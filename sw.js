@@ -1,11 +1,15 @@
-const CACHE = 'autojournal-v1.0.1';
+const CACHE = 'autojournal-v1.0.2';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css',
   './app.js',
-  './db.js',
   './manifest.webmanifest',
+  './payload/styles.b64',
+  './payload/app.part1a.b64',
+  './payload/app.part1b.b64',
+  './payload/app.part1c.b64',
+  './payload/app.part2.b64',
+  './payload/app.part3.b64',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png'
@@ -25,6 +29,7 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+
   event.respondWith(
     caches.match(event.request).then(cached => {
       const fresh = fetch(event.request).then(response => {
