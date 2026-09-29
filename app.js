@@ -23,13 +23,21 @@ async function boot() {
   style.textContent = css;
   document.head.append(style);
 
-  const source = await readGzipBase64([
+  let source = await readGzipBase64([
     './payload/app.part1a.b64',
     './payload/app.part1b.b64',
     './payload/app.part1c.b64',
     './payload/app.part2.b64',
     './payload/app.part3.b64'
   ]);
+
+  const broken = "const next=componentEvents(c).sort((a,b)=>({overdue:0,soon:1,ok:2}[a.status]-({overdue:0,soon:1,ok:2}[b.status]))[0];";
+  const fixed = "const next=componentEvents(c).sort((a,b)=>({overdue:0,soon:1,ok:2}[a.status]-({overdue:0,soon:1,ok:2}[b.status])))[0];";
+  const patched = source.replace(broken, fixed);
+  if (patched === source && !source.includes(fixed)) {
+    throw new Error('Не удалось применить локальный hotfix приложения.');
+  }
+  source = patched;
 
   const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
   try {
