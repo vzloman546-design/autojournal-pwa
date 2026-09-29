@@ -1,4 +1,4 @@
-const CACHE = 'autojournal-v1.0.2';
+const CACHE = 'autojournal-v1.0.3';
 const APP_SHELL = [
   './',
   './index.html',
