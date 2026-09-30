@@ -1,0 +1,27 @@
+name: AutoJournal QA
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'app-v53.js'
+      - 'v53.css'
+      - 'index.html'
+      - 'sw.js'
+      - 'db.js'
+      - 'tests/v53.spec.cjs'
+      - 'playwright.v53.config.cjs'
+      - '.github/workflows/qa.yml'
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test --config=playwright.v53.config.cjs
