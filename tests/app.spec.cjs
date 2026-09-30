@@ -346,10 +346,13 @@ test('iPhone-like layout handles long content, themes and safe-area inputs', asy
   expect(edge.htmlBg).toBe(edge.bodyBg);
 
   if(browserName==='chromium'){
+    await page.locator('[data-action="go-back"]').click();
+    await page.locator('[data-action="go-back"]').click();
+    await expect(page.locator('.v5-tab-wrap')).toBeVisible();
     const cdp=await context.newCDPSession(page);
     await cdp.send('Emulation.setSafeAreaInsetsOverride',{insets:{top:47,bottom:34,left:0,right:0}});
-    const bottom=await page.locator('.v5-tab-wrap').evaluate(el=>el.getBoundingClientRect().bottom);
-    expect(Math.abs(bottom-window.innerHeight)).toBeLessThan(1);
+    const metrics=await page.locator('.v5-tab-wrap').evaluate(el=>({bottom:el.getBoundingClientRect().bottom,height:innerHeight}));
+    expect(Math.abs(metrics.bottom-metrics.height)).toBeLessThan(1);
   }
 });
 
