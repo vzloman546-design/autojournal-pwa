@@ -360,7 +360,7 @@ function sheetWrap(title,body,foot=''){ return `<div class="sheet-backdrop" data
 function inputField(label,name,value='',type='text',extra=''){ return `<div class="field"><label for="${name}">${label}</label><input class="input" id="${name}" name="${name}" type="${type}" value="${esc(value??'')}" ${extra}></div>`; }
 function selectField(label,name,options,value=''){ return `<div class="field"><label for="${name}">${label}</label><select class="input" id="${name}" name="${name}">${options.map(o=>{const [v,t]=Array.isArray(o)?o:[o,o];return `<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(t)}</option>`}).join('')}</select></div>`; }
 
-function carSheet(id=null){ const x=id?state.cars.find(c=>c.id===id):null; const body=`<form id="car-form"><input type="hidden" name="id" value="${x?.id||''}"><div class="form-section"><div class="field-grid two">${inputField('Марка','make',x?.make||'','text','required')}${inputField('Модель','model',x?.model||'','text','required')}</div><div class="field-grid two" style="margin-top:8px">${inputField('Год','year',x?.year||'','number','inputmode="numeric"')}${inputField('Двигатель','engine',x?.engine||'')}</div></div><div class="form-section"><div class="form-title">Идентификация</div><div class="field-grid two">${inputField('Госномер','plate',x?.plate||'')}${inputField('VIN','vin',x?.vin||'')}</div></div><div class="form-section"><div class="form-title">Пробег</div><div class="field-grid two">${inputField('Пробег при начале учёта, км','initialOdometer',x?.initialOdometer??0,'number','min="0" inputmode="numeric"')}${inputField('Текущий пробег, км','currentOdometer',x?.currentOdometer??0,'number','min="0" inputmode="numeric" required')}</div></div><div class="form-section"><div class="field-grid two">${inputField('Дата покупки','purchaseDate',x?.purchaseDate||'','date')}${inputField('Цена покупки, ₽','purchasePrice',x?.purchasePrice||'','number','min="0" inputmode="decimal"')}</div></div></form>`; const foot=`<button class="btn primary block" form="car-form" type="submit">${x?'Сохранить':'Добавить автомобиль'}</button>${x?`<button class="btn danger block" style="margin-top:8px" data-action="delete-car" data-id="${x.id}">Удалить автомобиль</button>`:''}`; return sheetWrap(x?'Автомобиль':'Новый автомобиль',body,foot); }
+function carSheet(id=null){ const x=id?state.cars.find(c=>c.id===id):null; const body=`<form id="car-form"><input type="hidden" name="id" value="${x?.id||''}"><div class="form-section"><div class="field-grid two">${inputField('Марка','make',x?.make||'','text','required')}${inputField('Модель','model',x?.model||'','text','required')}</div><div class="field-grid two" style="margin-top:8px">${inputField('Год','year',x?.year||'','number','inputmode="numeric"')}${inputField('Двигатель','engine',x?.engine||'')}</div></div><div class="form-section"><div class="form-title">Идентификация</div><div class="field-grid two">${inputField('Госномер','plate',x?.plate||'')}${inputField('VIN','vin',x?.vin||'')}</div></div><div class="form-section"><div class="form-title">Пробег</div><div class="field-grid two">${inputField('Пробег при начале учёта, км','initialOdometer',x?.initialOdometer??0,'number','min="0" inputmode="numeric"')}${inputField('Текущий пробег, км','currentOdometer',x?.currentOdometer??0,'number','min="0" inputmode="numeric" required')}</div></div><div class="form-section"><div class="field-grid two">${inputField('Дата покупки','purchaseDate',x?.purchaseDate||'','date')}${inputField('Цена покупки, ₽','purchasePrice',x?.purchasePrice||'','number','min="0" step="0.01" inputmode="decimal"')}</div></div></form>`; const foot=`<button class="btn primary block" form="car-form" type="submit">${x?'Сохранить':'Добавить автомобиль'}</button>${x?`<button class="btn danger block" style="margin-top:8px" data-action="delete-car" data-id="${x.id}">Удалить автомобиль</button>`:''}`; return sheetWrap(x?'Автомобиль':'Новый автомобиль',body,foot); }
 
 function garageSheet(){ const body=`${state.cars.length?`<div class="list">${state.cars.map(c=>`<button class="list-row" data-action="activate-car" data-id="${c.id}"><div class="row-icon">${icons.car}</div><div class="row-main"><div class="row-title">${esc(c.make)} ${esc(c.model)}</div><div class="row-sub">${fmtNum(c.currentOdometer)} км${c.plate?` · ${esc(c.plate)}`:''}</div></div>${c.id===state.activeCarId?statusPill('ok'):'<span class="row-chevron">›</span>'}</button>`).join('')}</div>`:''}<button class="btn primary block" style="margin-top:16px" data-action="add-car">Добавить автомобиль</button>${car()?`<button class="btn block" style="margin-top:8px" data-action="edit-current-car">Изменить текущий</button>`:''}`; return sheetWrap('Гараж',body); }
 
@@ -413,35 +413,58 @@ function syncEntryExpense(entry){
 
 
 async function handleSubmit(e){
-  e.preventDefault(); const f=e.target;
-  if(f.id==='car-form'){
+  const f=e.target;
+  // A control named "id" shadows HTMLFormElement.id in Safari and Chromium.
+  const formId=f.getAttribute('id');
+  if(formId==='car-form'){
     const d=formObject(f), id=d.id||uid(); let x=state.cars.find(c=>c.id===id); const initial=nonneg(d.initialOdometer), requested=nonneg(d.currentOdometer);
+    if(!d.make.trim()||!d.model.trim()){toast('Укажи марку и модель автомобиля');return;}
     if(requested<initial){toast('Текущий пробег не может быть меньше пробега начала учёта');return;}
     if(d.year&&(Number(d.year)<1886||Number(d.year)>new Date().getFullYear()+1)){toast('Проверь год автомобиля');return;}
     if(x){const floor=linkedMileageFloor(id);if(requested<floor){toast(`В истории есть запись на ${fmtNum(floor)} км. Сначала исправь её.`);return;}Object.assign(x,{id,make:d.make.trim(),model:d.model.trim(),year:d.year,engine:d.engine,plate:d.plate.trim(),vin:d.vin.trim(),initialOdometer:initial,purchaseDate:d.purchaseDate,purchasePrice:nonneg(d.purchasePrice)});state.odometerLogs=state.odometerLogs.filter(v=>!(v.carId===id&&v.sourceType==='manual'&&nonneg(v.value)>requested));state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Из карточки автомобиля',sourceType:'manual',sourceId:uid()});recalculateCurrentOdometer(id);}else{const obj={id,make:d.make.trim(),model:d.model.trim(),year:d.year,engine:d.engine,plate:d.plate.trim(),vin:d.vin.trim(),initialOdometer:initial,currentOdometer:requested,purchaseDate:d.purchaseDate,purchasePrice:nonneg(d.purchasePrice),trackingStartDate:nowISO()};state.cars.push(obj);state.activeCarId=id;state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Начало учёта',sourceType:'car-start',sourceId:id});}
     await persist();ui.sheet=null;toast('Автомобиль сохранён');render();return;
   }
-  if(f.id==='odometer-form'){const d=formObject(f);if(!updateCarMileage(d.value,d.date,d.note))return;await persist();ui.sheet=null;toast('Пробег обновлён');render();return;}
-  if(f.id==='entry-form'){
+  if(formId==='odometer-form'){const d=formObject(f);if(!updateCarMileage(d.value,d.date,d.note))return;await persist();ui.sheet=null;toast('Пробег обновлён');render();return;}
+  if(formId==='entry-form'){
     const d=formObject(f), id=d.id||uid(); let x=state.serviceEntries.find(v=>v.id===id); const oldComponentId=x?.componentId||''; const photos=x?.photos?[...x.photos]:[];
     for(const file of f.elements.photos.files){if(file.size>12*1024*1024){toast(`Фото ${file.name} слишком большое`);continue;}try{const data=await fileToDataURL(file,true);if(safeImageData(data))photos.push({id:uid(),name:file.name,data});else toast(`Формат ${file.name} не поддерживается`);}catch{toast(`Не удалось обработать ${file.name}`);}}
     const obj={id,carId:car().id,date:d.date,odometer:nonneg(d.odometer),type:d.type,title:d.title.trim(),category:d.category.trim(),faultKey:d.faultKey.trim(),workText:d.workText||'',partsText:d.partsText||'',partsCost:nonneg(d.partsCost),laborCost:nonneg(d.laborCost),otherCost:nonneg(d.otherCost),componentId:d.componentId||'',componentAction:d.componentAction||'',notes:d.notes,photos,createdAt:x?.createdAt||new Date().toISOString(),seq:x?.seq!=null?nonneg(x.seq):nextSeq()};
     if(!dateOK(obj.date)){toast('Укажи корректную дату');return;} if(obj.componentAction&&!obj.componentId){toast('Для действия выбери узел');return;} const err=mileageConsistencyError(obj.odometer,obj.date,'service',id); if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;}
     if(x)Object.assign(x,obj);else state.serviceEntries.push(obj); syncEntryExpense(obj); recordMileageObservation(obj.odometer,obj.date,'Из сервисной записи','service',id); if(oldComponentId&&oldComponentId!==obj.componentId){} await persist();ui.sheet=null;toast('Запись сохранена');render();return;
   }
-  if(f.id==='component-form'){
+  if(formId==='component-form'){
     const d=formObject(f), id=d.id||uid(); let x=state.components.find(v=>v.id===id); const installKm=nonneg(d.installedOdometer); if(installKm>currentKm()){toast('Пробег установки не может быть больше текущего пробега');return;} if(d.installedDate>today()){toast('Дата установки не может быть в будущем');return;}
     const obj={id,carId:car().id,name:d.name.trim(),category:d.category,brand:d.brand,partNumber:d.partNumber,baseInstalledDate:d.installedDate,baseInstalledOdometer:installKm,installedDate:d.installedDate,installedOdometer:installKm,lifeKm:nonneg(d.lifeKm),lifeMonths:nonneg(d.lifeMonths),inspectKm:nonneg(d.inspectKm),inspectMonths:nonneg(d.inspectMonths),warnKm:nonneg(d.warnKm),warnDays:nonneg(d.warnDays),cost:nonneg(d.cost),notes:d.notes,lastInspectionDate:d.installedDate,lastInspectionOdometer:installKm}; if(x)Object.assign(x,obj);else state.components.push(obj); recordMileageObservation(installKm,d.installedDate,'Установка узла','component',id); await persist();ui.sheet=null;toast('Узел сохранён');render();return;
   }
-  if(f.id==='expense-form'){
+  if(formId==='expense-form'){
     const d=formObject(f), id=d.id||uid(); let x=state.expenses.find(v=>v.id===id); if(x?.linkedServiceId){toast('Связанный расход изменяется через сервисную запись');return;} const obj={id,carId:car().id,date:d.date,odometer:nonneg(d.odometer),category:d.category,amount:nonneg(d.amount),description:d.description.trim(),note:d.note,linkedServiceId:''}; if(!dateOK(obj.date)){toast('Укажи корректную дату');return;} const err=obj.odometer?mileageConsistencyError(obj.odometer,obj.date,'expense',id):null;if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;} if(x)Object.assign(x,obj);else state.expenses.push(obj); if(obj.odometer)recordMileageObservation(obj.odometer,obj.date,'Из расхода','expense',id);else removeMileageSource('expense',id); await persist();ui.sheet=null;toast('Расход сохранён');render();return;
   }
-  if(f.id==='document-form'){
+  if(formId==='document-form'){
     const d=formObject(f), id=d.id||uid(); let x=state.documents.find(v=>v.id===id); if(d.issueDate&&d.expiryDate&&d.expiryDate<d.issueDate){toast('Дата окончания не может быть раньше даты выдачи');return;} const files=x?.files?[...x.files]:[]; for(const file of f.elements.files.files){if(file.size>15*1024*1024){toast(`Файл ${file.name} больше 15 МБ`);continue;}try{const data=await fileToDataURL(file,file.type.startsWith('image/'));if(safeStoredFileData(data))files.push({id:uid(),name:file.name,type:file.type||'',size:file.size,data});else toast(`Формат ${file.name} не поддерживается`);}catch{toast(`Не удалось обработать ${file.name}`);}} const obj={id,carId:car().id,title:d.title.trim(),type:d.type,number:d.number,issueDate:d.issueDate,expiryDate:d.expiryDate,remindDays:nonneg(d.remindDays,30),files}; if(x)Object.assign(x,obj);else state.documents.push(obj); await persist();ui.sheet=null;toast('Документ сохранён');render();return;
   }
 }
 
-document.addEventListener('submit',handleSubmit);
+document.addEventListener('submit',async e=>{
+  const form=e.target;
+  if(!(form instanceof HTMLFormElement))return;
+  e.preventDefault();
+  if(form.dataset.saving==='true')return;
+  form.dataset.saving='true';
+  const button=e.submitter;
+  const label=button?.textContent;
+  const previousState=structuredClone(state);
+  if(button){button.disabled=true;button.textContent='Сохранение…';}
+  try{
+    await handleSubmit(e);
+  }catch(err){
+    state=previousState;
+    console.error('Could not save form',err);
+    toast('Не удалось сохранить. Попробуй ещё раз — заполненные поля остались в форме.');
+  }finally{
+    delete form.dataset.saving;
+    if(button){button.disabled=false;button.textContent=label;}
+  }
+});
 
 document.addEventListener('input', e=>{
   const key=e.target.dataset.input;

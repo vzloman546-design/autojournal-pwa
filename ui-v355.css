@@ -19,13 +19,37 @@
   --page-gutter: var(--grid-4);
   --control-height: var(--grid-12);
   --touch-height: var(--grid-11);
+  --tabbar-content-height: 56px;
+  --tabbar-height: calc(var(--tabbar-content-height) + 1px + env(safe-area-inset-bottom, 0px));
   --radius-lg: var(--grid-6);
   --radius-md: var(--grid-5);
   --radius-sm: var(--grid-3);
 }
 
+.app-shell {
+  height: 100vh;
+  height: 100dvh;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding-bottom: var(--tabbar-height);
+}
+
 .topbar {
   padding: calc(env(safe-area-inset-top, 0px) + var(--grid-2)) var(--page-gutter) var(--grid-2);
+  padding-left: max(var(--page-gutter), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--page-gutter), env(safe-area-inset-right, 0px));
+  background: var(--bg);
+  filter: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.topbar .icon-btn {
+  background: var(--surface-solid);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.topbar .brand-mark {
+  box-shadow: none;
 }
 .topbar-row {
   display: grid;
@@ -63,10 +87,12 @@
 }
 
 .main-scroll {
-  padding: 0 var(--page-gutter) calc(var(--grid-6) + env(safe-area-inset-bottom, 0px));
+  padding: 0 var(--page-gutter) var(--grid-6);
+  padding-left: max(var(--page-gutter), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--page-gutter), env(safe-area-inset-right, 0px));
 }
 .main-scroll.has-fab {
-  padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 88px;
 }
 .page {
   width: 100%;
@@ -244,18 +270,34 @@
 
 .fab {
   right: var(--grid-4);
-  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--tabbar-height) + var(--grid-4));
   width: var(--grid-14);
   height: var(--grid-14);
   border-radius: var(--grid-5);
 }
 .tabbar-wrap {
-  padding: var(--grid-2) var(--grid-2) calc(var(--grid-2) + env(safe-area-inset-bottom, 0px));
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--tabbar-height);
+  padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  background: var(--surface-solid);
+  border-top: 1px solid var(--line);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .tabbar {
-  gap: var(--grid-1);
-  padding: var(--grid-1);
-  border-radius: var(--grid-6);
+  height: var(--tabbar-content-height);
+  min-height: var(--tabbar-content-height);
+  gap: 0;
+  padding: var(--grid-1) var(--grid-2);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .tab {
   min-height: var(--grid-12);
@@ -309,9 +351,27 @@
 .field { gap: var(--grid-1); min-width: 0; }
 .field label { margin-left: 0; }
 .input {
+  min-width: 0;
+  max-width: 100%;
   min-height: var(--grid-12);
   padding: var(--grid-3);
   border-radius: var(--grid-3);
+}
+/* iOS date controls otherwise keep their native intrinsic minimum width. */
+.input[type="date"] {
+  display: block;
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: left;
+}
+.input[type="date"]::-webkit-date-and-time-value {
+  min-height: 1.2em;
+  text-align: left;
+}
+.input[type="date"]::-webkit-datetime-edit {
+  min-width: 0;
+  padding: 0;
 }
 textarea.input { min-height: 96px; }
 .helper { margin: var(--grid-1) 0 0; }
@@ -475,8 +535,10 @@ textarea.input { min-height: 96px; }
 }
 
 @media (min-width: 700px) {
-  .main-scroll { padding-left: var(--grid-6); padding-right: var(--grid-6); }
-  .topbar { padding-left: var(--grid-6); padding-right: var(--grid-6); }
+  .main-scroll, .topbar {
+    padding-left: max(var(--grid-6), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--grid-6), env(safe-area-inset-right, 0px));
+  }
   .fab { right: calc((100vw - var(--content-max))/2 + var(--grid-6)); }
 }
 
@@ -529,7 +591,7 @@ textarea.input { min-height: 96px; }
 
   .main-scroll {
     padding-top: 6px;
-    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: 18px;
   }
   .page { padding-bottom: 12px; }
   .page-title {
@@ -627,24 +689,8 @@ textarea.input { min-height: 96px; }
     padding: 10px 12px;
   }
 
-  .tabbar-wrap {
-    padding: 0 0 env(safe-area-inset-bottom, 0px);
-    background: var(--surface-solid);
-    border-top: 1px solid var(--line);
-    backdrop-filter: blur(20px) saturate(150%);
-    -webkit-backdrop-filter: blur(20px) saturate(150%);
-  }
   .tabbar {
-    max-width: 760px;
-    min-height: 54px;
     padding: 4px 8px 3px;
-    gap: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
   .tab {
     min-height: 46px;
@@ -662,11 +708,11 @@ textarea.input { min-height: 96px; }
 
   .fab {
     right: 16px;
-    bottom: calc(70px + env(safe-area-inset-bottom,0px));
     width: 52px;
     height: 52px;
     border-radius: 17px;
   }
+}
 
   .page-welcome {
     padding-top: 8px;
@@ -731,7 +777,6 @@ textarea.input { min-height: 96px; }
     height: 14px;
     margin-top: 1px;
   }
-}
 
 @media (max-width: 359px) {
   .page-title { font-size: 24px; }
