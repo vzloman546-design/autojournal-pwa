@@ -131,6 +131,7 @@ test('document file, expiry reminder, edit and delete full cycle', async({page})
   await page.locator('#remindDays').fill('30');
   await page.locator('#files').setInputFiles({name:'policy.txt',mimeType:'text/plain',buffer:Buffer.from('policy qa')});
   await page.locator('button[form="document-form"]').click();
+  await expect(page.locator('#document-form')).toHaveCount(0);
 
   let s=await state(page);
   expect(s.documents).toHaveLength(1);
@@ -144,8 +145,10 @@ test('document file, expiry reminder, edit and delete full cycle', async({page})
   await page.locator('[data-action="edit-document"]').click();
   await page.locator('#title').fill('ОСАГО QA изменено');
   await page.locator('button[form="document-form"]').click();
+  await expect(page.locator('#document-form')).toHaveCount(0);
   await expect(page.getByText('ОСАГО QA изменено',{exact:true})).toBeVisible();
 
+  await page.locator('[data-action="go-back"]').click();
   await page.locator('[data-action="go-back"]').click();
   await page.locator('.v5-tabbar [data-view="notifications"]').click();
   await expect(page.getByText(/Документ: ОСАГО QA изменено/)).toBeVisible();
@@ -187,8 +190,9 @@ test('maintenance inspect and replace reset independent cycles', async({page})=>
   actions=s.serviceEntries.filter(x=>x.componentAction);
   expect(actions.filter(x=>x.componentAction==='replace')).toHaveLength(1);
   expect(actions.filter(x=>x.componentAction==='inspect')).toHaveLength(1);
-  await expect(page.locator('.sheet')).toContainText('250 000 км');
-  await expect(page.locator('.sheet')).toContainText('220 000 км');
+  await expect(page.locator('.sheet')).toContainText('через 40 000 км');
+  await expect(page.locator('.sheet')).toContainText('через 10 000 км');
+  await expect(page.locator('.sheet')).toContainText('210 000 км');
 });
 
 test('multiple cars are isolated', async({page})=>{
