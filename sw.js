@@ -1,5 +1,5 @@
-const CACHE='autojournal-v3.1.0';
-const APP_SHELL=['./','./index.html','./app.js','./db.js','./manifest.webmanifest','./payload/styles.b64','./payload/app.part1a.b64','./payload/app.part1b.b64','./payload/app.part1c.b64','./payload/app.part2.b64','./payload/app.part3.b64','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png'];
+const CACHE='autojournal-v3.1.1';
+const APP_SHELL=['./','./index.html','./app.js','./db.js','./manifest.webmanifest','./payload/styles.js','./payload/app.part1a.js','./payload/app.part1b.js','./payload/app.part1c.js','./payload/app.part2.js','./payload/app.part3.js','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(APP_SHELL)));self.skipWaiting();});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});
 async function networkFirst(req){try{const r=await fetch(req);if(r?.ok)(await caches.open(CACHE)).put(req,r.clone());return r}catch{return(await caches.match(req))||(req.mode==='navigate'?caches.match('./index.html'):Response.error())}}

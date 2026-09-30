@@ -1,7 +1,7 @@
 async function readGzipBase64(paths) {
   const chunks = await Promise.all(paths.map(async path => {
     const response = await fetch(path);
-    if (!response.ok) throw new Error(`Не удалось загрузить ${path}`);
+    if (!response.ok) throw new Error(`Не удалось загрузить ${path}: HTTP ${response.status}`);
     return response.text();
   }));
   const binary = atob(chunks.join('').replace(/\s+/g, ''));
@@ -13,8 +13,8 @@ async function readGzipBase64(paths) {
 }
 async function boot() {
   const [css, rawSource] = await Promise.all([
-    readGzipBase64(['./payload/styles.b64']),
-    readGzipBase64(['./payload/app.part1a.b64','./payload/app.part1b.b64','./payload/app.part1c.b64','./payload/app.part2.b64','./payload/app.part3.b64'])
+    readGzipBase64(['./payload/styles.js']),
+    readGzipBase64(['./payload/app.part1a.js','./payload/app.part1b.js','./payload/app.part1c.js','./payload/app.part2.js','./payload/app.part3.js'])
   ]);
   const style = document.createElement('style');
   style.textContent = css;
