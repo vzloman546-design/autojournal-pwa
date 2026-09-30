@@ -1,6 +1,6 @@
 async function readGzipBase64(paths) {
   const chunks = await Promise.all(paths.map(async path => {
-    const response = await fetch(path);
+    const response = await fetch(path, { cache: 'no-store' });
     if (!response.ok) throw new Error(`Не удалось загрузить ${path}`);
     return response.text();
   }));
@@ -18,26 +18,23 @@ async function readGzipBase64(paths) {
 }
 
 async function boot() {
-  const css = await readGzipBase64(['./payload/styles.b64']);
+  const css = await readGzipBase64(['./payload/v2-styles.b64']);
   const style = document.createElement('style');
   style.textContent = css;
   document.head.append(style);
 
   let source = await readGzipBase64([
-    './payload/app.part1a.b64',
-    './payload/app.part1b.b64',
-    './payload/app.part1c.b64',
-    './payload/app.part2.b64',
-    './payload/app.part3.b64'
+    './payload/v2-app-1.b64',
+    './payload/v2-app-2.b64',
+    './payload/v2-app-3.b64',
+    './payload/v2-app-4.b64'
   ]);
 
-  const broken = "const next=componentEvents(c).sort((a,b)=>({overdue:0,soon:1,ok:2}[a.status]-({overdue:0,soon:1,ok:2}[b.status]))[0];";
-  const fixed = "const next=componentEvents(c).sort((a,b)=>({overdue:0,soon:1,ok:2}[a.status]-({overdue:0,soon:1,ok:2}[b.status])))[0];";
-  const patched = source.replace(broken, fixed);
-  if (patched === source && !source.includes(fixed)) {
-    throw new Error('Не удалось применить локальный hotfix приложения.');
-  }
-  source = patched;
+  const dbUrl = new URL('./db.js', location.href).href;
+  source = source.replace(
+    /from\s+['"]\.\/db\.js['"]/,
+    `from '${dbUrl}'`
+  );
 
   const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
   try {
