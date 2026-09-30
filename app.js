@@ -231,7 +231,20 @@ function statusPill(status){ const t={ok:'В норме',soon:'Скоро',due:'
 
 function homePage(){
   const c=car();
-  if(!c) return `<main class="main-scroll"><div class="page"><h1 class="page-title">Вся история машины — у тебя</h1><p class="page-lead">Без аккаунта и облака. Данные хранятся в IndexedDB на iPhone и остаются доступны без интернета.</p>${emptyState('Добавь первый автомобиль','После этого появятся сервисная история, интервалы замены и проверок, расходы, документы и аналитика.','add-car','Добавить автомобиль')}</div></main>`;
+  if(!c) return `<main class="main-scroll"><div class="page page-welcome">
+    <section class="welcome-card card">
+      <div class="welcome-head">
+        <div class="welcome-icon">${icons.car}</div>
+        <div class="welcome-copy">
+          <div class="welcome-eyebrow">Сервисная книжка</div>
+          <h1 class="welcome-title">Добавьте автомобиль</h1>
+          <p class="welcome-text">Ведите обслуживание, проверки, расходы и документы в одном месте.</p>
+        </div>
+      </div>
+      <button class="btn primary block welcome-action" data-action="add-car">Добавить автомобиль</button>
+      <div class="welcome-privacy">${icons.lock || ''}<span>Данные хранятся только на этом устройстве и доступны офлайн.</span></div>
+    </section>
+  </div></main>`;
   const ex=carItems(state.expenses); const total=ex.reduce((s,x)=>s+Number(x.amount||0),0);
   const reminders=allReminders();
   const avg=averageKmPerDay(c);
