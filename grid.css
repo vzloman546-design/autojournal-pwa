@@ -743,3 +743,25 @@ textarea.input { min-height: 96px; }
   .tabbar { padding-left: 4px; padding-right: 4px; }
   .tab-label { font-size: 9.5px; }
 }
+
+
+/* v3.5.1 — force a true native flat tab bar */
+@media (max-width: 430px) {
+  .tabbar .tab,
+  .tabbar .tab.active,
+  .tabbar .tab[aria-current="page"] {
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+  .tabbar .tab.active,
+  .tabbar .tab[aria-current="page"] {
+    color: var(--accent) !important;
+  }
+  .tabbar .tab.active .icon,
+  .tabbar .tab[aria-current="page"] .icon {
+    color: var(--accent) !important;
+    stroke: currentColor !important;
+  }
+}
