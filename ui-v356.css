@@ -26,6 +26,13 @@
   --radius-sm: var(--grid-3);
 }
 
+/* Match the footer where WebKit extends the page into the home-indicator area. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+html, body {
+  background-color: var(--surface-solid);
+}
+
 .app-shell {
   height: 100vh;
   height: 100dvh;
@@ -34,6 +41,9 @@
 }
 
 .topbar {
+  /* iOS 27 samples an opaque sticky/fixed edge to suppress its system blur. */
+  position: sticky;
+  top: 0;
   padding: calc(env(safe-area-inset-top, 0px) + var(--grid-2)) var(--page-gutter) var(--grid-2);
   padding-left: max(var(--page-gutter), env(safe-area-inset-left, 0px));
   padding-right: max(var(--page-gutter), env(safe-area-inset-right, 0px));

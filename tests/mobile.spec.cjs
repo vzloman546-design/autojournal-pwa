@@ -232,6 +232,52 @@ test('safe area stays inside the bottom bar and keeps controls clear of the notc
   await screenshot(page, info, 'safe-area-landscape');
 });
 
+test('opaque viewport edges survive the shorter installed-app viewport', async ({page, context, browserName}, info) => {
+  // This checks WebKit's edge-sampling inputs, not the native iOS scroll effect.
+  // Without the legacy translucent status bar, iOS owns the top 47 CSS pixels.
+  await page.setViewportSize({width:390, height:797});
+  if (browserName === 'chromium') {
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setSafeAreaInsetsOverride', {insets:{top:0, bottom:34, left:0, right:0}});
+  }
+  await expect(page.locator('meta[name="apple-mobile-web-app-status-bar-style"]')).toHaveCount(0);
+  await addCar(page);
+  for (const theme of ['dark', 'light']) {
+    await page.locator('.tabbar [data-view="more"]').tap();
+    await page.locator('[data-input="theme"]').selectOption(theme);
+    await page.locator('.tabbar [data-view="home"]').tap();
+    await expect(page.locator('.toast')).toHaveCount(0);
+    for (const scrollTop of [1000, 0]) {
+      await page.locator('.main-scroll').evaluate((el, top) => {el.scrollTop = top;}, scrollTop);
+      await checkShell(page);
+      const edges = await page.evaluate(() => {
+        const top = document.elementFromPoint(innerWidth / 2, 4)?.closest('.topbar');
+        const bottom = document.elementFromPoint(innerWidth / 2, innerHeight - 1)?.closest('.tabbar-wrap');
+        return {
+          topIsHeader: !!top,
+          topPosition: top && getComputedStyle(top).position,
+          topWidth: top?.getBoundingClientRect().width,
+          topColor: top && getComputedStyle(top).backgroundColor,
+          bottomIsNavigation: !!bottom,
+          bottomColor: bottom && getComputedStyle(bottom).backgroundColor,
+          canvasColor: getComputedStyle(document.documentElement).backgroundColor,
+          bodyColor: getComputedStyle(document.body).backgroundColor,
+          colorScheme: getComputedStyle(document.documentElement).colorScheme
+        };
+      });
+      expect(edges.topIsHeader).toBe(true);
+      expect(['sticky','fixed']).toContain(edges.topPosition);
+      expect(edges.topWidth).toBe(390);
+      expect(edges.topColor).toMatch(/^rgb\(/);
+      expect(edges.bottomIsNavigation).toBe(true);
+      expect(edges.canvasColor).toBe(edges.bottomColor);
+      expect(edges.bodyColor).toBe(edges.bottomColor);
+      expect(edges.colorScheme).toBe(theme);
+    }
+    await screenshot(page, info, `installed-viewport-${theme}`);
+  }
+});
+
 test.describe('offline PWA', () => {
   test.use({serviceWorkers:'allow'});
   test('cached app reopens and saves a vehicle without a network', async ({page, context, browserName}) => {
@@ -239,7 +285,7 @@ test.describe('offline PWA', () => {
     await addCar(page);
     await page.evaluate(() => navigator.serviceWorker.ready);
     await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
-    await expect.poll(() => page.evaluate(() => caches.keys())).toContain('autojournal-v3.5.5');
+    await expect.poll(() => page.evaluate(() => caches.keys())).toContain('autojournal-v3.5.6');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.vehicle-name')).toHaveText('Toyota Corolla');
