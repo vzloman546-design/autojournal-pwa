@@ -1,6 +1,6 @@
 import { loadState, saveState, clearState } from './db.js';
 
-const APP_VERSION = 5;
+const APP_VERSION = 6;
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -79,9 +79,9 @@ const defaultState = () => ({
 });
 
 let state = defaultState();
-let ui = { view:'home', sheet:null, sheetId:null, search:'', historyType:'all', expenseFilter:'all', notificationTab:'auto', analyticsTab:'expenses', analyticsPeriod:'month' };
+let ui = { view:'home', sheet:null, sheetId:null, search:'', historyType:'all', expenseFilter:'all', notificationTab:'auto', analyticsTab:'expenses', analyticsPeriod:'month', reportMode:'short' };
 const primaryViews=new Set(['home','records','refuels','notifications']);
-const secondaryTitles={profile:'Профиль',analytics:'Статистика',documents:'Документы',parts:'Контроль обслуживания',more:'Настройки'};
+const secondaryTitles={profile:'Профиль',carcard:'Паспорт автомобиля',report:'Отчёт автомобиля',analytics:'Статистика',documents:'Документы',parts:'Контроль обслуживания',more:'Настройки'};
 let navStack=[];
 let nextTransition='';
 
@@ -108,6 +108,7 @@ function migrate(raw) {
   const base=defaultState(), rs=raw.settings&&typeof raw.settings==='object'?raw.settings:{};
   const cars=(Array.isArray(raw.cars)?raw.cars:[]).map(c=>({
     ...c,id:String(c.id||uid()),make:String(c.make||''),model:String(c.model||''),year:String(c.year||''),engine:String(c.engine||''),plate:String(c.plate||''),vin:String(c.vin||''),
+    photo:safeImageData(c.photo),trim:String(c.trim||''),fuelType:String(c.fuelType||''),engineVolume:String(c.engineVolume||''),transmission:String(c.transmission||''),powerHp:nonneg(c.powerHp),tireSize:String(c.tireSize||''),engineOil:String(c.engineOil||''),engineOilVolume:String(c.engineOilVolume||''),coolantVolume:String(c.coolantVolume||''),transmissionOilVolume:String(c.transmissionOilVolume||''),brakeFluidVolume:String(c.brakeFluidVolume||''),steeringFluidVolume:String(c.steeringFluidVolume||''),customSpecs:String(c.customSpecs||''),
     initialOdometer:nonneg(c.initialOdometer),currentOdometer:nonneg(c.currentOdometer),purchasePrice:nonneg(c.purchasePrice),purchaseDate:String(c.purchaseDate||''),trackingStartDate:String(c.trackingStartDate||c.purchaseDate||'')
   }));
   let odometerLogs=(Array.isArray(raw.odometerLogs)?raw.odometerLogs:[]).filter(x=>!['Из сервисной записи','Из расхода'].includes(x?.note)).map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),value:nonneg(x.value),note:String(x.note||''),sourceType:String(x.sourceType||'manual'),sourceId:String(x.sourceId||x.id||uid())}));
@@ -379,7 +380,7 @@ function analyticsPage(){
   const catMap={};ex.forEach(x=>catMap[x.category||'Другое']=(catMap[x.category||'Другое']||0)+Number(x.amount||0));
   const cats=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,8),tab=ui.analyticsTab||'expenses';let content='';
   if(tab==='mileage')content=`<div class="v5-analytics-grid"><div class="stat-card"><div class="stat-value">${fmtNum(mileage.distance)} км</div><div class="stat-label">пробег за период</div></div><div class="stat-card"><div class="stat-value">${mileage.avg?`${fmtNum(mileage.avg,1)} км`:'—'}</div><div class="stat-label">в среднем за день</div></div><div class="stat-card"><div class="stat-value">${fmtNum(c.currentOdometer)} км</div><div class="stat-label">текущий одометр</div></div></div><section class="section"><div class="section-title">История пробега</div>${mileage.logs.length?`<div class="v5-list">${mileage.logs.slice(0,16).map(x=>`<div class="list-row"><div class="row-icon">${icons.speed}</div><div class="row-main"><div class="row-title">${fmtNum(x.value)} км</div><div class="row-sub">${fmtDate(x.date)}</div></div></div>`).join('')}</div>`:emptyState('Нет показаний за период','Измените период или обновите пробег.',null,null,icons.speed)}</section>`;
-  else if(tab==='refuels')content=`<div class="v5-analytics-grid"><div class="stat-card"><div class="stat-value">${refs.length}</div><div class="stat-label">заправок</div></div><div class="stat-card"><div class="stat-value">${fmtNum(liters,1)} л</div><div class="stat-label">топлива</div></div><div class="stat-card"><div class="stat-value">${money(fuelSpend)}</div><div class="stat-label">потрачено</div></div><div class="stat-card"><div class="stat-value">${avgPrice?`${fmtNum(avgPrice,2)} ₽`:'—'}</div><div class="stat-label">средняя цена за литр</div></div></div><section class="section"><div class="section-title">Заправки за период</div>${refs.length?`<div class="v5-list">${refs.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,16).map(refuelRow).join('')}</div>`:emptyState('Заправок за период нет','Измените период или добавьте заправку.',null,null,icons.fuel)}</section>`;
+  else if(tab==='refuels'){const fuelAll=fuelJournalStats(allRefs),periodCycles=fuelAll.cycles.filter(x=>dateInAnalyticsPeriod(x.endDate,bounds)),periodFuel=fuelCycleSummary(periodCycles),stationMap=new Map();refs.forEach(x=>{const name=String(x.station||'').trim();if(name)stationMap.set(name,(stationMap.get(name)||0)+1);});const favorite=[...stationMap.entries()].sort((a,b)=>b[1]-a[1])[0];content=`<div class="v5-analytics-grid"><div class="stat-card"><div class="stat-value">${refs.length}</div><div class="stat-label">заправок</div></div><div class="stat-card"><div class="stat-value">${fuelConsumptionText(periodFuel.consumption)}</div><div class="stat-label">средний расход</div></div><div class="stat-card"><div class="stat-value">${fuelCost100Text(periodFuel.cost100)}</div><div class="stat-label">стоимость 100 км</div></div><div class="stat-card"><div class="stat-value">${avgPrice?`${fmtNum(avgPrice,2)} ₽/л`:'—'}</div><div class="stat-label">средняя цена</div></div><div class="stat-card"><div class="stat-value">${favorite?esc(favorite[0]):'—'}</div><div class="stat-label">любимая АЗС</div></div><div class="stat-card"><div class="stat-value">${money(fuelSpend)}</div><div class="stat-label">потрачено</div></div></div><section class="section"><div class="section-title">Заправки за период</div>${refs.length?`<div class="v5-list">${refs.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,16).map(refuelRow).join('')}</div>`:emptyState('Заправок за период нет','Измените период или добавьте заправку.',null,null,icons.fuel)}</section>`;}
   else content=`<div class="v5-analytics-grid"><div class="stat-card"><div class="stat-value">${money(total)}</div><div class="stat-label">расходы за период</div></div><div class="stat-card"><div class="stat-value">${cpk?`${fmtNum(cpk,2)} ₽`:'—'}</div><div class="stat-label">стоимость 1 км</div></div><div class="stat-card"><div class="stat-value">${ex.length}</div><div class="stat-label">операций</div></div></div><section class="section"><div class="section-title">По категориям</div>${cats.length?`<div class="v5-list">${cats.map(([name,value])=>`<div class="list-row"><div class="row-icon">${icons.wallet}</div><div class="row-main"><div class="row-title">${esc(name)}</div></div><div class="row-value">${money(value)}</div></div>`).join('')}</div>`:emptyState('Расходов за период нет','Измените период или добавьте запись.',null,null,icons.chart)}</section>`;
   return `<main class="v5-main"><div class="v5-page v5-secondary-page"><div class="v5-analytics-toolbar"><label><span>Период</span><select data-input="analytics-period"><option value="month" ${ui.analyticsPeriod==='month'?'selected':''}>Этот месяц</option><option value="lastMonth" ${ui.analyticsPeriod==='lastMonth'?'selected':''}>Прошлый месяц</option><option value="90" ${ui.analyticsPeriod==='90'?'selected':''}>Последние 90 дней</option><option value="year" ${ui.analyticsPeriod==='year'?'selected':''}>Этот год</option><option value="all" ${ui.analyticsPeriod==='all'?'selected':''}>Всё время</option></select></label></div><div class="v5-segment v5-stat-segment"><button class="${tab==='mileage'?'active':''}" data-action="analytics-tab" data-value="mileage">Пробег</button><button class="${tab==='expenses'?'active':''}" data-action="analytics-tab" data-value="expenses">Расходы</button><button class="${tab==='refuels'?'active':''}" data-action="analytics-tab" data-value="refuels">Заправки</button></div>${content}</div></main>`;
 }
@@ -406,24 +407,95 @@ function morePage(){
 }
 
 
+function orderedRefuels(items=carItems(state.refuels||[])){
+  return [...items].sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.createdAt||'').localeCompare(String(b.createdAt||''))||nonneg(a.odometer)-nonneg(b.odometer));
+}
+function fuelCycles(items=carItems(state.refuels||[])){
+  const list=orderedRefuels(items),cycles=[];let prevFull=-1;
+  for(let i=0;i<list.length;i++){
+    const cur=list[i];
+    if(!cur.fullTank||nonneg(cur.odometer)<=0)continue;
+    if(prevFull>=0){
+      const prev=list[prevFull],distance=nonneg(cur.odometer)-nonneg(prev.odometer);
+      const segment=list.slice(prevFull+1,i+1);
+      const liters=segment.reduce((sum,x)=>sum+nonneg(x.liters),0);
+      const amount=segment.reduce((sum,x)=>sum+nonneg(x.amount),0);
+      if(distance>0&&liters>0)cycles.push({
+        startRefuelId:prev.id,endRefuelId:cur.id,startDate:prev.date,endDate:cur.date,
+        startOdometer:nonneg(prev.odometer),endOdometer:nonneg(cur.odometer),
+        distance,liters,amount,consumption:liters/distance*100,cost100:amount/distance*100,
+        station:cur.station||'',fuelType:cur.fuelType||''
+      });
+    }
+    prevFull=i;
+  }
+  return cycles;
+}
+function fuelCycleSummary(cycles){
+  const distance=cycles.reduce((s,x)=>s+x.distance,0),liters=cycles.reduce((s,x)=>s+x.liters,0),amount=cycles.reduce((s,x)=>s+x.amount,0);
+  return {distance,liters,amount,consumption:distance>0?liters/distance*100:0,cost100:distance>0?amount/distance*100:0};
+}
+function fuelJournalStats(items=carItems(state.refuels||[])){
+  const list=orderedRefuels(items),cycles=fuelCycles(list),now=today(),month=now.slice(0,7),year=now.slice(0,4);
+  const all=fuelCycleSummary(cycles),monthSummary=fuelCycleSummary(cycles.filter(x=>String(x.endDate).startsWith(month))),yearSummary=fuelCycleSummary(cycles.filter(x=>String(x.endDate).startsWith(year)));
+  const priced=list.filter(x=>nonneg(x.liters)>0&&nonneg(x.amount)>0),priceLiters=priced.reduce((s,x)=>s+nonneg(x.liters),0),priceAmount=priced.reduce((s,x)=>s+nonneg(x.amount),0);
+  const stationMap=new Map();
+  for(const x of list){const name=String(x.station||'').trim();if(!name)continue;const v=stationMap.get(name)||{name,count:0,amount:0,liters:0};v.count++;v.amount+=nonneg(x.amount);v.liters+=nonneg(x.liters);stationMap.set(name,v);}
+  const stations=[...stationMap.values()].sort((a,b)=>b.count-a.count||b.amount-a.amount);
+  const tanks=list.filter(x=>x.fullTank&&nonneg(x.amount)>0).sort((a,b)=>nonneg(a.amount)-nonneg(b.amount));
+  return {
+    list,cycles,all,month:monthSummary,year:yearSummary,
+    avgPrice:priceLiters>0?priceAmount/priceLiters:0,
+    favoriteStation:stations[0]||null,
+    cheapestTank:tanks[0]||null,
+    expensiveTank:tanks.at(-1)||null,
+    cycleByRefuel:new Map(cycles.map(x=>[x.endRefuelId,x]))
+  };
+}
+function fuelConsumptionText(v){return v>0?`${fmtNum(v,2)} л/100 км`:'—';}
+function fuelCost100Text(v){return v>0?`${fmtNum(v,0)} ₽/100 км`:'—';}
+
 function refuelRow(x){
+  const cycle=fuelJournalStats().cycleByRefuel.get(x.id);
   return `<button class="list-row" data-action="refuel-detail" data-id="${x.id}">
     <div class="row-icon">${icons.fuel}</div>
-    <div class="row-main"><div class="row-title">${esc(x.station||x.fuelType||'Заправка')}</div><div class="row-sub">${fmtDate(x.date)} · ${fmtNum(x.odometer)} км${x.liters?` · ${fmtNum(x.liters,2)} л`:''}</div></div>
+    <div class="row-main"><div class="row-title">${esc(x.station||x.fuelType||'Заправка')}${x.fullTank?' · полный бак':''}</div><div class="row-sub">${fmtDate(x.date)} · ${fmtNum(x.odometer)} км${x.liters?` · ${fmtNum(x.liters,2)} л`:''}${cycle?` · ${fuelConsumptionText(cycle.consumption)}`:''}</div></div>
     <div class="row-side"><div class="row-value">${money(x.amount)}</div><div class="row-sub">›</div></div>
   </button>`;
 }
 
 function refuelsPage(){
   if(!car())return `<main class="v5-main"><div class="v5-page">${emptyState('Сначала добавьте автомобиль','Заправки привязываются к конкретной машине.','add-car','Добавить автомобиль')}</div></main>`;
-  const items=carItems(state.refuels||[]).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  const liters=items.reduce((s,x)=>s+Number(x.liters||0),0);
-  const total=items.reduce((s,x)=>s+Number(x.amount||0),0);
+  const items=carItems(state.refuels||[]).sort((a,b)=>String(b.date).localeCompare(String(a.date))),stats=fuelJournalStats(items);
+  const liters=items.reduce((sum,x)=>sum+nonneg(x.liters),0),total=items.reduce((sum,x)=>sum+nonneg(x.amount),0);
+  const cheap=stats.cheapestTank,expensive=stats.expensiveTank;
   return `<main class="v5-main"><div class="v5-page">
     <h1 class="v5-title">Заправки</h1>
     <button class="v5-primary v5-wide" data-action="add-refuel">${icons.plus} Добавить заправку</button>
     <div class="v5-fuel-summary"><div><span>Заправок</span><strong>${items.length}</strong></div><div><span>Топливо</span><strong>${fmtNum(liters,1)} л</strong></div><div><span>Сумма</span><strong>${money(total)}</strong></div></div>
-    ${items.length?`<div class="v5-list">${items.map(refuelRow).join('')}</div>`:emptyState('Заправок пока нет','Добавьте первую заправку вручную.','add-refuel','Добавить заправку',icons.fuel)}
+
+    <section class="v5-section"><h2>Расход топлива</h2>
+      <div class="v5-fuel-metrics">
+        <div><span>Всё время</span><strong>${fuelConsumptionText(stats.all.consumption)}</strong><small>${stats.all.distance?`${fmtNum(stats.all.distance)} км по полным бакам`:'Нужно минимум 2 полных бака'}</small></div>
+        <div><span>Этот месяц</span><strong>${fuelConsumptionText(stats.month.consumption)}</strong><small>по завершённым циклам</small></div>
+        <div><span>Этот год</span><strong>${fuelConsumptionText(stats.year.consumption)}</strong><small>по завершённым циклам</small></div>
+        <div><span>Стоимость 100 км</span><strong>${fuelCost100Text(stats.all.cost100)}</strong><small>между полными баками</small></div>
+      </div>
+      <div class="v5-fuel-note">Расход считается методом «полный бак → полный бак». Все промежуточные неполные заправки между ними тоже учитываются.</div>
+    </section>
+
+    <section class="v5-section"><h2>Топливная статистика</h2>
+      <div class="v5-fuel-facts">
+        <div><span>Средняя цена литра</span><strong>${stats.avgPrice?`${fmtNum(stats.avgPrice,2)} ₽/л`:'—'}</strong></div>
+        <div><span>Любимая АЗС</span><strong>${stats.favoriteStation?esc(stats.favoriteStation.name):'—'}</strong><small>${stats.favoriteStation?`${stats.favoriteStation.count} ${plural(stats.favoriteStation.count,'заправка','заправки','заправок')}`:''}</small></div>
+        <div><span>Самый дешёвый полный бак</span><strong>${cheap?money(cheap.amount):'—'}</strong><small>${cheap?`${esc(cheap.station||cheap.fuelType)} · ${fmtDate(cheap.date)}`:''}</small></div>
+        <div><span>Самый дорогой полный бак</span><strong>${expensive?money(expensive.amount):'—'}</strong><small>${expensive?`${esc(expensive.station||expensive.fuelType)} · ${fmtDate(expensive.date)}`:''}</small></div>
+      </div>
+    </section>
+
+    <section class="v5-section"><h2>История</h2>
+      ${items.length?`<div class="v5-list">${items.map(refuelRow).join('')}</div>`:emptyState('Заправок пока нет','Добавьте первую заправку вручную.','add-refuel','Добавить заправку',icons.fuel)}
+    </section>
   </div></main>`;
 }
 
@@ -443,11 +515,64 @@ function notificationsPage(){
   return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Уведомления</h1><div class="v5-segment"><button class="${ui.notificationTab==='app'?'active':''}" data-action="notif-tab" data-value="app">Приложение</button><button class="${ui.notificationTab==='auto'?'active':''}" data-action="notif-tab" data-value="auto">Авто</button></div>${items.length?`<div class="v5-notify-list">${items.map(n=>`<button class="v5-notify-card ${n.status?`status-${n.status}`:''}" ${n.event?`data-action="reminder-open" data-kind="${n.event.kind}" data-id="${n.event.documentId||n.event.componentId||''}"`:n.action?`data-action="${n.action}"`:''}><div class="v5-notify-icon">${n.icon}</div><div><div class="v5-notify-title-row"><strong>${esc(n.title)}</strong>${n.status?`<span class="v5-notify-status">${statusText[n.status]||''}</span>`:''}</div><p>${esc(n.text)}</p><span>${esc(n.date)}</span></div></button>`).join('')}</div>`:emptyState('Уведомлений нет','Здесь появятся сроки обслуживания, документов и полезные напоминания.',null,null,icons.bell)}</div></main>`;
 }
 
+function carSpecValue(v,suffix=''){return String(v||'').trim()?`${esc(v)}${suffix}`:'—';}
+function customSpecRows(text=''){
+  return String(text||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map(line=>{const i=line.indexOf(':');return i>0?[line.slice(0,i).trim(),line.slice(i+1).trim()]:[line,''];});
+}
+function carCardPage(){
+  const c=car();if(!c)return `<main class="v5-main"><div class="v5-page">${emptyState('Нет автомобиля','Добавьте автомобиль, чтобы открыть его паспорт.','add-car','Добавить автомобиль')}</div></main>`;
+  const custom=customSpecRows(c.customSpecs);
+  return `<main class="v5-main"><div class="v5-page v5-secondary-page">
+    <section class="v5-car-passport-hero">${c.photo?`<img src="${c.photo}" alt="${esc(c.make)} ${esc(c.model)}">`:`<div class="v5-car-passport-placeholder">${icons.car}</div>`}<div><h1>${esc(c.make)} ${esc(c.model)}</h1><p>${[c.year,c.trim,c.plate].filter(Boolean).map(esc).join(' · ')||'Паспорт автомобиля'}</p><strong>${fmtNum(c.currentOdometer)} км</strong></div></section>
+    <div class="v5-passport-actions"><button class="v5-primary" data-action="edit-current-car">${icons.edit} Изменить</button><button class="btn" data-view="report">${icons.doc} Отчёт</button></div>
+    <section class="v5-passport-section"><h2>Основные данные</h2><div class="v5-spec-grid">
+      <div><span>VIN</span><strong>${carSpecValue(c.vin)}</strong></div><div><span>Госномер</span><strong>${carSpecValue(c.plate)}</strong></div>
+      <div><span>Комплектация</span><strong>${carSpecValue(c.trim)}</strong></div><div><span>Год</span><strong>${carSpecValue(c.year)}</strong></div>
+      <div><span>Двигатель</span><strong>${carSpecValue(c.engine)}</strong></div><div><span>Объём</span><strong>${carSpecValue(c.engineVolume,c.engineVolume?' л':'')}</strong></div>
+      <div><span>Мощность</span><strong>${c.powerHp?`${fmtNum(c.powerHp)} л.с.`:'—'}</strong></div><div><span>Коробка</span><strong>${carSpecValue(c.transmission)}</strong></div>
+      <div><span>Топливо</span><strong>${carSpecValue(c.fuelType)}</strong></div><div><span>Шины</span><strong>${carSpecValue(c.tireSize)}</strong></div>
+    </div></section>
+    <section class="v5-passport-section"><h2>Масла и жидкости</h2><div class="v5-spec-grid">
+      <div><span>Моторное масло</span><strong>${carSpecValue(c.engineOil)}</strong></div><div><span>Объём масла</span><strong>${carSpecValue(c.engineOilVolume,c.engineOilVolume?' л':'')}</strong></div>
+      <div><span>Охлаждающая жидкость</span><strong>${carSpecValue(c.coolantVolume,c.coolantVolume?' л':'')}</strong></div><div><span>Масло КПП</span><strong>${carSpecValue(c.transmissionOilVolume,c.transmissionOilVolume?' л':'')}</strong></div>
+      <div><span>Тормозная жидкость</span><strong>${carSpecValue(c.brakeFluidVolume,c.brakeFluidVolume?' л':'')}</strong></div><div><span>Жидкость ГУР</span><strong>${carSpecValue(c.steeringFluidVolume,c.steeringFluidVolume?' л':'')}</strong></div>
+    </div></section>
+    ${custom.length?`<section class="v5-passport-section"><h2>Дополнительные характеристики</h2><div class="v5-spec-list">${custom.map(([k,v])=>`<div><span>${esc(k)}</span><strong>${esc(v||'—')}</strong></div>`).join('')}</div></section>`:''}
+    <section class="v5-passport-section"><h2>Покупка и учёт</h2><div class="v5-spec-grid"><div><span>Дата покупки</span><strong>${fmtDate(c.purchaseDate)}</strong></div><div><span>Цена покупки</span><strong>${c.purchasePrice?money(c.purchasePrice):'—'}</strong></div><div><span>Пробег начала учёта</span><strong>${fmtNum(c.initialOdometer)} км</strong></div><div><span>Текущий пробег</span><strong>${fmtNum(c.currentOdometer)} км</strong></div></div></section>
+  </div></main>`;
+}
+function reportTable(title,headers,rows){
+  if(!rows.length)return '';
+  return `<section class="v5-report-section"><h2>${esc(title)}</h2><div class="v5-report-table-wrap"><table><thead><tr>${headers.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(cell=>`<td>${esc(cell??'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`;
+}
+function reportPage(){
+  const c=car();if(!c)return `<main class="v5-main"><div class="v5-page">${emptyState('Нет автомобиля','Для отчёта нужен автомобиль.','add-car','Добавить автомобиль')}</div></main>`;
+  const full=ui.reportMode==='full',entries=carItems(state.serviceEntries).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))),components=carItems(state.components),docs=carItems(state.documents),expenses=carItems(state.expenses),refs=carItems(state.refuels||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))),fuel=fuelJournalStats(refs),totalExpenses=expenses.reduce((sum,x)=>sum+nonneg(x.amount),0),reminders=allReminders();
+  const specs=[[c.trim,'Комплектация'],[c.engine,'Двигатель'],[c.engineVolume&&`${c.engineVolume} л`,'Объём двигателя'],[c.powerHp&&`${fmtNum(c.powerHp)} л.с.`,'Мощность'],[c.transmission,'Коробка'],[c.fuelType,'Топливо'],[c.tireSize,'Шины'],[c.engineOil,'Моторное масло']].filter(x=>x[0]);
+  return `<main class="v5-main v5-report-main"><div class="v5-page v5-secondary-page v5-report-page">
+    <div class="v5-report-controls"><div class="v5-segment v5-report-mode"><button class="${!full?'active':''}" data-action="report-mode" data-value="short">Короткий</button><button class="${full?'active':''}" data-action="report-mode" data-value="full">Полный</button></div><button class="v5-primary v5-wide" data-action="print-report">${icons.export} Сохранить PDF</button><p>Откроется системное окно печати. На iPhone из предпросмотра можно сохранить или отправить PDF.</p></div>
+    <article class="v5-report-paper">
+      <header class="v5-report-header">${c.photo?`<img src="${c.photo}" alt="">`:''}<div><div class="v5-report-brand">AutoJournal</div><h1>${esc(c.make)} ${esc(c.model)}</h1><p>${[c.year,c.trim,c.plate].filter(Boolean).map(esc).join(' · ')}</p><strong>${fmtNum(c.currentOdometer)} км</strong></div></header>
+      <section class="v5-report-section"><h2>Паспорт автомобиля</h2><div class="v5-report-specs"><div><span>VIN</span><strong>${esc(c.vin||'—')}</strong></div>${specs.map(([v,k])=>`<div><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('')}</div></section>
+      <section class="v5-report-section"><h2>Сводка эксплуатации</h2><div class="v5-report-kpis"><div><span>Расходы</span><strong>${money(totalExpenses)}</strong></div><div><span>Сервисных записей</span><strong>${entries.length}</strong></div><div><span>Средний расход</span><strong>${fuelConsumptionText(fuel.all.consumption)}</strong></div><div><span>Стоимость 100 км</span><strong>${fuelCost100Text(fuel.all.cost100)}</strong></div><div><span>Заправок</span><strong>${refs.length}</strong></div><div><span>Требует внимания</span><strong>${reminders.filter(x=>x.status!=='ok').length}</strong></div></div></section>
+      ${reportTable('Ближайшее обслуживание',['Событие','Срок'],reminders.slice(0,8).map(x=>[x.title,describeDue(x)]))}
+      ${full?reportTable('История обслуживания',['Дата','Пробег','Запись','Стоимость'],entries.map(x=>[fmtDate(x.date),x.odometer?`${fmtNum(x.odometer)} км`:'—',x.title,money(totalServiceCost(x))])):''}
+      ${full?reportTable('Узлы и детали',['Узел','Установлено','Пробег установки','Ресурс / проверка'],components.map(x=>[x.name,fmtDate(x.installedDate),`${fmtNum(x.installedOdometer)} км`,[x.lifeKm?`${fmtNum(x.lifeKm)} км`:'',x.lifeMonths?`${fmtNum(x.lifeMonths)} мес.`:'',x.inspectKm?`проверка ${fmtNum(x.inspectKm)} км`:'',x.inspectMonths?`проверка ${fmtNum(x.inspectMonths)} мес.`:''].filter(Boolean).join(' · ')])):''}
+      ${full?reportTable('Документы',['Документ','Номер','Выдан','Действует до'],docs.map(x=>[x.title,x.number||'—',fmtDate(x.issueDate),fmtDate(x.expiryDate)])):''}
+      ${full?reportTable('Расходы',['Дата','Категория','Описание','Сумма'],expenses.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(x=>[fmtDate(x.date),x.category,x.description||'',money(x.amount)])):''}
+      ${full?reportTable('Заправки',['Дата','Пробег','АЗС','Топливо','Объём','Сумма'],refs.map(x=>[fmtDate(x.date),`${fmtNum(x.odometer)} км`,x.station||'—',x.fuelType,`${fmtNum(x.liters,2)} л`,money(x.amount)])):''}
+      <footer class="v5-report-footer">Сформировано в AutoJournal · ${fmtDate(today())}</footer>
+    </article>
+  </div></main>`;
+}
+
 function profilePage(){
   const c=car();
   return `<main class="v5-main"><div class="v5-page v5-secondary-page">
     <div class="v5-profile-card"><div class="v5-profile-avatar">AJ</div><div><strong>AutoJournal</strong><span>${c?`${esc(c.make)} ${esc(c.model)}`:'Локальное приложение'}</span></div></div>
     <div class="v5-menu">
+      <button data-view="carcard">${icons.car}<span><strong>Паспорт автомобиля</strong><small>Фото, комплектация, жидкости и характеристики</small></span><b>›</b></button>
+      <button data-view="report">${icons.doc}<span><strong>Отчёт автомобиля</strong><small>Короткий или полный отчёт в PDF</small></span><b>›</b></button>
       <button data-view="documents">${icons.doc}<span><strong>Документы</strong><small>Файлы и сроки действия</small></span><b>›</b></button>
       <button data-view="analytics">${icons.chart}<span><strong>Статистика</strong><small>Пробег, расходы и заправки</small></span><b>›</b></button>
       <button data-view="parts">${icons.wrench}<span><strong>Контроль обслуживания</strong><small>Срок службы и графики проверок</small></span><b>›</b></button>
@@ -492,7 +617,8 @@ function refuelSheet(id=null){
 
 function refuelDetailSheet(id){
   const x=(state.refuels||[]).find(v=>v.id===id);if(!x)return'';
-  return sheetWrap('Заправка',`<div class="detail-hero"><div class="detail-title">${esc(x.station||x.fuelType||'Заправка')}</div><div class="detail-sub">${fmtDate(x.date)} · ${fmtNum(x.odometer)} км</div><div class="detail-grid"><div class="detail-item"><div class="detail-label">Сумма</div><div class="detail-value">${money(x.amount)}</div></div><div class="detail-item"><div class="detail-label">Объём</div><div class="detail-value">${x.liters?`${fmtNum(x.liters,2)} л`:'—'}</div></div><div class="detail-item"><div class="detail-label">Цена/л</div><div class="detail-value">${x.pricePerLiter?`${fmtNum(x.pricePerLiter,2)} ₽`:'—'}</div></div><div class="detail-item"><div class="detail-label">Полный бак</div><div class="detail-value">${x.fullTank?'Да':'Нет'}</div></div></div></div>${x.address?`<div class="section"><div class="note-box">${esc(x.address)}</div></div>`:''}${x.notes?`<div class="section"><div class="note-box">${esc(x.notes)}</div></div>`:''}`,`<div class="btn-row"><button class="btn" data-action="edit-refuel" data-id="${x.id}">Изменить</button><button class="btn danger" data-action="delete-refuel" data-id="${x.id}">Удалить</button></div>`);
+  const cycle=fuelJournalStats().cycleByRefuel.get(x.id);
+  return sheetWrap('Заправка',`<div class="detail-hero"><div class="detail-title">${esc(x.station||x.fuelType||'Заправка')}</div><div class="detail-sub">${fmtDate(x.date)} · ${fmtNum(x.odometer)} км</div><div class="detail-grid"><div class="detail-item"><div class="detail-label">Сумма</div><div class="detail-value">${money(x.amount)}</div></div><div class="detail-item"><div class="detail-label">Объём</div><div class="detail-value">${x.liters?`${fmtNum(x.liters,2)} л`:'—'}</div></div><div class="detail-item"><div class="detail-label">Цена/л</div><div class="detail-value">${x.pricePerLiter?`${fmtNum(x.pricePerLiter,2)} ₽`:'—'}</div></div><div class="detail-item"><div class="detail-label">Полный бак</div><div class="detail-value">${x.fullTank?'Да':'Нет'}</div></div></div></div>${cycle?`<section class="section"><div class="form-title">Расход от предыдущего полного бака</div><div class="v5-fuel-cycle"><strong>${fuelConsumptionText(cycle.consumption)}</strong><span>${fmtNum(cycle.distance)} км · ${fmtNum(cycle.liters,2)} л · ${fuelCost100Text(cycle.cost100)}</span></div></section>`:''}${x.address?`<div class="section"><div class="note-box">${esc(x.address)}</div></div>`:''}${x.notes?`<div class="section"><div class="note-box">${esc(x.notes)}</div></div>`:''}`,`<div class="btn-row"><button class="btn" data-action="edit-refuel" data-id="${x.id}">Изменить</button><button class="btn danger" data-action="delete-refuel" data-id="${x.id}">Удалить</button></div>`);
 }
 
 function syncRefuelExpense(r){
@@ -509,9 +635,38 @@ function sheetWrap(title,body,foot=''){ return `<div class="sheet-backdrop" data
 function inputField(label,name,value='',type='text',extra=''){ return `<div class="field"><label for="${name}">${label}</label><input class="input" id="${name}" name="${name}" type="${type}" value="${esc(value??'')}" ${extra}></div>`; }
 function selectField(label,name,options,value=''){ return `<div class="field"><label for="${name}">${label}</label><select class="input" id="${name}" name="${name}">${options.map(o=>{const [v,t]=Array.isArray(o)?o:[o,o];return `<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(t)}</option>`}).join('')}</select></div>`; }
 
-function carSheet(id=null){ const x=id?state.cars.find(c=>c.id===id):null; const body=`<form id="car-form"><input type="hidden" name="id" value="${x?.id||''}"><div class="form-section"><div class="field-grid two">${inputField('Марка','make',x?.make||'','text','required')}${inputField('Модель','model',x?.model||'','text','required')}</div><div class="field-grid two" style="margin-top:8px">${inputField('Год','year',x?.year||'','number','inputmode="numeric"')}${inputField('Двигатель','engine',x?.engine||'')}</div></div><div class="form-section"><div class="form-title">Идентификация</div><div class="field-grid two">${inputField('Госномер','plate',x?.plate||'')}${inputField('VIN','vin',x?.vin||'')}</div></div><div class="form-section"><div class="form-title">Пробег</div><div class="field-grid two">${inputField('Пробег при начале учёта, км','initialOdometer',x?.initialOdometer??0,'number','min="0" inputmode="numeric"')}${inputField('Текущий пробег, км','currentOdometer',x?.currentOdometer??0,'number','min="0" inputmode="numeric" required')}</div></div><div class="form-section"><div class="field-grid two">${inputField('Дата покупки','purchaseDate',x?.purchaseDate||'','date')}${inputField('Цена покупки, ₽','purchasePrice',x?.purchasePrice||'','number','min="0" step="0.01" inputmode="decimal"')}</div></div></form>`; const foot=`<button class="btn primary block" form="car-form" type="submit">${x?'Сохранить':'Добавить автомобиль'}</button>${x?`<button class="btn danger block" style="margin-top:8px" data-action="delete-car" data-id="${x.id}">Удалить автомобиль</button>`:''}`; return sheetWrap(x?'Автомобиль':'Новый автомобиль',body,foot); }
+function carSheet(id=null){
+  const x=id?state.cars.find(c=>c.id===id):null;
+  const body=`<form id="car-form"><input type="hidden" name="id" value="${x?.id||''}">
+    <div class="form-section">
+      <div class="form-title">Автомобиль</div>
+      <div class="field-grid two">${inputField('Марка','make',x?.make||'','text','required')}${inputField('Модель','model',x?.model||'','text','required')}</div>
+      <div class="field-grid two" style="margin-top:8px">${inputField('Год','year',x?.year||'','number','inputmode="numeric"')}${inputField('Комплектация','trim',x?.trim||'','text','placeholder="Comfort, Style…"')}</div>
+      <div class="field" style="margin-top:8px"><label>Фото автомобиля</label>${x?.photo?`<img class="v5-car-form-photo" src="${x.photo}" alt="Фото автомобиля">`:''}<input class="input" id="carPhoto" name="carPhoto" type="file" accept="image/*">${x?.photo?'<label class="v5-check-line"><input type="checkbox" name="removePhoto"> Удалить текущее фото</label>':''}</div>
+    </div>
+    <div class="form-section"><div class="form-title">Двигатель и трансмиссия</div>
+      <div class="field-grid two">${inputField('Код / модификация двигателя','engine',x?.engine||'')}${inputField('Объём двигателя, л','engineVolume',x?.engineVolume||'','number','min="0" step="0.1" inputmode="decimal"')}</div>
+      <div class="field-grid two" style="margin-top:8px">${inputField('Мощность, л.с.','powerHp',x?.powerHp||'','number','min="0" inputmode="numeric"')}${selectField('Коробка передач','transmission',['','МКПП','АКПП','Робот','Вариатор','Другое'],x?.transmission||'')}</div>
+      <div class="field-grid two" style="margin-top:8px">${selectField('Основное топливо','fuelType',['','АИ-92','АИ-95','АИ-98','АИ-100','Дизель','Газ','Электричество','Гибрид','Другое'],x?.fuelType||'')}${inputField('Размер шин','tireSize',x?.tireSize||'','text','placeholder="205/60 R16"')}</div>
+    </div>
+    <div class="form-section"><div class="form-title">Масла и жидкости</div>
+      <div class="field-grid two">${inputField('Масло двигателя','engineOil',x?.engineOil||'','text','placeholder="5W-40, допуск…"')}${inputField('Масло двигателя, л','engineOilVolume',x?.engineOilVolume||'','number','min="0" step="0.1" inputmode="decimal"')}</div>
+      <div class="field-grid two" style="margin-top:8px">${inputField('Охлаждающая жидкость, л','coolantVolume',x?.coolantVolume||'','number','min="0" step="0.1" inputmode="decimal"')}${inputField('Масло КПП, л','transmissionOilVolume',x?.transmissionOilVolume||'','number','min="0" step="0.1" inputmode="decimal"')}</div>
+      <div class="field-grid two" style="margin-top:8px">${inputField('Тормозная жидкость, л','brakeFluidVolume',x?.brakeFluidVolume||'','number','min="0" step="0.1" inputmode="decimal"')}${inputField('Жидкость ГУР, л','steeringFluidVolume',x?.steeringFluidVolume||'','number','min="0" step="0.1" inputmode="decimal"')}</div>
+    </div>
+    <div class="form-section"><div class="form-title">Идентификация</div><div class="field-grid two">${inputField('Госномер','plate',x?.plate||'')}${inputField('VIN','vin',x?.vin||'')}</div></div>
+    <div class="form-section"><div class="form-title">Пробег</div><div class="field-grid two">${inputField('Пробег при начале учёта, км','initialOdometer',x?.initialOdometer??0,'number','min="0" inputmode="numeric"')}${inputField('Текущий пробег, км','currentOdometer',x?.currentOdometer??0,'number','min="0" inputmode="numeric" required')}</div></div>
+    <div class="form-section"><div class="field-grid two">${inputField('Дата покупки','purchaseDate',x?.purchaseDate||'','date')}${inputField('Цена покупки, ₽','purchasePrice',x?.purchasePrice||'','number','min="0" step="0.01" inputmode="decimal"')}</div></div>
+    <div class="form-section"><div class="field"><label>Пользовательские характеристики</label><textarea class="input" name="customSpecs" placeholder="По одной характеристике на строку, например:&#10;Клиренс: 155 мм&#10;Аккумулятор: 60 А·ч">${esc(x?.customSpecs||'')}</textarea></div></div>
+  </form>`;
+  const foot=`<button class="btn primary block" form="car-form" type="submit">${x?'Сохранить':'Добавить автомобиль'}</button>${x?`<button class="btn danger block" style="margin-top:8px" data-action="delete-car" data-id="${x.id}">Удалить автомобиль</button>`:''}`;
+  return sheetWrap(x?'Автомобиль':'Новый автомобиль',body,foot);
+}
 
-function garageSheet(){ const body=`${state.cars.length?`<div class="list">${state.cars.map(c=>`<button class="list-row" data-action="activate-car" data-id="${c.id}"><div class="row-icon">${icons.car}</div><div class="row-main"><div class="row-title">${esc(c.make)} ${esc(c.model)}</div><div class="row-sub">${fmtNum(c.currentOdometer)} км${c.plate?` · ${esc(c.plate)}`:''}</div></div>${c.id===state.activeCarId?statusPill('ok'):'<span class="row-chevron">›</span>'}</button>`).join('')}</div>`:''}<button class="btn primary block" style="margin-top:16px" data-action="add-car">Добавить автомобиль</button>${car()?`<button class="btn block" style="margin-top:8px" data-action="edit-current-car">Изменить текущий</button>`:''}`; return sheetWrap('Гараж',body); }
+function garageSheet(){
+  const body=`${state.cars.length?`<div class="list">${state.cars.map(c=>`<button class="list-row" data-action="activate-car" data-id="${c.id}"><div class="row-icon v5-garage-photo">${c.photo?`<img src="${c.photo}" alt="">`:icons.car}</div><div class="row-main"><div class="row-title">${esc(c.make)} ${esc(c.model)}</div><div class="row-sub">${c.trim?`${esc(c.trim)} · `:''}${fmtNum(c.currentOdometer)} км${c.plate?` · ${esc(c.plate)}`:''}</div></div>${c.id===state.activeCarId?statusPill('ok'):'<span class="row-chevron">›</span>'}</button>`).join('')}</div>`:''}<button class="btn primary block" style="margin-top:16px" data-action="add-car">Добавить автомобиль</button>${car()?`<button class="btn block" style="margin-top:8px" data-action="edit-current-car">Изменить текущий</button>`:''}`;
+  return sheetWrap('Гараж',body);
+}
 
 function odometerSheet(){
   const c=car(), last=nonneg(c?.currentOdometer);
@@ -620,7 +775,7 @@ function goBack(){
 }
 function render(){
   const root=$('#app');
-  const page={home:homePage,records:historyPage,refuels:refuelsPage,notifications:notificationsPage,profile:profilePage,parts:partsPage,analytics:analyticsPage,documents:documentsPage,more:morePage}[ui.view]||homePage;
+  const page={home:homePage,records:historyPage,refuels:refuelsPage,notifications:notificationsPage,profile:profilePage,carcard:carCardPage,report:reportPage,parts:partsPage,analytics:analyticsPage,documents:documentsPage,more:morePage}[ui.view]||homePage;
   const secondary=!primaryViews.has(ui.view);
   root.dataset.secondary=secondary?'true':'false';
   root.innerHTML=`${topbar()}${page()}${secondary?'':tabbar()}${renderSheet()}`;
@@ -659,11 +814,28 @@ async function handleSubmit(e){
   // A control named "id" shadows HTMLFormElement.id in Safari and Chromium.
   const formId=f.getAttribute('id');
   if(formId==='car-form'){
-    const d=formObject(f), id=d.id||uid(); let x=state.cars.find(c=>c.id===id); const initial=nonneg(d.initialOdometer), requested=nonneg(d.currentOdometer);
+    const d=formObject(f),id=d.id||uid();let x=state.cars.find(c=>c.id===id);const initial=nonneg(d.initialOdometer),requested=nonneg(d.currentOdometer);
     if(!d.make.trim()||!d.model.trim()){toast('Укажи марку и модель автомобиля');return;}
     if(requested<initial){toast('Текущий пробег не может быть меньше пробега начала учёта');return;}
     if(d.year&&(Number(d.year)<1886||Number(d.year)>new Date().getFullYear()+1)){toast('Проверь год автомобиля');return;}
-    if(x){const floor=linkedMileageFloor(id);if(requested<floor){toast(`В истории есть запись на ${fmtNum(floor)} км. Сначала исправь её.`);return;}Object.assign(x,{id,make:d.make.trim(),model:d.model.trim(),year:d.year,engine:d.engine,plate:d.plate.trim(),vin:d.vin.trim(),initialOdometer:initial,purchaseDate:d.purchaseDate,purchasePrice:nonneg(d.purchasePrice)});state.odometerLogs=state.odometerLogs.filter(v=>!(v.carId===id&&v.sourceType==='manual'&&nonneg(v.value)>requested));state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Из карточки автомобиля',sourceType:'manual',sourceId:uid()});recalculateCurrentOdometer(id);}else{const obj={id,make:d.make.trim(),model:d.model.trim(),year:d.year,engine:d.engine,plate:d.plate.trim(),vin:d.vin.trim(),initialOdometer:initial,currentOdometer:requested,purchaseDate:d.purchaseDate,purchasePrice:nonneg(d.purchasePrice),trackingStartDate:nowISO()};state.cars.push(obj);state.activeCarId=id;state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Начало учёта',sourceType:'car-start',sourceId:id});}
+    let photo=x?.photo||'';
+    if(d.removePhoto)photo='';
+    const photoFile=f.elements.carPhoto?.files?.[0];
+    if(photoFile){
+      if(photoFile.size>12*1024*1024){toast('Фото автомобиля больше 12 МБ');return;}
+      try{const data=await fileToDataURL(photoFile,true);if(!safeImageData(data)){toast('Не удалось обработать фото автомобиля');return;}photo=data;}catch{toast('Не удалось обработать фото автомобиля');return;}
+    }
+    const details={id,make:d.make.trim(),model:d.model.trim(),year:d.year,engine:d.engine,plate:d.plate.trim(),vin:d.vin.trim(),photo,trim:String(d.trim||'').trim(),fuelType:String(d.fuelType||''),engineVolume:String(d.engineVolume||''),transmission:String(d.transmission||''),powerHp:nonneg(d.powerHp),tireSize:String(d.tireSize||'').trim(),engineOil:String(d.engineOil||'').trim(),engineOilVolume:String(d.engineOilVolume||''),coolantVolume:String(d.coolantVolume||''),transmissionOilVolume:String(d.transmissionOilVolume||''),brakeFluidVolume:String(d.brakeFluidVolume||''),steeringFluidVolume:String(d.steeringFluidVolume||''),customSpecs:String(d.customSpecs||'').trim(),initialOdometer:initial,purchaseDate:d.purchaseDate,purchasePrice:nonneg(d.purchasePrice)};
+    if(x){
+      const floor=linkedMileageFloor(id);if(requested<floor){toast(`В истории есть запись на ${fmtNum(floor)} км. Сначала исправь её.`);return;}
+      Object.assign(x,details);
+      state.odometerLogs=state.odometerLogs.filter(v=>!(v.carId===id&&v.sourceType==='manual'&&nonneg(v.value)>requested));
+      state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Из карточки автомобиля',sourceType:'manual',sourceId:uid()});
+      recalculateCurrentOdometer(id);
+    }else{
+      const obj={...details,currentOdometer:requested,trackingStartDate:nowISO()};state.cars.push(obj);state.activeCarId=id;
+      state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Начало учёта',sourceType:'car-start',sourceId:id});
+    }
     await persist();ui.sheet=null;toast('Автомобиль сохранён');render();return;
   }
   if(formId==='odometer-form'){const d=formObject(f);if(!updateCarMileage(d.value,nowISO(),'Обновление пробега'))return;await persist();ui.sheet=null;toast('Пробег обновлён');render();return;}
@@ -894,6 +1066,8 @@ document.addEventListener('click', async e=>{
   if(a==='open-profile'){navigateTo('profile');return;}
   if(a==='go-back'){goBack();return;}
   if(a==='analytics-tab'){ui.analyticsTab=el.dataset.value||'expenses';nextTransition='fade';render();return;}
+  if(a==='report-mode'){ui.reportMode=el.dataset.value==='full'?'full':'short';nextTransition='fade';render();return;}
+  if(a==='print-report'){const old=document.title,c=car();document.title=`AutoJournal-${c?.make||'auto'}-${c?.model||'report'}-${today()}`;document.body.classList.add('v5-print-report');setTimeout(()=>{window.print();setTimeout(()=>{document.body.classList.remove('v5-print-report');document.title=old;},200);},60);return;}
   if(a==='notif-tab'){ui.notificationTab=el.dataset.value||'auto';render();return;}
   if(a==='add-car'){ui.sheet='car';ui.sheetId=null;render();return;}
   if(a==='edit-current-car'){ui.sheet='car';ui.sheetId=state.activeCarId;render();return;}
@@ -935,7 +1109,7 @@ document.addEventListener('click', async e=>{
   if(a==='calendar-export'){exportCalendar();return;}
   if(a==='enable-notifications'){await showCurrentNotification();return;}
   if(a==='persist-storage'){await requestPersistentStorage();return;}
-  if(a==='reset-all'){if(confirm('Удалить ВСЕ автомобили, историю, фото, документы и настройки с этого устройства?')){await clearState();state=defaultState();applyTheme();ui={view:'home',sheet:null,sheetId:null,search:'',historyType:'all',expenseFilter:'all',notificationTab:'auto',analyticsTab:'expenses',analyticsPeriod:'month'};navStack=[];render();toast('Все данные удалены');}return;}
+  if(a==='reset-all'){if(confirm('Удалить ВСЕ автомобили, историю, фото, документы и настройки с этого устройства?')){await clearState();state=defaultState();applyTheme();ui={view:'home',sheet:null,sheetId:null,search:'',historyType:'all',expenseFilter:'all',notificationTab:'auto',analyticsTab:'expenses',analyticsPeriod:'month',reportMode:'short'};navStack=[];render();toast('Все данные удалены');}return;}
 });
 
 let edgeSwipe=null;

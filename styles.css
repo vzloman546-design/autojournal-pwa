@@ -767,3 +767,329 @@ body.v5-sheet-settling .sheet-backdrop{
   .v5-notify-title-row{display:block}
   .v5-notify-status{display:inline-block;margin-top:5px}
 }
+
+
+/* =========================================================
+   AutoJournal v5.4 — fuel journal, vehicle passport, reports
+   ========================================================= */
+.v5-fuel-metrics,
+.v5-fuel-facts,
+.v5-spec-grid,
+.v5-report-kpis{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:9px;
+}
+.v5-fuel-metrics>div,
+.v5-fuel-facts>div,
+.v5-spec-grid>div{
+  min-width:0;
+  padding:14px;
+  border:1px solid var(--v5-line);
+  border-radius:18px;
+  background:var(--v5-card);
+}
+.v5-fuel-metrics span,
+.v5-fuel-facts span,
+.v5-spec-grid span{
+  display:block;
+  color:var(--v5-muted);
+  font-size:10px;
+  line-height:1.25;
+}
+.v5-fuel-metrics strong,
+.v5-fuel-facts strong,
+.v5-spec-grid strong{
+  display:block;
+  margin-top:5px;
+  color:var(--v5-text);
+  font-size:15px;
+  line-height:1.28;
+  overflow-wrap:anywhere;
+}
+.v5-fuel-metrics small,
+.v5-fuel-facts small{
+  display:block;
+  margin-top:4px;
+  color:var(--v5-muted);
+  font-size:10px;
+  line-height:1.3;
+}
+.v5-fuel-note{
+  margin-top:10px;
+  padding:11px 13px;
+  border-radius:15px;
+  background:var(--v5-soft);
+  color:var(--v5-muted);
+  font-size:11px;
+  line-height:1.42;
+}
+.v5-fuel-cycle{
+  padding:15px;
+  border:1px solid var(--v5-line);
+  border-radius:18px;
+  background:var(--v5-card);
+}
+.v5-fuel-cycle strong{
+  display:block;
+  font-size:22px;
+  letter-spacing:-.025em;
+}
+.v5-fuel-cycle span{
+  display:block;
+  margin-top:5px;
+  color:var(--v5-muted);
+  font-size:12px;
+}
+.v5-car-form-photo{
+  display:block;
+  width:100%;
+  max-height:210px;
+  object-fit:cover;
+  border-radius:18px;
+  margin:0 0 9px;
+  border:1px solid var(--v5-line);
+}
+.v5-check-line{
+  display:flex!important;
+  align-items:center;
+  gap:8px;
+  margin-top:9px;
+  color:var(--v5-muted)!important;
+  font-size:12px!important;
+}
+.v5-check-line input{width:20px;height:20px}
+.v5-garage-photo{
+  overflow:hidden;
+  padding:0!important;
+}
+.v5-garage-photo img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.v5-car-passport-hero{
+  overflow:hidden;
+  border:1px solid var(--v5-line);
+  border-radius:26px;
+  background:var(--v5-card);
+}
+.v5-car-passport-hero>img,
+.v5-car-passport-placeholder{
+  width:100%;
+  height:220px;
+  object-fit:cover;
+}
+.v5-car-passport-placeholder{
+  display:grid;
+  place-items:center;
+  background:linear-gradient(145deg,var(--v5-soft),var(--v5-card));
+  color:var(--v5-accent);
+}
+.v5-car-passport-placeholder .icon{width:68px;height:68px}
+.v5-car-passport-hero>div:last-child{padding:18px}
+.v5-car-passport-hero h1{
+  margin:0;
+  font-size:27px;
+  line-height:1.06;
+  letter-spacing:-.035em;
+}
+.v5-car-passport-hero p{
+  margin:6px 0 12px;
+  color:var(--v5-muted);
+  font-size:13px;
+}
+.v5-car-passport-hero strong{
+  font-size:22px;
+  letter-spacing:-.02em;
+}
+.v5-passport-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+  margin:12px 0 20px;
+}
+.v5-passport-actions>*{min-height:50px}
+.v5-passport-section{margin-top:22px}
+.v5-passport-section h2{
+  margin:0 0 10px;
+  font-size:19px;
+  letter-spacing:-.02em;
+}
+.v5-spec-list{
+  overflow:hidden;
+  border:1px solid var(--v5-line);
+  border-radius:20px;
+  background:var(--v5-card);
+}
+.v5-spec-list>div{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);
+  gap:12px;
+  padding:13px 14px;
+}
+.v5-spec-list>div+div{border-top:1px solid var(--v5-line)}
+.v5-spec-list span{color:var(--v5-muted);font-size:12px}
+.v5-spec-list strong{text-align:right;font-size:13px;overflow-wrap:anywhere}
+
+/* Vehicle report */
+.v5-report-controls{
+  display:grid;
+  gap:10px;
+  margin:4px 0 18px;
+}
+.v5-report-mode{margin:0}
+.v5-report-controls>p{
+  margin:0;
+  color:var(--v5-muted);
+  font-size:11px;
+  line-height:1.4;
+}
+.v5-report-paper{
+  padding:22px;
+  border:1px solid var(--v5-line);
+  border-radius:24px;
+  background:var(--v5-card);
+  color:var(--v5-text);
+}
+.v5-report-header{
+  display:grid;
+  grid-template-columns:104px minmax(0,1fr);
+  gap:16px;
+  align-items:center;
+  padding-bottom:18px;
+  border-bottom:1px solid var(--v5-line);
+}
+.v5-report-header>img{
+  width:104px;
+  height:78px;
+  object-fit:cover;
+  border-radius:14px;
+}
+.v5-report-header:not(:has(img)){grid-template-columns:1fr}
+.v5-report-brand{
+  color:var(--v5-accent);
+  font-size:11px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.v5-report-header h1{
+  margin:3px 0 2px;
+  font-size:25px;
+  line-height:1.08;
+  letter-spacing:-.03em;
+}
+.v5-report-header p{
+  margin:0 0 7px;
+  color:var(--v5-muted);
+  font-size:12px;
+}
+.v5-report-header strong{font-size:17px}
+.v5-report-section{
+  margin-top:20px;
+  break-inside:avoid;
+}
+.v5-report-section h2{
+  margin:0 0 10px;
+  font-size:16px;
+}
+.v5-report-specs{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+}
+.v5-report-specs>div,
+.v5-report-kpis>div{
+  padding:10px;
+  border-radius:12px;
+  background:var(--v5-bg);
+}
+.v5-report-specs span,
+.v5-report-kpis span{
+  display:block;
+  color:var(--v5-muted);
+  font-size:9px;
+}
+.v5-report-specs strong,
+.v5-report-kpis strong{
+  display:block;
+  margin-top:4px;
+  font-size:12px;
+  overflow-wrap:anywhere;
+}
+.v5-report-table-wrap{
+  width:100%;
+  overflow:auto;
+  border:1px solid var(--v5-line);
+  border-radius:14px;
+}
+.v5-report-table-wrap table{
+  width:100%;
+  min-width:520px;
+  border-collapse:collapse;
+  font-size:10px;
+}
+.v5-report-table-wrap th,
+.v5-report-table-wrap td{
+  padding:8px 9px;
+  border-bottom:1px solid var(--v5-line);
+  text-align:left;
+  vertical-align:top;
+}
+.v5-report-table-wrap th{
+  color:var(--v5-muted);
+  font-weight:700;
+}
+.v5-report-table-wrap tr:last-child td{border-bottom:0}
+.v5-report-footer{
+  margin-top:24px;
+  padding-top:12px;
+  border-top:1px solid var(--v5-line);
+  color:var(--v5-muted);
+  font-size:9px;
+  text-align:center;
+}
+
+@media(max-width:359px){
+  .v5-fuel-metrics,.v5-fuel-facts,.v5-spec-grid,.v5-report-kpis{grid-template-columns:1fr}
+  .v5-passport-actions{grid-template-columns:1fr}
+  .v5-car-passport-hero>img,.v5-car-passport-placeholder{height:180px}
+  .v5-report-paper{padding:16px}
+  .v5-report-header{grid-template-columns:1fr}
+  .v5-report-header>img{width:100%;height:150px}
+}
+
+/* System print/PDF output. Keeps Cyrillic and photos through the browser renderer. */
+@media print{
+  @page{size:A4;margin:12mm}
+  html,body{
+    background:#fff!important;
+    color:#111!important;
+    height:auto!important;
+    overflow:visible!important;
+  }
+  #ios-edge-shield,.v5-subbar,.v5-topbar,.v5-tab-wrap,.v5-report-controls,.toast-root{display:none!important}
+  #app,.v5-main,.v5-page,.v5-report-page,.v5-report-paper{
+    position:static!important;
+    width:auto!important;
+    max-width:none!important;
+    height:auto!important;
+    min-height:0!important;
+    overflow:visible!important;
+    margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+    color:#111!important;
+    border:0!important;
+    box-shadow:none!important;
+  }
+  .v5-report-paper *{color:#111!important}
+  .v5-report-header,.v5-report-section,.v5-report-kpis>div,.v5-report-specs>div{break-inside:avoid}
+  .v5-report-kpis,.v5-report-specs{grid-template-columns:repeat(3,1fr)!important}
+  .v5-report-table-wrap{overflow:visible!important;border-color:#bbb!important}
+  .v5-report-table-wrap table{min-width:0!important;font-size:8.5pt!important}
+  .v5-report-table-wrap th,.v5-report-table-wrap td{border-color:#ddd!important;padding:5pt!important}
+  .v5-report-specs>div,.v5-report-kpis>div{background:#f5f5f5!important}
+  .v5-report-header img{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+}

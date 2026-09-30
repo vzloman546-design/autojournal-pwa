@@ -37,6 +37,19 @@ function isoOffset(days){
   return d.toISOString().slice(0,10);
 }
 
+async function addRefuel(page,{date,odometer,amount,liters,station='АЗС',fullTank=false}){
+  await page.locator('.v5-tabbar [data-view="refuels"]').click();
+  await page.locator('[data-action="add-refuel"]').first().click();
+  await page.locator('#date').fill(date);
+  await page.locator('#odometer').fill(String(odometer));
+  await page.locator('#amount').fill(String(amount));
+  await page.locator('#liters').fill(String(liters));
+  await page.locator('#station').fill(station);
+  if(fullTank)await page.locator('input[name="fullTank"]').check();
+  await page.locator('button[form="refuel-form"]').click();
+  await expect(page.locator('#refuel-form')).toHaveCount(0);
+}
+
 test.beforeEach(async({page})=>{ await clearApp(page); });
 
 test('service entry without mileage syncs one expense through edit and delete', async({page})=>{
@@ -356,6 +369,102 @@ test('iPhone-like layout handles long content, themes and safe-area inputs', asy
   }
 });
 
+
+test('fuel journal calculates full-tank consumption with partial fills', async({page})=>{
+  await addCar(page,{initial:'100000',current:'100000'});
+  await addRefuel(page,{date:isoOffset(-2),odometer:100000,amount:3000,liters:50,station:'Лукойл',fullTank:true});
+  await addRefuel(page,{date:isoOffset(-1),odometer:100300,amount:1800,liters:30,station:'Роснефть',fullTank:false});
+  await addRefuel(page,{date:isoOffset(0),odometer:100700,amount:2100,liters:35,station:'Лукойл',fullTank:true});
+
+  await page.locator('.v5-tabbar [data-view="refuels"]').click();
+  await expect(page.locator('.v5-main')).toContainText('9,29 л/100 км');
+  await expect(page.locator('.v5-main')).toContainText('557 ₽/100 км');
+  await expect(page.locator('.v5-main')).toContainText('60 ₽/л');
+  await expect(page.locator('.v5-main')).toContainText('Любимая АЗС');
+  await expect(page.locator('.v5-main')).toContainText('Лукойл');
+  await expect(page.locator('.v5-main')).toContainText('2 100 ₽');
+  await expect(page.locator('.v5-main')).toContainText('3 000 ₽');
+
+  const rows=page.locator('[data-action="refuel-detail"]');
+  await rows.first().click();
+  await expect(page.locator('.sheet')).toContainText('Расход от предыдущего полного бака');
+  await expect(page.locator('.sheet')).toContainText('9,29 л/100 км');
+  await closeSheet(page);
+
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="analytics"]').click();
+  await page.locator('[data-action="analytics-tab"][data-value="refuels"]').click();
+  await page.locator('[data-input="analytics-period"]').selectOption('all');
+  await expect(page.locator('.v5-main')).toContainText('9,29 л/100 км');
+  await expect(page.locator('.v5-main')).toContainText('557 ₽/100 км');
+});
+
+test('vehicle passport stores photo and technical specifications', async({page})=>{
+  await addCar(page);
+  await page.locator('[data-action="car-switch"]').click();
+  await page.locator('[data-action="edit-current-car"]').click();
+  await page.locator('#trim').fill('Style');
+  await page.locator('#engineVolume').fill('2.0');
+  await page.locator('#powerHp').fill('137');
+  await page.locator('#transmission').selectOption('МКПП');
+  await page.locator('#fuelType').selectOption('АИ-95');
+  await page.locator('#tireSize').fill('205/60 R16');
+  await page.locator('#engineOil').fill('5W-40');
+  await page.locator('#engineOilVolume').fill('4.0');
+  await page.locator('#coolantVolume').fill('7.0');
+  await page.locator('#transmissionOilVolume').fill('2.0');
+  await page.locator('#brakeFluidVolume').fill('0.8');
+  await page.locator('#steeringFluidVolume').fill('1.0');
+  await page.locator('textarea[name="customSpecs"]').fill('Клиренс: 155 мм\nАккумулятор: 60 А·ч');
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64');
+  await page.locator('#carPhoto').setInputFiles({name:'car.png',mimeType:'image/png',buffer:png});
+  await page.locator('button[form="car-form"]').click();
+  await expect(page.locator('#car-form')).toHaveCount(0);
+
+  const s=await state(page),c=s.cars[0];
+  expect(c.trim).toBe('Style');
+  expect(c.powerHp).toBe(137);
+  expect(c.transmission).toBe('МКПП');
+  expect(c.fuelType).toBe('АИ-95');
+  expect(c.photo).toMatch(/^data:image\//);
+
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="carcard"]').click();
+  await expect(page.locator('.v5-subbar-title')).toHaveText('Паспорт автомобиля');
+  await expect(page.locator('.v5-car-passport-hero img')).toBeVisible();
+  for(const text of ['Style','137 л.с.','МКПП','АИ-95','205/60 R16','5W-40','Клиренс','155 мм','Аккумулятор','60 А·ч']){
+    await expect(page.locator('.v5-main')).toContainText(text);
+  }
+  await expect(page.locator('.v5-tabbar')).toHaveCount(0);
+});
+
+test('short and full vehicle reports render and invoke system PDF print', async({page})=>{
+  await addCar(page);
+  await page.locator('[data-action="add-entry"]').first().click();
+  await page.locator('#title').fill('Замена масла для отчёта');
+  await page.locator('#partsCost').fill('3000');
+  await page.locator('#laborCost').fill('1000');
+  await page.locator('button[form="entry-form"]').click();
+
+  await page.evaluate(()=>{window.print=()=>{window.__reportPrinted=true;};});
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="report"]').click();
+  await expect(page.locator('.v5-subbar-title')).toHaveText('Отчёт автомобиля');
+  await expect(page.locator('.v5-report-paper')).toContainText('Паспорт автомобиля');
+  await expect(page.locator('.v5-report-paper')).toContainText('Сводка эксплуатации');
+  await expect(page.locator('.v5-report-paper')).not.toContainText('История обслуживания');
+
+  await page.locator('[data-action="report-mode"][data-value="full"]').click();
+  await expect(page.locator('.v5-report-paper')).toContainText('История обслуживания');
+  await expect(page.locator('.v5-report-paper')).toContainText('Замена масла для отчёта');
+  await expect(page.locator('.v5-report-paper')).toContainText('Расходы');
+  await expect(page.locator('.v5-report-paper')).toContainText('Заправки');
+
+  await page.locator('[data-action="print-report"]').click();
+  await expect.poll(()=>page.evaluate(()=>window.__reportPrinted===true)).toBe(true);
+  await expect(page.locator('.v5-tabbar')).toHaveCount(0);
+});
+
 test.describe('offline PWA',()=>{
   test.use({serviceWorkers:'allow'});
   test('cached shell and IndexedDB remain usable offline',async({page,context,browserName})=>{
@@ -363,7 +472,7 @@ test.describe('offline PWA',()=>{
     await addCar(page);
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.3.1');
+    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.4.0');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
