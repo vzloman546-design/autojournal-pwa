@@ -1,6 +1,6 @@
-const CACHE='autojournal-v5.0.0';
+const CACHE='autojournal-v5.1.0';
 const APP_SHELL=[
-  './','./index.html','./v41.css','./v5.css','./app-v5.js','./db.js','./manifest.webmanifest',
+  './','./index.html','./v41.css','./v51.css','./app-v51.js','./db.js','./manifest.webmanifest',
   './icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png'
 ];
 self.addEventListener('install',event=>{
@@ -24,6 +24,6 @@ self.addEventListener('fetch',event=>{
   if(event.request.method!=='GET')return;
   const url=new URL(event.request.url);
   if(url.origin!==location.origin)return;
-  const core=event.request.mode==='navigate'||/\/(?:app-v5|db|sw)\.js$/.test(url.pathname)||/\/(?:v41|v5)\.css$/.test(url.pathname)||/\/manifest\.webmanifest$/.test(url.pathname);
+  const core=event.request.mode==='navigate'||/\/(?:app-v51|db|sw)\.js$/.test(url.pathname)||/\/(?:v41|v51)\.css$/.test(url.pathname)||/\/manifest\.webmanifest$/.test(url.pathname);
   event.respondWith(core?networkFirst(event.request):caches.match(event.request).then(hit=>hit||networkFirst(event.request)));
 });
