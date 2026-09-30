@@ -371,7 +371,7 @@ test('iPhone-like layout handles long content, themes and safe-area inputs', asy
 
 
 test('fuel journal calculates full-tank consumption with partial fills', async({page})=>{
-  await addCar(page,{initial:'100000',current:'100000'});
+  await addCar(page,{initial:'100000',current:'100700'});
   await addRefuel(page,{date:isoOffset(-2),odometer:100000,amount:3000,liters:50,station:'Лукойл',fullTank:true});
   await addRefuel(page,{date:isoOffset(-1),odometer:100300,amount:1800,liters:30,station:'Роснефть',fullTank:false});
   await addRefuel(page,{date:isoOffset(0),odometer:100700,amount:2100,liters:35,station:'Лукойл',fullTank:true});
@@ -472,7 +472,7 @@ test.describe('offline PWA',()=>{
     await addCar(page);
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.4.0');
+    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.4.1');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');

@@ -542,7 +542,7 @@ function carCardPage(){
   </div></main>`;
 }
 function reportTable(title,headers,rows){
-  if(!rows.length)return '';
+  if(!rows.length)return `<section class="v5-report-section"><h2>${esc(title)}</h2><div class="v5-report-empty">Нет записей</div></section>`;
   return `<section class="v5-report-section"><h2>${esc(title)}</h2><div class="v5-report-table-wrap"><table><thead><tr>${headers.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(cell=>`<td>${esc(cell??'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`;
 }
 function reportPage(){

@@ -1093,3 +1093,16 @@ body.v5-sheet-settling .sheet-backdrop{
   .v5-report-specs>div,.v5-report-kpis>div{background:#f5f5f5!important}
   .v5-report-header img{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 }
+
+
+.v5-report-empty{
+  padding:12px 14px;
+  border:1px solid var(--v5-line);
+  border-radius:14px;
+  background:var(--v5-bg);
+  color:var(--v5-muted);
+  font-size:11px;
+}
+@media print{
+  .v5-report-empty{background:#f5f5f5!important;border-color:#ddd!important;color:#666!important}
+}
