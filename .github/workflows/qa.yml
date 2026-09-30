@@ -4,13 +4,17 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'app-v53.js'
-      - 'v53.css'
+      - 'app.js'
+      - 'styles.css'
       - 'index.html'
       - 'sw.js'
       - 'db.js'
-      - 'tests/v53.spec.cjs'
-      - 'playwright.v53.config.cjs'
+      - 'manifest.webmanifest'
+      - 'tests/app.spec.cjs'
+      - 'tests/server.cjs'
+      - 'playwright.config.cjs'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/qa.yml'
 jobs:
   qa:
@@ -24,4 +28,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
-      - run: npx playwright test --config=playwright.v53.config.cjs
+      - run: npm test

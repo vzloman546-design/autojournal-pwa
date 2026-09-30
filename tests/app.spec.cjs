@@ -315,6 +315,44 @@ test('notifications surface maintenance/document/backup states', async({page})=>
   await expect(page.getByText(/резервную копию/i)).toBeVisible();
 });
 
+
+test('iPhone-like layout handles long content, themes and safe-area inputs', async({page,context,browserName})=>{
+  await addCar(page,{make:'Mercedes-Benz',model:'C-Class Очень длинное название автомобиля',initial:'9000000',current:'9999999'});
+  await page.setViewportSize({width:320,height:568});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await expect(page.locator('.v5-car-title')).toBeVisible();
+
+  await page.locator('[data-action="add-entry"]').first().click();
+  const fontSizes=await page.locator('.sheet input,.sheet textarea,.sheet select').evaluateAll(nodes=>nodes.map(n=>parseFloat(getComputedStyle(n).fontSize)||0));
+  expect(fontSizes.every(v=>v>=16)).toBe(true);
+  await page.locator('.sheet-close').click();
+
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="more"]').click();
+  await page.locator('[data-input="theme"]').selectOption('dark');
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.getAttribute('data-theme'))).toBe('dark');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+
+  const edge=await page.evaluate(()=>({
+    shield:getComputedStyle(document.querySelector('#ios-edge-shield')).position,
+    shieldHeight:document.querySelector('#ios-edge-shield').getBoundingClientRect().height,
+    bodyAfter:getComputedStyle(document.body,'::after').display,
+    htmlBg:getComputedStyle(document.documentElement).backgroundColor,
+    bodyBg:getComputedStyle(document.body).backgroundColor
+  }));
+  expect(edge.shield).toBe('fixed');
+  expect(edge.shieldHeight).toBeGreaterThanOrEqual(6);
+  expect(edge.bodyAfter).toBe('none');
+  expect(edge.htmlBg).toBe(edge.bodyBg);
+
+  if(browserName==='chromium'){
+    const cdp=await context.newCDPSession(page);
+    await cdp.send('Emulation.setSafeAreaInsetsOverride',{insets:{top:47,bottom:34,left:0,right:0}});
+    const bottom=await page.locator('.v5-tab-wrap').evaluate(el=>el.getBoundingClientRect().bottom);
+    expect(Math.abs(bottom-window.innerHeight)).toBeLessThan(1);
+  }
+});
+
 test.describe('offline PWA',()=>{
   test.use({serviceWorkers:'allow'});
   test('cached shell and IndexedDB remain usable offline',async({page,context,browserName})=>{
@@ -322,7 +360,7 @@ test.describe('offline PWA',()=>{
     await addCar(page);
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.3.0');
+    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.3.1');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
