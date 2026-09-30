@@ -1,6 +1,29 @@
-const CACHE='autojournal-v3.5.6';
-const APP_SHELL=['./','./index.html','./styles.css','./ui-v356.css','./app-v355.js','./db.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png'];
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(APP_SHELL)));self.skipWaiting();});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});
-async function networkFirst(req){try{const r=await fetch(req);if(r?.ok)(await caches.open(CACHE)).put(req,r.clone());return r}catch{return(await caches.match(req))||(req.mode==='navigate'?caches.match('./index.html'):Response.error())}}
-self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;const core=e.request.mode==='navigate'||/\/(?:app(?:-v\d+)?|db|sw)\.js$/.test(u.pathname)||/\/(?:styles|ui-v\d+)\.css$/.test(u.pathname)||/\/manifest\.webmanifest$/.test(u.pathname);e.respondWith(core?networkFirst(e.request):caches.match(e.request).then(c=>c||networkFirst(e.request)));});
+const CACHE='autojournal-v4.0.0';
+const APP_SHELL=[
+  './','./index.html','./v4.css','./app-v4.js','./db.js','./manifest.webmanifest',
+  './icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png'
+];
+self.addEventListener('install',event=>{
+  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(APP_SHELL)));
+  self.skipWaiting();
+});
+self.addEventListener('activate',event=>{
+  event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))));
+  self.clients.claim();
+});
+async function networkFirst(request){
+  try{
+    const response=await fetch(request);
+    if(response?.ok)(await caches.open(CACHE)).put(request,response.clone());
+    return response;
+  }catch{
+    return (await caches.match(request)) || (request.mode==='navigate' ? caches.match('./index.html') : Response.error());
+  }
+}
+self.addEventListener('fetch',event=>{
+  if(event.request.method!=='GET')return;
+  const url=new URL(event.request.url);
+  if(url.origin!==location.origin)return;
+  const core=event.request.mode==='navigate'||/\/(?:app-v4|db|sw)\.js$/.test(url.pathname)||/\/v4\.css$/.test(url.pathname)||/\/manifest\.webmanifest$/.test(url.pathname);
+  event.respondWith(core?networkFirst(event.request):caches.match(event.request).then(hit=>hit||networkFirst(event.request)));
+});
