@@ -1,58 +1,6 @@
-const CACHE = 'autojournal-v2.1.0';
-const APP_SHELL = [
-  './',
-  './index.html',
-  './app.js',
-  './db.js',
-  './manifest.webmanifest',
-  './payload/v2-styles.b64',
-  './payload/v2-app-1.b64',
-  './payload/v2-app-2.b64',
-  './payload/v2-app-3.b64',
-  './payload/v2-app-4.b64',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
-];
-
-self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)));
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))));
-  self.clients.claim();
-});
-
-async function networkFirst(request) {
-  try {
-    const response = await fetch(request);
-    if (response?.ok) {
-      const cache = await caches.open(CACHE);
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch {
-    return (await caches.match(request)) || (request.mode === 'navigate' ? caches.match('./index.html') : Response.error());
-  }
-}
-
-self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
-  const url = new URL(event.request.url);
-  if (url.origin !== location.origin) return;
-
-  const core =
-    event.request.mode === 'navigate' ||
-    /\/(?:app|db|sw)\.js$/.test(url.pathname) ||
-    /\/manifest\.webmanifest$/.test(url.pathname) ||
-    /\/payload\/v2-/.test(url.pathname);
-
-  if (core) {
-    event.respondWith(networkFirst(event.request));
-    return;
-  }
-
-  event.respondWith(caches.match(event.request).then(cached => cached || networkFirst(event.request)));
-});
+const CACHE='autojournal-v3.1.0';
+const APP_SHELL=['./','./index.html','./app.js','./db.js','./manifest.webmanifest','./payload/styles.b64','./payload/app.part1a.b64','./payload/app.part1b.b64','./payload/app.part1c.b64','./payload/app.part2.b64','./payload/app.part3.b64','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png'];
+self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(APP_SHELL)));self.skipWaiting();});
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});
+async function networkFirst(req){try{const r=await fetch(req);if(r?.ok)(await caches.open(CACHE)).put(req,r.clone());return r}catch{return(await caches.match(req))||(req.mode==='navigate'?caches.match('./index.html'):Response.error())}}
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;const core=e.request.mode==='navigate'||/\/(?:app|db|sw)\.js$/.test(u.pathname)||/\/manifest\.webmanifest$/.test(u.pathname)||/\/payload\//.test(u.pathname);e.respondWith(core?networkFirst(e.request):caches.match(e.request).then(c=>c||networkFirst(e.request)));});
