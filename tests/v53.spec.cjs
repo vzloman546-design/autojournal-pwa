@@ -26,7 +26,7 @@ async function openProfile(page){
 }
 async function gotoSecondary(page,view){
   await openProfile(page);
-  await page.locator('[data-view="'+view+'"]').click();
+  await page.locator('.v5-menu [data-view="'+view+'"]').click();
 }
 async function closeSheet(page){
   const close=page.locator('.sheet-close');
@@ -41,7 +41,7 @@ test.beforeEach(async({page})=>{ await clearApp(page); });
 
 test('service entry without mileage syncs one expense through edit and delete', async({page})=>{
   await addCar(page);
-  await page.locator('[data-action="add-entry"]').first().click();
+  await page.locator('[data-action="add-entry"]').first().first().click();
   await page.locator('#title').fill('Тестовое ТО');
   await expect(page.locator('#odometer')).toHaveValue('');
   await expect(page.locator('#odometer')).toHaveAttribute('placeholder','210000');
@@ -59,7 +59,7 @@ test('service entry without mileage syncs one expense through edit and delete', 
   expect(s.components).toHaveLength(1);
   expect(s.components[0].baseInstalledOdometer).toBe(210000);
 
-  await page.locator('[data-view="records"]').click();
+  await page.locator('.v5-tabbar [data-view="records"]').click();
   await page.locator('[data-action="entry-detail"]',{hasText:'Тестовое ТО'}).click();
   await page.locator('[data-action="edit-entry"]').click();
   await page.locator('#partsCost').fill('4500');
@@ -80,8 +80,8 @@ test('service entry without mileage syncs one expense through edit and delete', 
 
 test('refuel live math and linked expense remain one-to-one', async({page})=>{
   await addCar(page);
-  await page.locator('[data-view="refuels"]').click();
-  await page.locator('[data-action="add-refuel"]').click();
+  await page.locator('.v5-tabbar [data-view="refuels"]').click();
+  await page.locator('[data-action="add-refuel"]').first().click();
   const amount=page.locator('#amount'), liters=page.locator('#liters'), price=page.locator('#pricePerLiter');
 
   await amount.fill('3000'); await liters.fill('50');
@@ -122,7 +122,7 @@ test('refuel live math and linked expense remain one-to-one', async({page})=>{
 test('document file, expiry reminder, edit and delete full cycle', async({page})=>{
   await addCar(page);
   await gotoSecondary(page,'documents');
-  await page.locator('[data-action="add-document"]').click();
+  await page.locator('[data-action="add-document"]').last().click();
   await page.locator('#title').fill('ОСАГО QA');
   await page.locator('#type').fill('Страховка');
   await page.locator('#number').fill('QA-123');
@@ -147,10 +147,10 @@ test('document file, expiry reminder, edit and delete full cycle', async({page})
   await expect(page.getByText('ОСАГО QA изменено',{exact:true})).toBeVisible();
 
   await page.locator('[data-action="go-back"]').click();
-  await page.locator('[data-view="notifications"]').click();
+  await page.locator('.v5-tabbar [data-view="notifications"]').click();
   await expect(page.getByText(/Документ: ОСАГО QA изменено/)).toBeVisible();
 
-  await openProfile(page); await page.locator('[data-view="documents"]').click();
+  await openProfile(page); await page.locator('.v5-menu [data-view="documents"]').click();
   await page.locator('[data-action="document-detail"]',{hasText:'ОСАГО QA изменено'}).click();
   page.once('dialog',d=>d.accept());
   await page.locator('[data-action="delete-document"]').click();
@@ -161,7 +161,7 @@ test('document file, expiry reminder, edit and delete full cycle', async({page})
 test('maintenance inspect and replace reset independent cycles', async({page})=>{
   await addCar(page);
   await gotoSecondary(page,'parts');
-  await page.locator('[data-action="add-component"]').click();
+  await page.locator('[data-action="add-component"]').last().click();
   await page.locator('#name').fill('Колодки QA');
   await page.locator('#installedDate').fill(isoOffset(-30));
   await page.locator('#installedOdometer').fill('200000');
@@ -193,7 +193,7 @@ test('maintenance inspect and replace reset independent cycles', async({page})=>
 
 test('multiple cars are isolated', async({page})=>{
   await addCar(page,{make:'Hyundai',model:'Sonata',initial:'200000',current:'210000'});
-  await page.locator('[data-action="add-entry"]').click();
+  await page.locator('[data-action="add-entry"]').first().click();
   await page.locator('#title').fill('Только Sonata');
   await page.locator('#partsCost').fill('1000');
   await page.locator('button[form="entry-form"]').click();
@@ -203,15 +203,15 @@ test('multiple cars are isolated', async({page})=>{
   await page.locator('#make').fill('Ford'); await page.locator('#model').fill('Focus');
   await page.locator('#initialOdometer').fill('50000'); await page.locator('#currentOdometer').fill('53000');
   await page.locator('button[form="car-form"]').click();
-  await page.locator('[data-view="records"]').click();
+  await page.locator('.v5-tabbar [data-view="records"]').click();
   await expect(page.getByText('Только Sonata',{exact:true})).toHaveCount(0);
 
-  await page.locator('[data-action="add-entry"]').click();
+  await page.locator('[data-action="add-entry"]').first().click();
   await page.locator('#title').fill('Только Focus'); await page.locator('#partsCost').fill('2000');
   await page.locator('button[form="entry-form"]').click();
   await page.locator('[data-action="car-switch"]').click();
   await page.locator('[data-action="activate-car"]',{hasText:'Hyundai Sonata'}).click();
-  await page.locator('[data-view="records"]').click();
+  await page.locator('.v5-tabbar [data-view="records"]').click();
   await expect(page.getByText('Только Sonata',{exact:true})).toBeVisible();
   await expect(page.getByText('Только Focus',{exact:true})).toHaveCount(0);
 });
@@ -246,14 +246,14 @@ test('statistics categories and periods render without cross-period leakage', as
 
 test('backup roundtrip and calendar export', async({page})=>{
   await addCar(page);
-  await page.locator('[data-action="add-entry"]').click();
+  await page.locator('[data-action="add-entry"]').first().click();
   await page.locator('#title').fill('Backup marker');
   await page.locator('#lifeMonths').fill('12');
   await page.locator('#warnDays').fill('30');
   await page.locator('button[form="entry-form"]').click();
   const original=await state(page);
 
-  await openProfile(page); await page.locator('[data-view="more"]').click();
+  await openProfile(page); await page.locator('.v5-menu [data-view="more"]').click();
   const [backup]=await Promise.all([page.waitForEvent('download'),page.locator('[data-action="backup-export"]').click()]);
   const backupPath=await backup.path();
   expect(backupPath).toBeTruthy();
@@ -270,7 +270,7 @@ test('backup roundtrip and calendar export', async({page})=>{
 
   await page.evaluate(async()=>{const db=await import('./db.js');await db.clearState();});
   await page.reload();
-  await openProfile(page); await page.locator('[data-view="more"]').click();
+  await openProfile(page); await page.locator('.v5-menu [data-view="more"]').click();
   page.once('dialog',d=>d.accept());
   await page.locator('#backup-input').setInputFiles(backupPath);
   await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
@@ -304,7 +304,7 @@ test('notifications surface maintenance/document/backup states', async({page})=>
   s.documents.push({id:'doc',carId,title:'ОСАГО уведомление',type:'Страховка',number:'',issueDate:isoOffset(-30),expiryDate:isoOffset(5),remindDays:30,files:[]});
   await page.evaluate(async data=>{const db=await import('./db.js');await db.saveState(data);},s);
   await page.reload();
-  await page.locator('[data-view="notifications"]').click();
+  await page.locator('.v5-tabbar [data-view="notifications"]').click();
   await expect(page.getByText(/Ремень QA/)).toBeVisible();
   await expect(page.getByText(/ОСАГО уведомление/)).toBeVisible();
   await page.locator('[data-action="notif-tab"][data-value="app"]').click();
