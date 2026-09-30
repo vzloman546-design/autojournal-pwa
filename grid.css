@@ -765,3 +765,20 @@ textarea.input { min-height: 96px; }
     stroke: currentColor !important;
   }
 }
+
+/* v3.5.2 — global native tab selection, independent of viewport width */
+.tabbar .tab.active,
+.tabbar .tab[aria-current="page"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: var(--accent) !important;
+}
+.tabbar .tab.active::before,
+.tabbar .tab.active::after,
+.tabbar .tab[aria-current="page"]::before,
+.tabbar .tab[aria-current="page"]::after {
+  background: transparent !important;
+  box-shadow: none !important;
+}
