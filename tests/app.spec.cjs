@@ -668,19 +668,27 @@ test.describe('offline PWA',()=>{
 
 test('QR transfer exposes directional modes and generates one-time QR session', async({page})=>{
   let sessionId='';
-  await page.route('**/__sync/**',async route=>{
-    const req=route.request(),url=new URL(req.url()),path=url.pathname.replace('/__sync','');
+  const cors={
+    'Access-Control-Allow-Origin':'*',
+    'Access-Control-Allow-Methods':'GET,POST,PUT,OPTIONS',
+    'Access-Control-Allow-Headers':'Authorization,Content-Type'
+  };
+  await page.route('https://sync.test/**',async route=>{
+    const req=route.request(),url=new URL(req.url()),path=url.pathname;
+    if(req.method()==='OPTIONS'){
+      await route.fulfill({status:204,headers:cors,body:''});return;
+    }
     if(path==='/v1/sessions'&&req.method()==='POST'){
       const body=JSON.parse(req.postData()||'{}');sessionId=body.id;
-      await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ok:true,expiresAt:Date.now()+600000})});return;
+      await route.fulfill({status:201,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({ok:true,expiresAt:Date.now()+600000})});return;
     }
     if(path===`/v1/sessions/${sessionId}`&&req.method()==='GET'){
-      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:sessionId,status:'waiting',mode:null,expiresAt:Date.now()+600000})});return;
+      await route.fulfill({status:200,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({id:sessionId,status:'waiting',mode:null,expiresAt:Date.now()+600000})});return;
     }
-    await route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:'not_found'})});
+    await route.fulfill({status:404,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({error:'not_found'})});
   });
   await page.goto('/');
-  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync'));
+  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api','https://sync.test'));
   await openProfile(page);
   await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
@@ -702,37 +710,45 @@ test('QR transfer exposes directional modes and generates one-time QR session', 
 test('QR relay payload is encrypted and relay auth is not the QR encryption secret', async({page})=>{
   let sessionId='',status='waiting',mode=null,totalChunks=null,iv=null,sender=null;
   const chunks=new Map(),authHeaders=[];
-  await page.route('**/__sync/**',async route=>{
-    const req=route.request(),url=new URL(req.url()),path=url.pathname.replace('/__sync','');
+  const cors={
+    'Access-Control-Allow-Origin':'*',
+    'Access-Control-Allow-Methods':'GET,POST,PUT,OPTIONS',
+    'Access-Control-Allow-Headers':'Authorization,Content-Type'
+  };
+  await page.route('https://sync.test/**',async route=>{
+    const req=route.request(),url=new URL(req.url()),path=url.pathname;
+    if(req.method()==='OPTIONS'){
+      await route.fulfill({status:204,headers:cors,body:''});return;
+    }
     const auth=req.headers()['authorization']||'';
     if(auth)authHeaders.push(auth);
     if(path==='/v1/sessions'&&req.method()==='POST'){
       const body=JSON.parse(req.postData()||'{}');sessionId=body.id;
-      await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ok:true,expiresAt:Date.now()+600000})});return;
+      await route.fulfill({status:201,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({ok:true,expiresAt:Date.now()+600000})});return;
     }
     if(path===`/v1/sessions/${sessionId}/request`&&req.method()==='POST'){
       mode=JSON.parse(req.postData()||'{}').mode;status='requested';
-      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,mode,status})});return;
+      await route.fulfill({status:200,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({ok:true,mode,status})});return;
     }
     const chunk=path.match(new RegExp('^/v1/sessions/'+sessionId+'/chunks/(\\d+)$'));
     if(chunk&&req.method()==='PUT'){
       chunks.set(Number(chunk[1]),req.postData()||'');status='uploading';
-      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true})});return;
+      await route.fulfill({status:200,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({ok:true})});return;
     }
     if(path===`/v1/sessions/${sessionId}/complete`&&req.method()==='POST'){
       const body=JSON.parse(req.postData()||'{}');totalChunks=body.totalChunks;iv=body.iv;sender=body.sender;status='ready';
-      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,status})});return;
+      await route.fulfill({status:200,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({ok:true,status})});return;
     }
     if(chunk&&req.method()==='GET'){
-      await route.fulfill({status:200,contentType:'text/plain',body:chunks.get(Number(chunk[1]))||''});return;
+      await route.fulfill({status:200,headers:{...cors,'Content-Type':'text/plain'},body:chunks.get(Number(chunk[1]))||''});return;
     }
     if(path===`/v1/sessions/${sessionId}`&&req.method()==='GET'){
-      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:sessionId,status,mode,totalChunks,iv,sender,expiresAt:Date.now()+600000})});return;
+      await route.fulfill({status:200,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({id:sessionId,status,mode,totalChunks,iv,sender,expiresAt:Date.now()+600000})});return;
     }
-    await route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:'not_found'})});
+    await route.fulfill({status:404,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({error:'not_found'})});
   });
   await page.goto('/');
-  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync'));
+  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api','https://sync.test'));
   const result=await page.evaluate(async()=>{
     const sync=await import(new URL('./sync.js',location.href).href);
     const pair=await sync.createSyncSession();
