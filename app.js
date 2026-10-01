@@ -744,7 +744,8 @@ function partsPage(){
   const coreTracked=coreKeys.filter(key=>healthTrackedComponentByKey(key)).length;
   const coverage=coreKeys.length?Math.round(coreTracked/coreKeys.length*100):0;
   const statuses=comps.map(componentOverall),attention=statuses.filter(x=>['overdue','due','soon'].includes(x)).length,ok=statuses.filter(x=>x==='ok').length;
-  const extra=comps.filter(x=>!coreSet.has(x.systemKey)).sort((a,b)=>({overdue:0,due:1,soon:2,ok:3,neutral:4}[componentOverall(a)]-({overdue:0,due:1,soon:2,ok:3,neutral:4}[componentOverall(b)])||a.name.localeCompare(b.name,'ru'));
+  const healthRank={overdue:0,due:1,soon:2,ok:3,neutral:4};
+  const extra=comps.filter(x=>!coreSet.has(x.systemKey)).sort((a,b)=>(healthRank[componentOverall(a)]??9)-(healthRank[componentOverall(b)]??9)||a.name.localeCompare(b.name,'ru'));
   const headline=attention?`${attention} ${plural(attention,'пункт требует','пункта требуют','пунктов требуют')} внимания`:ok?`${ok} ${plural(ok,'пункт в норме','пункта в норме','пунктов в норме')}`:comps.length?'Настройте интервалы обслуживания':'Заполните план обслуживания';
   return `<main class="v5-main"><div class="v5-page v5-health-page">
     <section class="v5-health-hero">
