@@ -1520,9 +1520,38 @@ function expenseDetailSheet(id){
   return sheetWrap('Расход',`<div class="detail-hero"><div class="detail-title">${money(x.amount)}</div><div class="detail-sub">${esc(x.description||x.category)} · ${fmtDate(x.date)}</div><div class="detail-grid"><div class="detail-item"><div class="detail-label">Категория</div><div class="detail-value">${esc(x.category)}</div></div><div class="detail-item"><div class="detail-label">Пробег</div><div class="detail-value">${x.odometer?`${fmtNum(x.odometer)} км`:'—'}</div></div></div></div>${linkedNote}${x.note?`<section class="section"><div class="note-box">${esc(x.note)}</div></section>`:''}`,foot);
 }
 
+function storedFileKind(file){
+  const type=String(file?.type||'').toLowerCase(),name=String(file?.name||'').toLowerCase();
+  if(type.startsWith('image/'))return 'image';
+  if(type==='application/pdf'||name.endsWith('.pdf'))return 'pdf';
+  if(type.startsWith('text/')||/\.(?:txt|csv|log|md)$/i.test(name))return 'text';
+  return 'file';
+}
+function storedFileSize(size){
+  const n=nonneg(size);
+  if(!n)return '';
+  if(n<1024)return `${fmtNum(n)} Б`;
+  if(n<1024*1024)return `${fmtNum(n/1024,1)} КБ`;
+  return `${fmtNum(n/(1024*1024),1)} МБ`;
+}
+function storedFileCard(file,docId,index){
+  const kind=storedFileKind(file),meta=[kind==='pdf'?'PDF':kind==='image'?'Изображение':kind==='text'?'Текстовый файл':'Файл',storedFileSize(file?.size)].filter(Boolean).join(' · ');
+  return `<article class="v5-stored-file-card" data-file-kind="${kind}">
+    <div class="v5-stored-file-open" role="button" tabindex="0" data-action="open-stored-file" data-doc="${docId}" data-index="${index}" aria-label="Открыть файл ${esc(file?.name||'Файл')}">
+      <div class="v5-stored-file-preview" data-stored-file-preview data-doc="${docId}" data-index="${index}">
+        <div class="v5-stored-file-preview-placeholder">${icons.doc}<span>${kind==='pdf'?'PDF':kind==='image'?'Изображение':'Файл'}</span></div>
+      </div>
+      <div class="v5-stored-file-caption">
+        <strong>${esc(file?.name||'Файл')}</strong>
+        <small>${esc(meta)}</small>
+      </div>
+    </div>
+    <button class="btn block v5-stored-file-share" type="button" data-action="share-stored-file" data-doc="${docId}" data-index="${index}">${icons.export} Поделиться</button>
+  </article>`;
+}
 function documentDetailSheet(id){
   const d=state.documents.find(x=>x.id===id);if(!d)return '';const ev=documentEvent(d);
-  return sheetWrap(d.title,`<div class="detail-hero"><div class="detail-title">${esc(d.title)}</div><div class="detail-sub">${esc(d.type||'Документ')}</div><div class="detail-grid"><div class="detail-item"><div class="detail-label">Номер</div><div class="detail-value">${esc(d.number||'—')}</div></div><div class="detail-item"><div class="detail-label">Дата выдачи</div><div class="detail-value">${fmtDate(d.issueDate)}</div></div><div class="detail-item"><div class="detail-label">Действует до</div><div class="detail-value">${fmtDate(d.expiryDate)}</div></div><div class="detail-item"><div class="detail-label">Напомнить</div><div class="detail-value">${d.expiryDate?`за ${fmtNum(d.remindDays??30)} дн.`:'—'}</div></div></div>${ev?`<div style="margin-top:12px">${statusPill(ev.status)} <span class="row-sub">${esc(describeDue(ev))}</span></div>`:''}</div>${d.files?.length?`<section class="section"><div class="form-title">Файлы</div>${d.files.map((f,i)=>`<div class="file-chip"><span>${icons.doc}</span><span class="file-name">${esc(f.name)}</span><button class="text-btn" data-action="open-stored-file" data-doc="${d.id}" data-index="${i}">Открыть</button><button class="text-btn" data-action="share-stored-file" data-doc="${d.id}" data-index="${i}">Поделиться</button></div>`).join('')}</section>`:''}`,`<div class="btn-row"><button class="btn" data-action="edit-document" data-id="${d.id}">Изменить</button><button class="btn danger" data-action="delete-document" data-id="${d.id}">Удалить</button></div>`);
+  return sheetWrap(d.title,`<div class="detail-hero"><div class="detail-title">${esc(d.title)}</div><div class="detail-sub">${esc(d.type||'Документ')}</div><div class="detail-grid"><div class="detail-item"><div class="detail-label">Номер</div><div class="detail-value">${esc(d.number||'—')}</div></div><div class="detail-item"><div class="detail-label">Дата выдачи</div><div class="detail-value">${fmtDate(d.issueDate)}</div></div><div class="detail-item"><div class="detail-label">Действует до</div><div class="detail-value">${fmtDate(d.expiryDate)}</div></div><div class="detail-item"><div class="detail-label">Напомнить</div><div class="detail-value">${d.expiryDate?`за ${fmtNum(d.remindDays??30)} дн.`:'—'}</div></div></div>${ev?`<div style="margin-top:12px">${statusPill(ev.status)} <span class="row-sub">${esc(describeDue(ev))}</span></div>`:''}</div>${d.files?.length?`<section class="section v5-document-files"><div class="form-title">Файлы</div><div class="v5-stored-file-list">${d.files.map((f,i)=>storedFileCard(f,d.id,i)).join('')}</div></section>`:''}`,`<div class="btn-row"><button class="btn" data-action="edit-document" data-id="${d.id}">Изменить</button><button class="btn danger" data-action="delete-document" data-id="${d.id}">Удалить</button></div>`);
 }
 
 function pdfReadySheet(){
@@ -1548,11 +1577,13 @@ function goBack(){
   ui.view=prev;nextTransition='back';render();
 }
 function render(){
+  cleanupStoredFilePreviewUrls();
   const root=$('#app');
   if(shouldShowFirstRun()){
     root.dataset.secondary='false';
     root.dataset.firstRun='true';
     root.innerHTML=`${firstRunPage()}${renderSheet()}`;
+    requestAnimationFrame(()=>hydrateStoredFilePreviews(root));
     if(nextTransition)nextTransition='';
     return;
   }
@@ -1561,6 +1592,7 @@ function render(){
   const secondary=!primaryViews.has(ui.view);
   root.dataset.secondary=secondary?'true':'false';
   root.innerHTML=`${topbar()}${page()}${secondary?'':tabbar()}${renderSheet()}`;
+  requestAnimationFrame(()=>hydrateStoredFilePreviews(root));
   if(nextTransition){
     const main=root.querySelector('.v5-main,.main-scroll');
     if(main){const cls=nextTransition==='back'?'v5-enter-back':nextTransition==='fade'?'v5-enter-fade':'v5-enter-forward';main.classList.add(cls);setTimeout(()=>main.classList.remove('v5-enter-back','v5-enter-forward','v5-enter-fade'),280);}
@@ -1871,6 +1903,12 @@ document.addEventListener('change', async e=>{
   if(e.target.id==='backup-input') await importBackupFile(e.target.files[0]);
 });
 
+document.addEventListener('keydown',e=>{
+  if((e.key==='Enter'||e.key===' ')&&e.target?.matches?.('.v5-stored-file-open[data-action="open-stored-file"]')){
+    e.preventDefault();openStoredFile(e.target.dataset.doc,Number(e.target.dataset.index));
+  }
+});
+
 document.addEventListener('click', async e=>{
   document.querySelectorAll('[data-system-combobox].is-open').forEach(box=>{if(!box.contains(e.target))closeSystemCombobox(box);});
   const view=e.target.closest('[data-view]')?.dataset.view;
@@ -2075,9 +2113,99 @@ document.addEventListener('touchcancel',()=>{
 
 async function markComponent(id,action){ const c=state.components.find(x=>x.id===id); if(!c)return; const km=currentKm(), date=nowISO(); const entry={id:uid(),carId:c.carId,date,odometer:km,type:action==='inspect'?'inspection':'replacement',title:`${action==='inspect'?'Проверка':'Замена'}: ${c.name}`,category:c.category||'',faultKey:'',workText:'',partsText:action==='replace'?[c.brand,c.partNumber].filter(Boolean).join(' · '):'',partsCost:action==='replace'?nonneg(c.cost):0,laborCost:0,otherCost:0,systemKey:c.systemKey||inferSystemKey(c.name,c.category),componentId:c.id,componentAction:action,componentEventOdometer:km,notes:'Отмечено из карточки узла',photos:[],createdAt:new Date().toISOString(),seq:nextSeq()}; state.serviceEntries.push(entry); syncEntryExpense(entry); recordMileageObservation(km,date,'Из сервисной записи','service',entry.id); await persist();toast(action==='inspect'?'Проверка отмечена':'Замена отмечена, циклы сброшены');ui.sheet='component-detail';render(); }
 
-function openStoredFile(docId,index){ const d=state.documents.find(x=>x.id===docId); const f=d?.files?.[index]; if(!f)return; const a=document.createElement('a');a.href=f.data;a.download=f.name;a.target='_blank';document.body.append(a);a.click();a.remove(); }
-
-async function shareStoredFile(docId,index){ const d=state.documents.find(x=>x.id===docId); const f=d?.files?.[index]; if(!f)return; try{ const res=await fetch(f.data); const blob=await res.blob(); const file=new File([blob],f.name,{type:f.type||blob.type||'application/octet-stream'}); if(navigator.canShare?.({files:[file]})){ await navigator.share({title:d.title,files:[file]}); } else { openStoredFile(docId,index); toast('Системный Share для файлов недоступен — файл открыт'); } }catch{ openStoredFile(docId,index); } }
+const storedFilePreviewUrls=[];
+function dataUrlBlob(data,type='application/octet-stream'){
+  const value=String(data||''),comma=value.indexOf(',');
+  if(!value.startsWith('data:')||comma<0)throw new Error('INVALID_STORED_FILE');
+  const head=value.slice(5,comma),payload=value.slice(comma+1),parts=head.split(';'),mime=parts[0]||type||'application/octet-stream',isBase64=parts.includes('base64');
+  if(isBase64){
+    const raw=atob(payload),bytes=new Uint8Array(raw.length);
+    for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+    return new Blob([bytes],{type:type||mime});
+  }
+  return new Blob([decodeURIComponent(payload)],{type:type||mime});
+}
+function storedFileBlob(file){
+  return dataUrlBlob(file?.data,file?.type||'application/octet-stream');
+}
+function makeStoredFileUrl(file,{preview=false}={}){
+  const url=URL.createObjectURL(storedFileBlob(file));
+  if(preview)storedFilePreviewUrls.push(url);
+  return url;
+}
+function cleanupStoredFilePreviewUrls(){
+  while(storedFilePreviewUrls.length){
+    try{URL.revokeObjectURL(storedFilePreviewUrls.pop());}catch{}
+  }
+}
+function storedTextPreview(file){
+  try{
+    const blob=storedFileBlob(file);
+    if(blob.size>1024*1024)return 'Текстовый файл';
+    const value=String(file?.data||''),comma=value.indexOf(','),head=value.slice(0,comma),payload=value.slice(comma+1);
+    const text=head.includes(';base64')?new TextDecoder().decode(Uint8Array.from(atob(payload),c=>c.charCodeAt(0))):decodeURIComponent(payload);
+    return text.trim().slice(0,900)||'Пустой текстовый файл';
+  }catch{return 'Текстовый файл';}
+}
+function hydrateStoredFilePreviews(root=document){
+  root.querySelectorAll('[data-stored-file-preview]').forEach(box=>{
+    const d=state.documents.find(x=>x.id===box.dataset.doc),file=d?.files?.[Number(box.dataset.index)];
+    if(!file)return;
+    const kind=storedFileKind(file);
+    box.replaceChildren();
+    if(kind==='image'){
+      const img=document.createElement('img');
+      img.className='v5-stored-file-preview-image';img.alt=file.name||'Изображение';img.src=file.data;
+      box.append(img);return;
+    }
+    if(kind==='pdf'){
+      try{
+        const frame=document.createElement('iframe');
+        frame.className='v5-stored-file-preview-pdf';
+        frame.title=`Первая страница ${file.name||'PDF'}`;
+        frame.tabIndex=-1;
+        frame.setAttribute('aria-hidden','true');
+        frame.src=`${makeStoredFileUrl(file,{preview:true})}#page=1&view=Fit&toolbar=0&navpanes=0&scrollbar=0`;
+        box.append(frame);
+        const badge=document.createElement('span');badge.className='v5-stored-file-pdf-badge';badge.textContent='PDF';
+        box.append(badge);
+        return;
+      }catch{}
+    }
+    if(kind==='text'){
+      const pre=document.createElement('pre');pre.className='v5-stored-file-preview-text';pre.textContent=storedTextPreview(file);box.append(pre);return;
+    }
+    const fallback=document.createElement('div');fallback.className='v5-stored-file-preview-placeholder';fallback.innerHTML=`${icons.doc}<span>Файл</span>`;box.append(fallback);
+  });
+}
+function openStoredFile(docId,index){
+  const d=state.documents.find(x=>x.id===docId),f=d?.files?.[index];if(!f)return;
+  try{
+    const url=makeStoredFileUrl(f),a=document.createElement('a');
+    a.href=url;a.target='_blank';a.rel='noopener';
+    document.body.append(a);a.click();a.remove();
+    setTimeout(()=>{try{URL.revokeObjectURL(url);}catch{}},60000);
+  }catch(err){
+    console.warn('Could not open stored file',err);
+    toast('Не удалось открыть файл');
+  }
+}
+async function shareStoredFile(docId,index){
+  const d=state.documents.find(x=>x.id===docId),f=d?.files?.[index];if(!f)return;
+  try{
+    const blob=storedFileBlob(f),file=new File([blob],f.name,{type:f.type||blob.type||'application/octet-stream'});
+    if(navigator.canShare?.({files:[file]})){
+      await navigator.share({title:d.title,files:[file]});
+    }else{
+      openStoredFile(docId,index);
+      toast('Системное меню «Поделиться» недоступно — файл открыт');
+    }
+  }catch(err){
+    if(err?.name==='AbortError')return;
+    console.warn('Could not share stored file',err);
+    toast('Не удалось поделиться файлом');
+  }
+}
 
 function downloadText(name,text,type='application/json'){ const blob=new Blob([text],{type}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000); }
 function mergeSyncStates(localRaw,incomingRaw){
