@@ -220,7 +220,6 @@ function chooseSystemComboboxValue(box,key){
   if(input)input.value=info.label;
   if(valueField){valueField.value=info.key;valueField.dispatchEvent(new Event('change',{bubbles:true}));}
   closeSystemCombobox(box);
-  input?.focus({preventScroll:true});
 }
 function moveSystemComboboxActive(input,delta){
   const box=input.closest('[data-system-combobox]');if(!box)return;
