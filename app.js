@@ -45,6 +45,7 @@ const icons = {
   home:`<svg class="icon" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9v11h13V9"/><path d="M9.5 20v-6h5v6"/></svg>`,
   history:`<svg class="icon" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.1-5.6"/><path d="M3.5 4.5v5h5"/><path d="M12 7.5V12l3 2"/></svg>`,
   wrench:`<svg class="icon" viewBox="0 0 24 24"><path d="M14.5 6.2a5 5 0 0 0-6.7 6.7L3.5 17.2a2.3 2.3 0 1 0 3.3 3.3l4.3-4.3a5 5 0 0 0 6.7-6.7l-3.1 3.1-3.3-.8-.8-3.3 3.9-2.3Z"/></svg>`,
+  health:`<svg class="icon" viewBox="0 0 24 24"><path d="M3 13h4l2-5 3.2 9 2.2-5H21"/><path d="M12 21C6.6 17.5 3 14.5 3 9.5A4.5 4.5 0 0 1 11 6.7 4.5 4.5 0 0 1 21 9.5c0 5-3.6 8-9 11.5Z"/></svg>`,
   wallet:`<svg class="icon" viewBox="0 0 24 24"><path d="M4 6.5h14.5a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h12"/><path d="M16 11h4.5v4H16a2 2 0 1 1 0-4Z"/></svg>`,
   more:`<svg class="icon" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>`,
   plus:`<svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>`,
@@ -348,9 +349,9 @@ const defaultState = () => ({
 });
 
 let state = defaultState();
-let ui = { view:'home', sheet:null, sheetId:null, search:'', historyType:'all', expenseFilter:'all', notificationTab:'auto', analyticsTab:'expenses', analyticsPeriod:'month', reportMode:'short' };
+let ui = { view:'home', sheet:null, sheetId:null, search:'', historyType:'all', expenseFilter:'all', notificationTab:'auto', analyticsTab:'expenses', analyticsPeriod:'month', reportMode:'short', healthSystemKey:'' };
 const primaryViews=new Set(['home','records','refuels','notifications']);
-const secondaryTitles={profile:'Профиль',carcard:'Паспорт автомобиля',report:'Отчёт автомобиля',analytics:'Статистика',documents:'Документы',parts:'Контроль обслуживания',more:'Настройки'};
+const secondaryTitles={profile:'Профиль',carcard:'Паспорт автомобиля',report:'Отчёт автомобиля',analytics:'Статистика',documents:'Документы',parts:'Здоровье автомобиля',more:'Настройки'};
 let navStack=[];
 let nextTransition='';
 let pendingPdfFile=null;
@@ -539,7 +540,7 @@ function componentOverall(comp){const evs=componentEvents(comp);if(!evs.length)r
 function componentProgress(comp){const cs=componentState(comp);if(!nonneg(comp.lifeKm)&&!nonneg(comp.lifeMonths))return 0;let ratios=[];if(nonneg(comp.lifeKm)>0)ratios.push((currentKm()-cs.installedOdometer)/nonneg(comp.lifeKm));if(nonneg(comp.lifeMonths)>0){const end=addMonths(cs.installedDate,comp.lifeMonths);const total=Math.max(1,daysBetween(cs.installedDate,end));ratios.push(daysBetween(cs.installedDate,today())/total);}return clamp(Math.max(...ratios,0),0,1.15);}
 
 function pageHeaderTitle() {
-  return ({home:'АвтоЖурнал',history:'История',parts:'Узлы',expenses:'Расходы',analytics:'Аналитика',documents:'Документы',more:'Ещё'})[ui.view] || 'АвтоЖурнал';
+  return ({home:'АвтоЖурнал',history:'История',parts:'Здоровье автомобиля',expenses:'Расходы',analytics:'Аналитика',documents:'Документы',more:'Ещё'})[ui.view] || 'АвтоЖурнал';
 }
 
 function topbar() {
@@ -794,7 +795,7 @@ async function storageInfoText(){ try{if(!navigator.storage?.estimate)return 'Н
 
 function morePage(){
   const syncReady=Boolean(getSyncApiUrl()),syncLinked=Boolean(loadSyncVault());
-  return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Настройки</h1><div class="v5-menu-page"><div class="v5-setting-row"><div><strong>Тема</strong><span>Системная, светлая или тёмная</span></div><select data-input="theme"><option value="system" ${state.settings.theme==='system'?'selected':''}>Система</option><option value="light" ${state.settings.theme==='light'?'selected':''}>Светлая</option><option value="dark" ${state.settings.theme==='dark'?'selected':''}>Тёмная</option></select></div><button data-action="sync-open">${icons.import}<span><strong>Синхронизация и QR</strong><small>${syncLinked?'Автосинхронизация включена':syncReady?'Без аккаунта · зашифрованный обмен между устройствами':'Модуль готов · требуется подключить бесплатный relay'}</small></span><b>›</b></button><button data-action="calendar-export">${icons.calendar}<span><strong>Экспорт напоминаний</strong><small>Файл .ics для системного календаря</small></span><b>›</b></button><button data-action="backup-export">${icons.export}<span><strong>Резервная копия</strong><small>Все локальные данные в JSON</small></span><b>›</b></button><button data-action="backup-import">${icons.import}<span><strong>Восстановить копию</strong><small>Заменит текущие данные после подтверждения</small></span><b>›</b></button><button data-action="persist-storage">${icons.check}<span><strong>Защитить хранилище</strong><small>Запросить persistent storage</small></span><b>›</b></button></div><section class="section"><button class="btn danger block" data-action="reset-all">Удалить все локальные данные</button></section></div><input id="backup-input" type="file" accept="application/json,.json" hidden></main>`;
+  return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Настройки</h1><div class="v5-menu-page"><div class="v5-setting-row"><div><strong>Тема</strong><span>Системная, светлая или тёмная</span></div><select data-input="theme"><option value="system" ${state.settings.theme==='system'?'selected':''}>Система</option><option value="light" ${state.settings.theme==='light'?'selected':''}>Светлая</option><option value="dark" ${state.settings.theme==='dark'?'selected':''}>Тёмная</option></select></div><button data-view="documents">${icons.doc}<span><strong>Документы</strong><small>Страховки, диагностические карты и файлы</small></span><b>›</b></button><button data-action="sync-open">${icons.import}<span><strong>Синхронизация и QR</strong><small>${syncLinked?'Автосинхронизация включена':syncReady?'Без аккаунта · зашифрованный обмен между устройствами':'Модуль готов · требуется подключить бесплатный relay'}</small></span><b>›</b></button><button data-action="calendar-export">${icons.calendar}<span><strong>Экспорт напоминаний</strong><small>Файл .ics для системного календаря</small></span><b>›</b></button><button data-action="backup-export">${icons.export}<span><strong>Резервная копия</strong><small>Все локальные данные в JSON</small></span><b>›</b></button><button data-action="backup-import">${icons.import}<span><strong>Восстановить копию</strong><small>Заменит текущие данные после подтверждения</small></span><b>›</b></button><button data-action="persist-storage">${icons.check}<span><strong>Защитить хранилище</strong><small>Запросить persistent storage</small></span><b>›</b></button></div><section class="section"><button class="btn danger block" data-action="reset-all">Удалить все локальные данные</button></section></div><input id="backup-input" type="file" accept="application/json,.json" hidden></main>`;
 }
 
 
@@ -1255,9 +1256,8 @@ function profilePage(){
     <div class="v5-menu">
       <button data-view="carcard">${icons.car}<span><strong>Паспорт автомобиля</strong><small>Фото, комплектация, жидкости и характеристики</small></span><b>›</b></button>
       <button data-view="report">${icons.doc}<span><strong>Отчёт автомобиля</strong><small>Короткий или полный отчёт в PDF</small></span><b>›</b></button>
-      <button data-view="documents">${icons.doc}<span><strong>Документы</strong><small>Файлы и сроки действия</small></span><b>›</b></button>
+      <button data-view="parts">${icons.health}<span><strong>Здоровье автомобиля</strong><small>План обслуживания, состояние узлов и сроки</small></span><b>›</b></button>
       <button data-view="analytics">${icons.chart}<span><strong>Статистика</strong><small>Пробег, расходы и заправки</small></span><b>›</b></button>
-      <button data-view="parts">${icons.wrench}<span><strong>Контроль обслуживания</strong><small>Срок службы и графики проверок</small></span><b>›</b></button>
       <button data-action="car-switch">${icons.car}<span><strong>Автомобили</strong><small>${state.cars.length} ${plural(state.cars.length,'автомобиль','автомобиля','автомобилей')}</small></span><b>›</b></button>
       <button data-view="more">${icons.gear}<span><strong>Настройки</strong><small>Тема, резервная копия, календарь</small></span><b>›</b></button>
     </div>
@@ -1268,9 +1268,8 @@ function profileSheet(){
   const c=car();
   return sheetWrap('Профиль',`<div class="v5-profile-card"><div class="v5-profile-avatar">AJ</div><div><strong>AutoJournal</strong><span>${c?`${esc(c.make)} ${esc(c.model)}`:'Локальное приложение'}</span></div></div>
   <div class="v5-menu">
-    <button data-view="documents">${icons.doc}<span><strong>Документы</strong><small>Файлы и сроки действия</small></span><b>›</b></button>
+    <button data-view="parts">${icons.health}<span><strong>Здоровье автомобиля</strong><small>План обслуживания, состояние узлов и сроки</small></span><b>›</b></button>
     <button data-view="analytics">${icons.chart}<span><strong>Статистика</strong><small>Расходы, пробег и заправки</small></span><b>›</b></button>
-    <button data-view="parts">${icons.wrench}<span><strong>Контроль обслуживания</strong><small>Срок службы и графики проверок</small></span><b>›</b></button>
     <button data-action="car-switch">${icons.car}<span><strong>Автомобили</strong><small>${state.cars.length} ${plural(state.cars.length,'автомобиль','автомобиля','автомобилей')}</small></span><b>›</b></button>
     <button data-view="more">${icons.gear}<span><strong>Настройки</strong><small>Тема, резервная копия, календарь</small></span><b>›</b></button>
   </div>`);
@@ -1448,7 +1447,7 @@ function entrySheet(id=null){
       ${inputField('Товар / детали, ₽','partsCost',x?.partsCost||'','number','min="0" inputmode="decimal"')}
       ${inputField('Работа, ₽','laborCost',x?.laborCost||'','number','min="0" inputmode="decimal"')}
     </div></div>
-    <div class="form-section"><div class="form-title">Контроль обслуживания <span class="v5-optional">необязательно</span></div><div class="field-grid two">
+    <div class="form-section"><div class="form-title">Интервалы и контроль узла <span class="v5-optional">необязательно</span></div><div class="field-grid two">
       ${inputField('Срок службы, км','lifeKm',comp?.lifeKm||'','number','min="0" inputmode="numeric" placeholder="40000"')}
       ${inputField('Срок службы, мес.','lifeMonths',comp?.lifeMonths||'','number','min="0" inputmode="numeric"')}
       ${inputField('Проверять каждые, км','inspectKm',comp?.inspectKm||'','number','min="0" inputmode="numeric" placeholder="10000"')}
@@ -1503,7 +1502,7 @@ function entryDetailSheet(id){
   if(comp?.warnKm)intervalBits.push(`Предупреждать за ${fmtNum(comp.warnKm)} км`);
   if(comp?.warnDays)intervalBits.push(`Предупреждать за ${fmtNum(comp.warnDays)} дн.`);
   return sheetWrap('Запись',
-    `<div class="detail-hero"><div class="detail-title">${esc(e.title)}</div><div class="detail-sub">${[fmtDate(e.date),nonneg(e.odometer)>0?`${fmtNum(e.odometer)} км`:``].filter(Boolean).join(` · `)}</div><div class="detail-grid"><div class="detail-item"><div class="detail-label">Тип</div><div class="detail-value">${esc(e.type)}</div></div><div class="detail-item"><div class="detail-label">Стоимость</div><div class="detail-value">${money(totalServiceCost(e))}</div></div><div class="detail-item"><div class="detail-label">Запчасти</div><div class="detail-value">${money(e.partsCost)}</div></div><div class="detail-item"><div class="detail-label">Работа</div><div class="detail-value">${money(e.laborCost)}</div></div></div></div>${intervalBits.length?`<div class="section"><div class="form-title">Контроль обслуживания</div><div class="note-box">${intervalBits.map(esc).join('<br>')}</div></div>`:''}${e.workText?`<div class="section"><div class="form-title">Выполненные работы</div><div class="note-box">${esc(e.workText)}</div></div>`:''}${e.partsText?`<div class="section"><div class="form-title">Установленные запчасти</div><div class="note-box">${esc(e.partsText)}</div></div>`:''}${e.notes?`<div class="section"><div class="form-title">Заметки</div><div class="note-box">${esc(e.notes)}</div></div>`:''}${e.photos?.length?`<div class="section"><div class="form-title">Фото</div><div class="preview-grid">${e.photos.map(p=>`<img src="${p.data}" data-action="open-image" alt="Фото">`).join('')}</div></div>`:''}`,
+    `<div class="detail-hero"><div class="detail-title">${esc(e.title)}</div><div class="detail-sub">${[fmtDate(e.date),nonneg(e.odometer)>0?`${fmtNum(e.odometer)} км`:``].filter(Boolean).join(` · `)}</div><div class="detail-grid"><div class="detail-item"><div class="detail-label">Тип</div><div class="detail-value">${esc(e.type)}</div></div><div class="detail-item"><div class="detail-label">Стоимость</div><div class="detail-value">${money(totalServiceCost(e))}</div></div><div class="detail-item"><div class="detail-label">Запчасти</div><div class="detail-value">${money(e.partsCost)}</div></div><div class="detail-item"><div class="detail-label">Работа</div><div class="detail-value">${money(e.laborCost)}</div></div></div></div>${intervalBits.length?`<div class="section"><div class="form-title">Интервалы и контроль узла</div><div class="note-box">${intervalBits.map(esc).join('<br>')}</div></div>`:''}${e.workText?`<div class="section"><div class="form-title">Выполненные работы</div><div class="note-box">${esc(e.workText)}</div></div>`:''}${e.partsText?`<div class="section"><div class="form-title">Установленные запчасти</div><div class="note-box">${esc(e.partsText)}</div></div>`:''}${e.notes?`<div class="section"><div class="form-title">Заметки</div><div class="note-box">${esc(e.notes)}</div></div>`:''}${e.photos?.length?`<div class="section"><div class="form-title">Фото</div><div class="preview-grid">${e.photos.map(p=>`<img src="${p.data}" data-action="open-image" alt="Фото">`).join('')}</div></div>`:''}`,
     `<div class="btn-row"><button class="btn" data-action="edit-entry" data-id="${e.id}">${icons.edit} Изменить</button><button class="btn danger" data-action="delete-entry" data-id="${e.id}">${icons.trash} Удалить</button></div>`
   );
 }
