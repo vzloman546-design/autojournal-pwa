@@ -42,6 +42,16 @@ const icons = {
   plus:`<svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>`,
   bell:`<svg class="icon" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 8.5h18C21 16 18 16 18 9Z"/><path d="M9.5 20h5"/></svg>`,
   car:`<svg class="icon" viewBox="0 0 24 24"><path d="m5 16-1.5-1.2V11l2-5h13l2 5v3.8L19 16"/><path d="M5 11h15M7 16h10"/><circle cx="7" cy="16" r="1.5"/><circle cx="17" cy="16" r="1.5"/></svg>`,
+  carPassport:`<svg class="v5-car-silhouette" viewBox="0 0 72 44" aria-hidden="true">
+    <path d="M8 27h3.2l5.2-10.1A6 6 0 0 1 21.7 13h25.1a6 6 0 0 1 5.4 3.4L57.4 27H62a4 4 0 0 1 4 4v5a2 2 0 0 1-2 2h-5.2"/>
+    <path d="M13.2 38H8a2 2 0 0 1-2-2v-5a4 4 0 0 1 2-4"/>
+    <path d="M23.8 38h24.4"/>
+    <path d="M18.8 18h31.7l4.4 9H14.2l4.6-9Z"/>
+    <path d="M32 18v9"/>
+    <path d="M9.5 30.5h8M54 30.5h9"/>
+    <circle cx="18.5" cy="36.5" r="5.5"/>
+    <circle cx="53.5" cy="36.5" r="5.5"/>
+  </svg>`,
   speed:`<svg class="icon" viewBox="0 0 24 24"><path d="M4.2 18a9 9 0 1 1 15.6 0"/><path d="m12 12 4-4"/><path d="M7 18h10"/></svg>`,
   doc:`<svg class="icon" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5M9 12h6M9 16h6"/></svg>`,
   chart:`<svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>`,
@@ -523,8 +533,8 @@ function carCardPage(){
   const c=car();if(!c)return `<main class="v5-main"><div class="v5-page">${emptyState('Нет автомобиля','Добавьте автомобиль, чтобы открыть его паспорт.','add-car','Добавить автомобиль')}</div></main>`;
   const custom=customSpecRows(c.customSpecs);
   return `<main class="v5-main"><div class="v5-page v5-secondary-page">
-    <section class="v5-car-passport-hero">${c.photo?`<img src="${c.photo}" alt="${esc(c.make)} ${esc(c.model)}">`:`<div class="v5-car-passport-placeholder">${icons.car}</div>`}<div><h1>${esc(c.make)} ${esc(c.model)}</h1><p>${[c.year,c.trim,c.plate].filter(Boolean).map(esc).join(' · ')||'Паспорт автомобиля'}</p><strong>${fmtNum(c.currentOdometer)} км</strong></div></section>
-    <div class="v5-passport-actions"><button class="v5-primary" data-action="edit-current-car">${icons.edit} Изменить</button><button class="btn" data-view="report">${icons.doc} Отчёт</button></div>
+    <section class="v5-car-passport-hero">${c.photo?`<img src="${c.photo}" alt="${esc(c.make)} ${esc(c.model)}">`:`<div class="v5-car-passport-placeholder">${icons.carPassport}</div>`}<div><h1>${esc(c.make)} ${esc(c.model)}</h1><p>${[c.year,c.trim,c.plate].filter(Boolean).map(esc).join(' · ')||'Паспорт автомобиля'}</p><strong>${fmtNum(c.currentOdometer)} км</strong></div></section>
+    <div class="v5-passport-actions"><button class="v5-primary v5-passport-action" data-action="edit-current-car"><span class="v5-passport-action-icon">${icons.edit}</span><span class="v5-passport-action-label">Изменить</span></button><button class="btn v5-passport-action" data-view="report"><span class="v5-passport-action-icon">${icons.doc}</span><span class="v5-passport-action-label">Отчёт</span></button></div>
     <section class="v5-passport-section"><h2>Основные данные</h2><div class="v5-spec-grid">
       <div><span>VIN</span><strong>${carSpecValue(c.vin)}</strong></div><div><span>Госномер</span><strong>${carSpecValue(c.plate)}</strong></div>
       <div><span>Комплектация</span><strong>${carSpecValue(c.trim)}</strong></div><div><span>Год</span><strong>${carSpecValue(c.year)}</strong></div>

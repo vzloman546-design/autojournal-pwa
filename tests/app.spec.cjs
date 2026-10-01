@@ -432,10 +432,31 @@ test('vehicle passport stores photo and technical specifications', async({page})
   await page.locator('.v5-menu [data-view="carcard"]').click();
   await expect(page.locator('.v5-subbar-title')).toHaveText('Паспорт автомобиля');
   await expect(page.locator('.v5-car-passport-hero img')).toBeVisible();
+  const actionLayout=await page.locator('.v5-passport-action').first().evaluate(el=>({
+    display:getComputedStyle(el).display,
+    align:getComputedStyle(el).alignItems,
+    justify:getComputedStyle(el).justifyContent,
+    icon:el.querySelector('.v5-passport-action-icon')?.getBoundingClientRect(),
+    label:el.querySelector('.v5-passport-action-label')?.getBoundingClientRect()
+  }));
+  expect(actionLayout.display).toBe('flex');
+  expect(actionLayout.align).toBe('center');
+  expect(actionLayout.justify).toBe('center');
+  expect(Math.abs((actionLayout.icon.y+actionLayout.icon.height/2)-(actionLayout.label.y+actionLayout.label.height/2))).toBeLessThan(2);
   for(const text of ['Style','137 л.с.','МКПП','АИ-95','205/60 R16','5W-40','Клиренс','155 мм','Аккумулятор','60 А·ч']){
     await expect(page.locator('.v5-main')).toContainText(text);
   }
   await expect(page.locator('.v5-tabbar')).toHaveCount(0);
+});
+
+test('vehicle passport fallback is a recognizable dedicated car silhouette', async({page})=>{
+  await addCar(page);
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="carcard"]').click();
+  await expect(page.locator('.v5-car-passport-placeholder .v5-car-silhouette')).toBeVisible();
+  const box=await page.locator('.v5-car-silhouette').boundingBox();
+  expect(box.width).toBeGreaterThan(80);
+  expect(box.width).toBeGreaterThan(box.height);
 });
 
 test('short and full vehicle reports render and invoke system PDF print', async({page})=>{
@@ -473,7 +494,7 @@ test.describe('offline PWA',()=>{
     await addCar(page);
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.4.2');
+    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.4.3');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
