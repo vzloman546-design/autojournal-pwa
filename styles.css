@@ -1470,3 +1470,5 @@ body.v5-sheet-settling .sheet-backdrop{
   .v5-first-run-shell{align-self:center}
   .v5-first-run-copy h1{font-size:31px}
 }
+
+.stat-sub{margin-top:4px;color:var(--muted);font-size:11px;line-height:1.3}
