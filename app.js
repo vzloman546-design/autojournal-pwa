@@ -162,9 +162,80 @@ function inferSystemKey(...values){
   return '';
 }
 function vehicleSystemInfo(key){return VEHICLE_SYSTEM_MAP.get(String(key||''))||null;}
+function vehicleSystemSearchRows(query=''){
+  const tracked=new Set(carItems(state.components).map(c=>c.systemKey).filter(Boolean));
+  const q=normalizeLabel(query);
+  const rows=[];
+  for(const [key,info] of VEHICLE_SYSTEM_MAP){
+    const label=normalizeLabel(info.label),group=normalizeLabel(info.group);
+    const aliases=(SYSTEM_ALIASES[key]||[]).map(normalizeLabel);
+    let score=99;
+    if(!q)score=tracked.has(key)?0:20;
+    else if(label===q||aliases.includes(q))score=0;
+    else if(label.startsWith(q)||aliases.some(a=>a.startsWith(q)))score=1;
+    else if(label.split(' ').some(w=>w.startsWith(q)))score=2;
+    else if(label.includes(q)||aliases.some(a=>a.includes(q)))score=3;
+    else if(group.startsWith(q)||group.includes(q))score=4;
+    else continue;
+    rows.push({...info,tracked:tracked.has(key),score});
+  }
+  rows.sort((a,b)=>a.score-b.score||(a.tracked===b.tracked?0:(a.tracked?-1:1))||a.group.localeCompare(b.group,'ru')||a.label.localeCompare(b.label,'ru'));
+  return rows.slice(0,q?30:18);
+}
+function systemComboboxResultsHtml(query=''){
+  const rows=vehicleSystemSearchRows(query);
+  if(!rows.length)return '<div class="v5-combobox-empty">Ничего не найдено</div>';
+  return rows.map((row,i)=>`<button type="button" class="v5-combobox-option" role="option" id="system-option-${row.key}" data-action="system-combobox-select" data-system-key="${row.key}" data-combo-index="${i}" aria-selected="false"><span class="v5-combobox-option-title">${esc(row.label)}${row.tracked?'<span class="v5-combobox-tracked">Отслеживается</span>':''}</span><span class="v5-combobox-option-meta">${esc(row.group)}</span></button>`).join('');
+}
+function closeSystemCombobox(box){
+  if(!box)return;
+  const input=box.querySelector('[data-system-combobox-input]'),list=box.querySelector('[data-system-combobox-list]');
+  box.classList.remove('is-open');box.dataset.activeIndex='-1';
+  if(input){input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');}
+  if(list)list.hidden=true;
+}
+function openSystemCombobox(input){
+  const box=input?.closest('[data-system-combobox]');if(!box)return;
+  document.querySelectorAll('[data-system-combobox].is-open').forEach(other=>{if(other!==box)closeSystemCombobox(other);});
+  const list=box.querySelector('[data-system-combobox-list]');
+  if(list){list.innerHTML=systemComboboxResultsHtml(input.value);list.hidden=false;}
+  box.classList.add('is-open');box.dataset.activeIndex='-1';input.setAttribute('aria-expanded','true');
+}
+function syncSystemComboboxSearch(input){
+  const box=input?.closest('[data-system-combobox]');if(!box)return;
+  const valueField=box.querySelector('[data-system-value]'),q=normalizeLabel(input.value);
+  const selected=vehicleSystemInfo(valueField?.value);
+  if(!q){
+    if(valueField?.value){valueField.value='';valueField.dispatchEvent(new Event('change',{bubbles:true}));}
+  }else if(!selected||normalizeLabel(selected.label)!==q){
+    const exact=vehicleSystemSearchRows(input.value).filter(row=>normalizeLabel(row.label)===q||(SYSTEM_ALIASES[row.key]||[]).map(normalizeLabel).includes(q));
+    const next=exact.length===1?exact[0].key:'';
+    if(valueField&&valueField.value!==next){valueField.value=next;valueField.dispatchEvent(new Event('change',{bubbles:true}));}
+  }
+  openSystemCombobox(input);
+}
+function chooseSystemComboboxValue(box,key){
+  const info=vehicleSystemInfo(key);if(!box||!info)return;
+  const input=box.querySelector('[data-system-combobox-input]'),valueField=box.querySelector('[data-system-value]');
+  if(input)input.value=info.label;
+  if(valueField){valueField.value=info.key;valueField.dispatchEvent(new Event('change',{bubbles:true}));}
+  closeSystemCombobox(box);
+  input?.focus({preventScroll:true});
+}
+function moveSystemComboboxActive(input,delta){
+  const box=input.closest('[data-system-combobox]');if(!box)return;
+  if(!box.classList.contains('is-open'))openSystemCombobox(input);
+  const options=[...box.querySelectorAll('.v5-combobox-option')];if(!options.length)return;
+  let index=Number(box.dataset.activeIndex??-1);
+  index=(index+delta+options.length)%options.length;
+  box.dataset.activeIndex=String(index);
+  options.forEach((option,i)=>{option.classList.toggle('is-active',i===index);option.setAttribute('aria-selected',i===index?'true':'false');});
+  const active=options[index];input.setAttribute('aria-activedescendant',active.id);active.scrollIntoView({block:'nearest'});
+}
 function groupedVehicleSystemField(label,name,value='',required=false){
   const tracked=new Set(carItems(state.components).map(c=>c.systemKey).filter(Boolean));
-  return `<div class="field"><label for="${name}">${label}</label><select class="input" id="${name}" name="${name}" ${required?'required':''}><option value="">— Не выбран —</option>${VEHICLE_SYSTEM_GROUPS.map(([group,items])=>`<optgroup label="${esc(group)}">${items.map(([key,text])=>`<option value="${key}" ${key===value?'selected':''}>${esc(text)}${tracked.has(key)?' • отслеживается':''}</option>`).join('')}</optgroup>`).join('')}</select></div>`;
+  const selected=vehicleSystemInfo(value);
+  return `<div class="field v5-system-field" data-system-combobox data-active-index="-1"><label for="${name}Search">${label}</label><select class="v5-system-value" id="${name}" name="${name}" data-system-value aria-hidden="true" tabindex="-1"><option value="">— Не выбран —</option>${VEHICLE_SYSTEM_GROUPS.map(([group,items])=>`<optgroup label="${esc(group)}">${items.map(([key,text])=>`<option value="${key}" ${key===value?'selected':''}>${esc(text)}${tracked.has(key)?' • отслеживается':''}</option>`).join('')}</optgroup>`).join('')}</select><div class="v5-combobox-control"><input class="input v5-combobox-input" id="${name}Search" type="search" inputmode="search" autocomplete="off" autocapitalize="sentences" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="${name}List" data-system-combobox-input value="${esc(selected?.label||'')}" placeholder="Начните вводить название узла…" ${required?'aria-required="true"':''}><button type="button" class="v5-combobox-toggle" data-action="system-combobox-toggle" aria-label="Показать список узлов">⌄</button></div><div class="v5-combobox-list" id="${name}List" role="listbox" data-system-combobox-list hidden></div><div class="helper">Введите часть названия: например «свечи», «колодки», «АКБ», «ГУР».</div></div>`;
 }
 
 const CAR_SPEC_SECTIONS=[
@@ -1584,8 +1655,27 @@ function updateRefuelCalculator(changedInput){
 
 document.addEventListener('input', e=>{
   updateRefuelCalculator(e.target);
+  if(e.target.matches('[data-system-combobox-input]'))syncSystemComboboxSearch(e.target);
   const key=e.target.dataset.input;
   if(key==='history-search'){ui.search=e.target.value; const pos=$('.v5-main')?.scrollTop||0; render(); const ms=$('.v5-main'); if(ms)ms.scrollTop=pos; $('#app input[data-input="history-search"]')?.focus();}
+});
+document.addEventListener('focusin',e=>{
+  if(e.target.matches('[data-system-combobox-input]'))openSystemCombobox(e.target);
+});
+document.addEventListener('keydown',e=>{
+  if(!e.target.matches('[data-system-combobox-input]'))return;
+  const input=e.target,box=input.closest('[data-system-combobox]');
+  if(e.key==='ArrowDown'){e.preventDefault();moveSystemComboboxActive(input,1);return;}
+  if(e.key==='ArrowUp'){e.preventDefault();moveSystemComboboxActive(input,-1);return;}
+  if(e.key==='Escape'){e.preventDefault();closeSystemCombobox(box);return;}
+  if(e.key==='Enter'){
+    const options=[...box.querySelectorAll('.v5-combobox-option')],index=Number(box.dataset.activeIndex??-1);
+    if(box.classList.contains('is-open')&&options.length){
+      e.preventDefault();
+      const option=index>=0?options[index]:options[0];
+      chooseSystemComboboxValue(box,option.dataset.systemKey);
+    }
+  }
 });
 document.addEventListener('change', async e=>{
   if(e.target.id==='systemKey'&&e.target.closest('#entry-form')){
@@ -1605,9 +1695,17 @@ document.addEventListener('change', async e=>{
 });
 
 document.addEventListener('click', async e=>{
+  document.querySelectorAll('[data-system-combobox].is-open').forEach(box=>{if(!box.contains(e.target))closeSystemCombobox(box);});
   const view=e.target.closest('[data-view]')?.dataset.view;
   if(view){navigateTo(view);return;}
   const el=e.target.closest('[data-action]'); if(!el)return; const a=el.dataset.action,id=el.dataset.id;
+  if(a==='system-combobox-toggle'){
+    const box=el.closest('[data-system-combobox]'),input=box?.querySelector('[data-system-combobox-input]');
+    if(!box||!input)return;
+    if(box.classList.contains('is-open'))closeSystemCombobox(box);else{openSystemCombobox(input);input.focus({preventScroll:true});}
+    return;
+  }
+  if(a==='system-combobox-select'){chooseSystemComboboxValue(el.closest('[data-system-combobox]'),el.dataset.systemKey);return;}
   if(a==='close-sheet'){const sheet=document.querySelector('.sheet'),backdrop=document.querySelector('.sheet-backdrop');if(sheet)closeSheetAfterGesture(sheet,backdrop);else{ui.sheet=null;ui.sheetId=null;render();}return;}
   if(a==='open-reminders'){ui.sheet='reminders';render();return;}
   if(a==='open-profile'){navigateTo('profile');return;}
