@@ -179,6 +179,45 @@ async function addRefuel(page,{date,odometer,amount,liters,station='АЗС',full
 
 test.beforeEach(async({page})=>{ await clearApp(page); });
 
+
+test('first launch offers receive data or a new journal', async({page})=>{
+  await expect(page.locator('.v5-first-run')).toBeVisible();
+  await expect(page.getByRole('button',{name:/Получить данные/})).toBeVisible();
+  await expect(page.getByRole('button',{name:/Новый журнал/})).toBeVisible();
+  await expect(page.locator('.v5-topbar')).toHaveCount(0);
+  await expect(page.locator('.v5-tabbar')).toHaveCount(0);
+});
+
+test('new journal from first launch opens vehicle form immediately', async({page})=>{
+  await page.getByRole('button',{name:/Новый журнал/}).click();
+  await expect(page.locator('#car-form')).toBeVisible();
+  await expect(page.locator('#make')).toBeVisible();
+  await expect(page.locator('#model')).toBeVisible();
+  await page.locator('#make').fill('Hyundai');
+  await page.locator('#model').fill('Sonata');
+  await page.locator('#year').fill('2008');
+  await page.locator('#initialOdometer').fill('200000');
+  await page.locator('#currentOdometer').fill('210000');
+  await page.locator('button[form="car-form"]').click();
+  await expect(page.locator('.v5-first-run')).toHaveCount(0);
+  await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
+});
+
+test('receive data from first launch opens QR scanner in pull mode', async({page})=>{
+  await page.evaluate(()=>{
+    const mediaDevices=navigator.mediaDevices||{};
+    Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{
+      ...mediaDevices,
+      getUserMedia:async()=>{throw new DOMException('No camera in QA','NotAllowedError');}
+    }});
+  });
+  await page.getByRole('button',{name:/Получить данные/}).click();
+  await expect(page.locator('.sheet')).toContainText('Получение данных');
+  await expect(page.locator('[data-sync-video]')).toBeVisible();
+  await expect(page.locator('[data-action="sync-photo-open"]')).toBeVisible();
+  await expect(page.locator('[data-sync-manual]')).toBeVisible();
+});
+
 test('service entry without mileage syncs one expense through edit and delete', async({page})=>{
   await addCar(page);
   await page.locator('[data-action="add-entry"]').first().first().click();
