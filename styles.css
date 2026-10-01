@@ -1300,3 +1300,51 @@ body.v5-sheet-settling .sheet-backdrop{
 @media(prefers-reduced-motion:reduce){
   .v5-spec-editor>summary::after{transition:none}
 }
+
+
+/* QR device transfer */
+.v5-sync-intro{display:grid;justify-items:center;text-align:center;gap:8px;margin:2px 0 16px}
+.v5-sync-intro p,.v5-sync-scan-intro p,.v5-sync-success p,.v5-sync-progress p,.v5-sync-qr-wrap p{margin:0;color:var(--muted);font-size:12px;line-height:1.45}
+.v5-sync-lock{width:54px;height:54px;border-radius:17px;display:grid;place-items:center;background:var(--surface-2);font-size:25px;font-weight:750}
+.v5-sync-mode-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:14px 0}
+.v5-sync-mode{
+  min-height:152px;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--surface-2);color:var(--text);
+  display:grid;align-content:start;gap:7px;text-align:left
+}
+.v5-sync-mode:not(:disabled):active{transform:scale(.985)}
+.v5-sync-mode:disabled{opacity:.48}
+.v5-sync-mode-icon{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--accent);font-size:23px;font-weight:800}
+.v5-sync-mode strong{font-size:14px}
+.v5-sync-mode small{font-size:11px;line-height:1.4;color:var(--muted)}
+.v5-sync-show{margin-top:8px}
+.v5-sync-qr-wrap{display:grid;justify-items:center;text-align:center;gap:9px}
+.v5-sync-qr{width:min(78vw,300px);aspect-ratio:1;padding:8px;border-radius:18px;background:#fff;border:1px solid var(--line);display:grid;place-items:center}
+.v5-sync-qr svg{width:100%;height:100%;display:block}
+.v5-sync-code{font:750 12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;color:var(--muted)}
+.v5-sync-status{width:100%;padding:10px 12px;border-radius:12px;background:var(--surface-2);font-size:12px;line-height:1.4}
+.v5-sync-scan-intro{display:grid;gap:5px;margin-bottom:12px}
+.v5-sync-camera{position:relative;aspect-ratio:1/1;overflow:hidden;border-radius:18px;background:#111;margin-bottom:10px}
+.v5-sync-camera video{width:100%;height:100%;object-fit:cover;display:block}
+.v5-sync-camera-frame{position:absolute;inset:18%;border:2px solid rgba(255,255,255,.88);border-radius:18px;box-shadow:0 0 0 999px rgba(0,0,0,.2);pointer-events:none}
+.v5-sync-camera-placeholder{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:#ddd;font-size:12px;background:#171719}
+.v5-sync-camera-placeholder[hidden]{display:none}
+.v5-sync-manual{display:grid;gap:8px;margin-top:18px;padding-top:16px;border-top:1px solid var(--line-soft)}
+.v5-sync-manual textarea.input{min-height:78px;font:12px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace}
+.v5-sync-progress,.v5-sync-success{min-height:230px;display:grid;align-content:center;justify-items:center;text-align:center;gap:10px}
+.v5-sync-spinner{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:v5-sync-spin .8s linear infinite}
+@keyframes v5-sync-spin{to{transform:rotate(360deg)}}
+.v5-sync-success-icon{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);font-size:25px;font-weight:800}
+.v5-sync-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:14px 0}
+.v5-sync-summary>div{padding:10px 7px;border:1px solid var(--line-soft);border-radius:12px;background:var(--surface-2);display:grid;justify-items:center;gap:2px}
+.v5-sync-summary strong{font-size:18px}
+.v5-sync-summary span{font-size:10px;color:var(--muted)}
+.v5-sync-choice{display:grid;gap:8px;margin-top:12px}
+.v5-sync-choice>div{padding:12px;border-radius:13px;background:var(--surface-2);display:grid;gap:3px}
+.v5-sync-choice strong{font-size:13px}
+.v5-sync-choice span{font-size:11px;line-height:1.4;color:var(--muted)}
+@media(max-width:430px){
+  .v5-sync-mode-grid{grid-template-columns:minmax(0,1fr)}
+  .v5-sync-mode{min-height:auto;grid-template-columns:42px minmax(0,1fr);column-gap:10px}
+  .v5-sync-mode-icon{grid-row:1/3}
+  .v5-sync-mode small{grid-column:2}
+}
