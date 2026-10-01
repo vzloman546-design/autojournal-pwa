@@ -275,6 +275,26 @@ const primaryViews=new Set(['home','records','refuels','notifications']);
 const secondaryTitles={profile:'Профиль',carcard:'Паспорт автомобиля',report:'Отчёт автомобиля',analytics:'Статистика',documents:'Документы',parts:'Контроль обслуживания',more:'Настройки'};
 let navStack=[];
 let nextTransition='';
+let pendingPdfFile=null;
+let pendingPdfUrl='';
+function isIOSStandalone(){
+  const ua=String(navigator.userAgent||'');
+  const isiOS=/iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&Number(navigator.maxTouchPoints)>1);
+  return isiOS&&(navigator.standalone===true||matchMedia('(display-mode: standalone)').matches);
+}
+function clearPendingPdf(){
+  if(pendingPdfUrl)URL.revokeObjectURL(pendingPdfUrl);
+  pendingPdfUrl='';
+  pendingPdfFile=null;
+}
+function downloadPendingPdf(){
+  if(!pendingPdfFile||!pendingPdfUrl){toast('PDF ещё не готов');return;}
+  const a=document.createElement('a');
+  a.href=pendingPdfUrl;
+  a.download=pendingPdfFile.name;
+  a.rel='noopener';
+  document.body.append(a);a.click();a.remove();
+}
 
 function car() { return state.cars.find(c=>c.id===state.activeCarId) || null; }
 function carItems(list) { const c=car(); return c ? list.filter(x=>x.carId===c.id) : []; }
@@ -824,8 +844,26 @@ function saveVehicleReportPdf(){
   try{
     const definition=vehicleReportPdfDefinition();
     const filename=vehicleReportPdfFilename();
+    const pdf=window.pdfMake.createPdf(definition);
     toast('Формируем PDF…');
-    window.pdfMake.createPdf(definition).download(filename,()=>toast('PDF создан'));
+    if(isIOSStandalone()){
+      pdf.getBlob(blob=>{
+        try{
+          clearPendingPdf();
+          pendingPdfFile=new File([blob],filename,{type:'application/pdf'});
+          pendingPdfUrl=URL.createObjectURL(blob);
+          ui.sheet='pdf-ready';
+          ui.sheetId=null;
+          render();
+          toast('PDF готов');
+        }catch(err){
+          console.error('PDF preparation failed',err);
+          toast('Не удалось подготовить PDF');
+        }
+      });
+      return;
+    }
+    pdf.download(filename,()=>toast('PDF создан'));
   }catch(err){
     console.error('PDF generation failed',err);
     toast('Не удалось сформировать PDF');
@@ -1060,7 +1098,15 @@ function documentDetailSheet(id){
   return sheetWrap(d.title,`<div class="detail-hero"><div class="detail-title">${esc(d.title)}</div><div class="detail-sub">${esc(d.type||'Документ')}</div><div class="detail-grid"><div class="detail-item"><div class="detail-label">Номер</div><div class="detail-value">${esc(d.number||'—')}</div></div><div class="detail-item"><div class="detail-label">Дата выдачи</div><div class="detail-value">${fmtDate(d.issueDate)}</div></div><div class="detail-item"><div class="detail-label">Действует до</div><div class="detail-value">${fmtDate(d.expiryDate)}</div></div><div class="detail-item"><div class="detail-label">Напомнить</div><div class="detail-value">${d.expiryDate?`за ${fmtNum(d.remindDays??30)} дн.`:'—'}</div></div></div>${ev?`<div style="margin-top:12px">${statusPill(ev.status)} <span class="row-sub">${esc(describeDue(ev))}</span></div>`:''}</div>${d.files?.length?`<section class="section"><div class="form-title">Файлы</div>${d.files.map((f,i)=>`<div class="file-chip"><span>${icons.doc}</span><span class="file-name">${esc(f.name)}</span><button class="text-btn" data-action="open-stored-file" data-doc="${d.id}" data-index="${i}">Открыть</button><button class="text-btn" data-action="share-stored-file" data-doc="${d.id}" data-index="${i}">Поделиться</button></div>`).join('')}</section>`:''}`,`<div class="btn-row"><button class="btn" data-action="edit-document" data-id="${d.id}">Изменить</button><button class="btn danger" data-action="delete-document" data-id="${d.id}">Удалить</button></div>`);
 }
 
-function renderSheet(){if(!ui.sheet)return '';if(ui.sheet==='profile')return profileSheet();if(ui.sheet==='reminders')return remindersSheet();if(ui.sheet==='car')return carSheet(ui.sheetId);if(ui.sheet==='garage')return garageSheet();if(ui.sheet==='odometer')return odometerSheet();if(ui.sheet==='entry')return entrySheet(ui.sheetId);if(ui.sheet==='component')return componentSheet(ui.sheetId);if(ui.sheet==='expense')return expenseSheet(ui.sheetId);if(ui.sheet==='document')return documentSheet(ui.sheetId);if(ui.sheet==='refuel')return refuelSheet(ui.sheetId);if(ui.sheet==='entry-detail')return entryDetailSheet(ui.sheetId);if(ui.sheet==='component-detail')return componentDetailSheet(ui.sheetId);if(ui.sheet==='expense-detail')return expenseDetailSheet(ui.sheetId);if(ui.sheet==='document-detail')return documentDetailSheet(ui.sheetId);if(ui.sheet==='refuel-detail')return refuelDetailSheet(ui.sheetId);return '';}
+function pdfReadySheet(){
+  if(!pendingPdfFile)return sheetWrap('PDF',`<div class="install-note">PDF-файл не найден. Сформируйте отчёт ещё раз.</div>`);
+  const shareSupported=typeof navigator.share==='function'&&typeof navigator.canShare==='function'&&navigator.canShare({files:[pendingPdfFile]});
+  const body=`<div class="install-note"><strong>PDF готов.</strong><br>Файл «${esc(pendingPdfFile.name)}» сформирован локально. На iPhone нажмите «Сохранить / поделиться» и выберите «Сохранить в Файлы» или нужное приложение.</div>`;
+  const foot=`${shareSupported?`<button class="btn primary block" data-action="share-ready-pdf">${icons.export} Сохранить / поделиться</button>`:''}<button class="btn block" style="margin-top:8px" data-action="download-ready-pdf">Открыть / скачать PDF</button>`;
+  return sheetWrap('PDF готов',body,foot);
+}
+
+function renderSheet(){if(!ui.sheet)return '';if(ui.sheet==='pdf-ready')return pdfReadySheet();if(ui.sheet==='profile')return profileSheet();if(ui.sheet==='reminders')return remindersSheet();if(ui.sheet==='car')return carSheet(ui.sheetId);if(ui.sheet==='garage')return garageSheet();if(ui.sheet==='odometer')return odometerSheet();if(ui.sheet==='entry')return entrySheet(ui.sheetId);if(ui.sheet==='component')return componentSheet(ui.sheetId);if(ui.sheet==='expense')return expenseSheet(ui.sheetId);if(ui.sheet==='document')return documentSheet(ui.sheetId);if(ui.sheet==='refuel')return refuelSheet(ui.sheetId);if(ui.sheet==='entry-detail')return entryDetailSheet(ui.sheetId);if(ui.sheet==='component-detail')return componentDetailSheet(ui.sheetId);if(ui.sheet==='expense-detail')return expenseDetailSheet(ui.sheetId);if(ui.sheet==='document-detail')return documentDetailSheet(ui.sheetId);if(ui.sheet==='refuel-detail')return refuelDetailSheet(ui.sheetId);return '';}
 
 function navigateTo(view,{replace=false}={}){
   if(!view)return;
@@ -1381,6 +1427,18 @@ document.addEventListener('click', async e=>{
   if(a==='analytics-tab'){ui.analyticsTab=el.dataset.value||'expenses';nextTransition='fade';render();return;}
   if(a==='report-mode'){ui.reportMode=el.dataset.value==='full'?'full':'short';nextTransition='fade';render();return;}
   if(a==='print-report'){saveVehicleReportPdf();return;}
+  if(a==='share-ready-pdf'){
+    if(!pendingPdfFile){toast('PDF ещё не готов');return;}
+    try{
+      if(navigator.canShare?.({files:[pendingPdfFile]})){
+        await navigator.share({files:[pendingPdfFile],title:pendingPdfFile.name});
+      }else downloadPendingPdf();
+    }catch(err){
+      if(err?.name!=='AbortError'){console.error('PDF share failed',err);toast('Не удалось открыть меню сохранения');}
+    }
+    return;
+  }
+  if(a==='download-ready-pdf'){downloadPendingPdf();return;}
   if(a==='notif-tab'){ui.notificationTab=el.dataset.value||'auto';render();return;}
   if(a==='add-car'){ui.sheet='car';ui.sheetId=null;render();return;}
   if(a==='edit-current-car'){ui.sheet='car';ui.sheetId=state.activeCarId;render();return;}
