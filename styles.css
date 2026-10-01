@@ -1206,3 +1206,68 @@ body.v5-sheet-settling .sheet-backdrop{
 @media(max-width:359px){
   .v5-car-silhouette{width:132px!important}
 }
+
+
+/* AutoJournal v5.5 — exhaustive vehicle systems and expandable technical passport */
+.v5-all-specs>.helper{margin-bottom:10px}
+.v5-spec-editor{
+  margin-top:8px;
+  overflow:hidden;
+  border:1px solid var(--v5-line);
+  border-radius:18px;
+  background:var(--v5-card);
+}
+.v5-spec-editor>summary{
+  min-height:50px;
+  padding:0 14px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  cursor:pointer;
+  list-style:none;
+  font-size:14px;
+  font-weight:720;
+  color:var(--v5-text);
+  user-select:none;
+  -webkit-user-select:none;
+}
+.v5-spec-editor>summary::-webkit-details-marker{display:none}
+.v5-spec-editor>summary::after{
+  content:'›';
+  flex:0 0 auto;
+  color:var(--v5-muted);
+  font-size:24px;
+  line-height:1;
+  transform:rotate(90deg);
+  transition:transform .18s ease;
+}
+.v5-spec-editor[open]>summary::after{transform:rotate(-90deg)}
+.v5-spec-editor>summary>span{
+  margin-left:auto;
+  padding:4px 7px;
+  border-radius:999px;
+  background:var(--v5-soft);
+  color:var(--v5-muted);
+  font-size:10px;
+  font-weight:700;
+}
+.v5-spec-editor-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+  padding:0 12px 12px;
+  border-top:1px solid var(--v5-line);
+}
+.v5-spec-editor-grid>.field{padding-top:10px}
+.v5-spec-editor-grid>.field .input{width:100%}
+#entry-form optgroup,
+#component-form optgroup{font-weight:700}
+#entry-form option,
+#component-form option{font-weight:400}
+@media(max-width:430px){
+  .v5-spec-editor-grid{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){
+  .v5-spec-editor>summary::after{transition:none}
+}

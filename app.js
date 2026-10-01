@@ -1,6 +1,6 @@
 import { loadState, saveState, clearState } from './db.js';
 
-const APP_VERSION = 6;
+const APP_VERSION = 7;
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -68,6 +68,187 @@ const icons = {
   calendar:`<svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg>`,
 };
 
+const VEHICLE_SYSTEM_GROUPS = [
+  ['Двигатель',[
+    ['engine_assembly','Двигатель в сборе'],['cylinder_block','Блок цилиндров'],['cylinder_head','Головка блока цилиндров'],['head_gasket','Прокладка ГБЦ'],['valve_cover','Клапанная крышка'],['valve_cover_gasket','Прокладка клапанной крышки'],['oil_pan','Масляный поддон'],['oil_pan_gasket','Прокладка поддона'],['crankshaft','Коленчатый вал'],['crankshaft_bearings','Коренные вкладыши'],['connecting_rods','Шатуны'],['rod_bearings','Шатунные вкладыши'],['pistons','Поршни'],['piston_rings','Поршневые кольца'],['camshaft','Распределительный вал'],['valves','Клапаны'],['valve_stem_seals','Маслосъёмные колпачки'],['lifters','Гидрокомпенсаторы / толкатели'],['rocker_arms','Коромысла'],['engine_mount_left','Опора двигателя левая'],['engine_mount_right','Опора двигателя правая'],['engine_mount_front','Опора двигателя передняя'],['engine_mount_rear','Опора двигателя задняя'],['intake_manifold','Впускной коллектор'],['exhaust_manifold','Выпускной коллектор'],['throttle_body','Дроссельная заслонка'],['pcv_valve','Клапан вентиляции картера PCV'],['egr_valve','Клапан EGR'],['turbocharger','Турбокомпрессор'],['supercharger','Механический компрессор'],['intercooler','Интеркулер'],['vacuum_pump','Вакуумный насос'],['oil_pump','Масляный насос'],['oil_cooler','Маслоохладитель'],['oil_pressure_sensor','Датчик давления масла'],['crankshaft_sensor','Датчик положения коленвала'],['camshaft_sensor','Датчик положения распредвала'],['knock_sensor','Датчик детонации'],['oxygen_sensor_upstream','Лямбда-зонд до катализатора'],['oxygen_sensor_downstream','Лямбда-зонд после катализатора']
+  ]],
+  ['ГРМ и привод навесного оборудования',[
+    ['timing_belt','Ремень ГРМ'],['timing_chain','Цепь ГРМ'],['timing_tensioner','Натяжитель ГРМ'],['timing_idler','Обводной ролик ГРМ'],['timing_guides','Успокоители / направляющие цепи ГРМ'],['timing_gears','Шестерни ГРМ'],['balance_belt','Ремень балансирных валов'],['accessory_belt','Приводной / поликлиновый ремень'],['accessory_tensioner','Натяжитель приводного ремня'],['accessory_idler','Обводной ролик приводного ремня'],['alternator_belt','Ремень генератора'],['power_steering_belt','Ремень ГУР'],['ac_belt','Ремень кондиционера'],['crank_pulley','Шкив коленвала'],['alternator_pulley','Обгонная муфта / шкив генератора']
+  ]],
+  ['Зажигание',[
+    ['spark_plugs','Свечи зажигания'],['ignition_coils','Катушки зажигания'],['high_voltage_wires','Высоковольтные провода'],['distributor','Распределитель зажигания'],['distributor_cap','Крышка трамблёра'],['distributor_rotor','Бегунок трамблёра'],['ignition_module','Модуль зажигания']
+  ]],
+  ['Топливная система',[
+    ['fuel_tank','Топливный бак'],['fuel_tank_cap','Крышка топливного бака'],['fuel_pump','Топливный насос'],['fuel_filter','Топливный фильтр'],['fuel_injectors','Топливные форсунки'],['fuel_rail','Топливная рампа'],['fuel_pressure_regulator','Регулятор давления топлива'],['high_pressure_fuel_pump','ТНВД / насос высокого давления'],['fuel_lines','Топливные магистрали'],['evap_canister','Адсорбер EVAP'],['evap_purge_valve','Клапан продувки адсорбера']
+  ]],
+  ['Дизель / DPF / SCR',[
+    ['glow_plugs','Свечи накаливания'],['glow_plug_relay','Реле свечей накаливания'],['diesel_injectors','Дизельные форсунки'],['dpf','Сажевый фильтр DPF'],['dpf_pressure_sensor','Датчик перепада давления DPF'],['scr_catalyst','SCR-катализатор'],['adblue_tank','Бак AdBlue'],['adblue_pump','Насос AdBlue'],['adblue_injector','Форсунка AdBlue'],['nox_sensor','Датчик NOx']
+  ]],
+  ['Система охлаждения',[
+    ['radiator','Радиатор охлаждения'],['water_pump','Помпа / водяной насос'],['thermostat','Термостат'],['upper_radiator_hose','Верхний патрубок радиатора'],['lower_radiator_hose','Нижний патрубок радиатора'],['coolant_hoses','Патрубки системы охлаждения'],['expansion_tank','Расширительный бачок'],['expansion_tank_cap','Крышка расширительного бачка'],['cooling_fan','Вентилятор радиатора'],['fan_control_module','Модуль управления вентилятором'],['coolant_temp_sensor','Датчик температуры ОЖ'],['heater_core','Радиатор отопителя'],['coolant_flange','Фланец / корпус системы охлаждения']
+  ]],
+  ['Впуск и выпуск',[
+    ['air_filter','Воздушный фильтр двигателя'],['maf_sensor','Датчик массового расхода воздуха ДМРВ'],['map_sensor','Датчик абсолютного давления MAP'],['intake_hose','Патрубок впуска'],['intake_resonator','Резонатор впуска'],['catalytic_converter','Катализатор'],['exhaust_flex_pipe','Гофра выхлопа'],['exhaust_resonator','Резонатор выхлопа'],['muffler','Глушитель'],['exhaust_pipe','Выхлопная труба'],['exhaust_hangers','Подвесы выхлопной системы']
+  ]],
+  ['Трансмиссия и сцепление',[
+    ['gearbox','Коробка передач в сборе'],['gearbox_filter','Фильтр коробки передач'],['torque_converter','Гидротрансформатор'],['mechatronic','Мехатроник'],['clutch_kit','Комплект сцепления'],['clutch_disc','Диск сцепления'],['clutch_pressure_plate','Корзина сцепления'],['release_bearing','Выжимной подшипник'],['flywheel','Маховик'],['dual_mass_flywheel','Двухмассовый маховик'],['clutch_master_cylinder','Главный цилиндр сцепления'],['clutch_slave_cylinder','Рабочий цилиндр сцепления'],['clutch_cable','Трос сцепления'],['gear_selector','Механизм / тросы выбора передач']
+  ]],
+  ['Привод и редукторы',[
+    ['transfer_case','Раздаточная коробка'],['front_differential','Передний дифференциал'],['rear_differential','Задний дифференциал'],['propeller_shaft','Карданный вал'],['propeller_center_bearing','Подвесной подшипник кардана'],['driveshaft_fl','Привод передний левый'],['driveshaft_fr','Привод передний правый'],['driveshaft_rl','Привод задний левый'],['driveshaft_rr','Привод задний правый'],['cv_outer_fl','ШРУС наружный передний левый'],['cv_outer_fr','ШРУС наружный передний правый'],['cv_inner_fl','ШРУС внутренний передний левый'],['cv_inner_fr','ШРУС внутренний передний правый'],['cv_outer_rl','ШРУС наружный задний левый'],['cv_outer_rr','ШРУС наружный задний правый'],['cv_inner_rl','ШРУС внутренний задний левый'],['cv_inner_rr','ШРУС внутренний задний правый'],['axle_seals','Сальники приводов']
+  ]],
+  ['Передняя подвеска',[
+    ['front_strut_left','Передняя стойка левая'],['front_strut_right','Передняя стойка правая'],['front_spring_left','Передняя пружина левая'],['front_spring_right','Передняя пружина правая'],['front_top_mount_left','Опора передней стойки левая'],['front_top_mount_right','Опора передней стойки правая'],['front_strut_bearing_left','Опорный подшипник передний левый'],['front_strut_bearing_right','Опорный подшипник передний правый'],['front_lower_arm_left','Передний нижний рычаг левый'],['front_lower_arm_right','Передний нижний рычаг правый'],['front_upper_arm_left','Передний верхний рычаг левый'],['front_upper_arm_right','Передний верхний рычаг правый'],['front_ball_joint_left','Шаровая опора передняя левая'],['front_ball_joint_right','Шаровая опора передняя правая'],['front_arm_bushings','Сайлентблоки передних рычагов'],['front_sway_bar','Передний стабилизатор'],['front_sway_link_left','Стойка стабилизатора передняя левая'],['front_sway_link_right','Стойка стабилизатора передняя правая'],['front_sway_bushings','Втулки переднего стабилизатора'],['front_subframe','Передний подрамник']
+  ]],
+  ['Задняя подвеска',[
+    ['rear_shock_left','Задний амортизатор левый'],['rear_shock_right','Задний амортизатор правый'],['rear_spring_left','Задняя пружина левая'],['rear_spring_right','Задняя пружина правая'],['rear_top_mount_left','Опора заднего амортизатора левая'],['rear_top_mount_right','Опора заднего амортизатора правая'],['rear_trailing_arm_left','Продольный рычаг задний левый'],['rear_trailing_arm_right','Продольный рычаг задний правый'],['rear_control_arms','Поперечные рычаги задней подвески'],['rear_arm_bushings','Сайлентблоки задней подвески'],['rear_sway_bar','Задний стабилизатор'],['rear_sway_link_left','Стойка стабилизатора задняя левая'],['rear_sway_link_right','Стойка стабилизатора задняя правая'],['rear_sway_bushings','Втулки заднего стабилизатора'],['rear_beam','Задняя балка'],['rear_subframe','Задний подрамник'],['air_spring_left','Пневмобаллон левый'],['air_spring_right','Пневмобаллон правый'],['air_suspension_compressor','Компрессор пневмоподвески'],['ride_height_sensor','Датчик высоты кузова']
+  ]],
+  ['Рулевое управление',[
+    ['steering_rack','Рулевая рейка'],['power_steering_pump','Насос ГУР'],['power_steering_reservoir','Бачок ГУР'],['power_steering_pressure_hose','Напорный шланг ГУР'],['power_steering_return_hose','Обратный шланг ГУР'],['inner_tie_rod_left','Рулевая тяга левая'],['inner_tie_rod_right','Рулевая тяга правая'],['tie_rod_end_left','Рулевой наконечник левый'],['tie_rod_end_right','Рулевой наконечник правый'],['steering_column','Рулевая колонка'],['steering_u_joint','Кардан рулевого вала'],['eps_motor','Электромотор ЭУР'],['steering_angle_sensor','Датчик угла руля']
+  ]],
+  ['Тормозная система',[
+    ['front_brake_pads','Передние тормозные колодки'],['rear_brake_pads','Задние тормозные колодки'],['front_brake_discs','Передние тормозные диски'],['rear_brake_discs','Задние тормозные диски'],['rear_brake_drums','Задние тормозные барабаны'],['caliper_fl','Суппорт передний левый'],['caliper_fr','Суппорт передний правый'],['caliper_rl','Суппорт задний левый'],['caliper_rr','Суппорт задний правый'],['caliper_guides_front','Направляющие передних суппортов'],['caliper_guides_rear','Направляющие задних суппортов'],['brake_hose_fl','Тормозной шланг передний левый'],['brake_hose_fr','Тормозной шланг передний правый'],['brake_hose_rl','Тормозной шланг задний левый'],['brake_hose_rr','Тормозной шланг задний правый'],['brake_master_cylinder','Главный тормозной цилиндр'],['brake_booster','Вакуумный усилитель тормозов'],['parking_brake_cables','Тросы стояночного тормоза'],['parking_brake_shoes','Колодки стояночного тормоза'],['abs_sensor_fl','Датчик ABS передний левый'],['abs_sensor_fr','Датчик ABS передний правый'],['abs_sensor_rl','Датчик ABS задний левый'],['abs_sensor_rr','Датчик ABS задний правый'],['abs_module','Блок ABS/ESP'],['brake_light_switch','Датчик педали тормоза']
+  ]],
+  ['Колёса и ступицы',[
+    ['tire_fl','Шина передняя левая'],['tire_fr','Шина передняя правая'],['tire_rl','Шина задняя левая'],['tire_rr','Шина задняя правая'],['tires_front_set','Комплект передних шин'],['tires_rear_set','Комплект задних шин'],['tires_set','Комплект шин'],['wheel_rims','Колёсные диски'],['hub_bearing_fl','Ступица / подшипник передний левый'],['hub_bearing_fr','Ступица / подшипник передний правый'],['hub_bearing_rl','Ступица / подшипник задний левый'],['hub_bearing_rr','Ступица / подшипник задний правый'],['tpms_fl','Датчик давления шин передний левый'],['tpms_fr','Датчик давления шин передний правый'],['tpms_rl','Датчик давления шин задний левый'],['tpms_rr','Датчик давления шин задний правый'],['spare_wheel','Запасное колесо'],['wheel_bolts','Колёсные болты / гайки']
+  ]],
+  ['Электрика и запуск',[
+    ['battery_12v','Аккумулятор 12 В'],['alternator','Генератор'],['starter','Стартер'],['starter_solenoid','Втягивающее реле стартера'],['engine_ecu','ЭБУ двигателя'],['body_control_module','Блок кузовной электроники BCM'],['fuse_box','Блок предохранителей'],['fuses','Предохранители'],['relays','Реле'],['ground_straps','Массовые провода'],['wiring_harness','Жгут проводки'],['immobilizer','Иммобилайзер'],['key_fob','Ключ / брелок']
+  ]],
+  ['Освещение',[
+    ['headlight_left','Фара левая'],['headlight_right','Фара правая'],['low_beam_bulbs','Лампы ближнего света'],['high_beam_bulbs','Лампы дальнего света'],['fog_lights','Противотуманные фары'],['drl','Дневные ходовые огни'],['tail_light_left','Задний фонарь левый'],['tail_light_right','Задний фонарь правый'],['brake_light_bulbs','Лампы стоп-сигналов'],['turn_signal_bulbs','Лампы указателей поворота'],['reverse_light_bulbs','Лампы заднего хода'],['license_plate_lights','Подсветка номера']
+  ]],
+  ['Стеклоочистители и омыватели',[
+    ['wiper_blade_left','Щётка стеклоочистителя левая'],['wiper_blade_right','Щётка стеклоочистителя правая'],['rear_wiper_blade','Задняя щётка стеклоочистителя'],['wiper_motor','Мотор стеклоочистителя'],['wiper_linkage','Трапеция стеклоочистителя'],['washer_pump','Насос омывателя'],['washer_reservoir','Бачок омывателя'],['washer_nozzles','Форсунки омывателя']
+  ]],
+  ['Климат и отопление',[
+    ['ac_compressor','Компрессор кондиционера'],['ac_compressor_clutch','Муфта компрессора кондиционера'],['ac_condenser','Конденсер кондиционера'],['ac_evaporator','Испаритель кондиционера'],['ac_receiver_drier','Ресивер-осушитель'],['ac_expansion_valve','ТРВ / расширительный клапан'],['blower_motor','Мотор отопителя'],['blower_resistor','Резистор / регулятор вентилятора'],['blend_door_actuator','Привод заслонки температуры'],['recirculation_actuator','Привод заслонки рециркуляции'],['cabin_filter','Салонный фильтр']
+  ]],
+  ['Кузов и двери',[
+    ['windshield','Лобовое стекло'],['rear_window','Заднее стекло'],['window_regulator_fl','Стеклоподъёмник передний левый'],['window_regulator_fr','Стеклоподъёмник передний правый'],['window_regulator_rl','Стеклоподъёмник задний левый'],['window_regulator_rr','Стеклоподъёмник задний правый'],['door_lock_fl','Замок двери передний левый'],['door_lock_fr','Замок двери передний правый'],['door_lock_rl','Замок двери задний левый'],['door_lock_rr','Замок двери задний правый'],['mirror_left','Зеркало левое'],['mirror_right','Зеркало правое'],['hood_latch','Замок капота'],['trunk_latch','Замок багажника'],['hood_struts','Упоры капота'],['trunk_struts','Упоры багажника'],['door_seals','Уплотнители дверей'],['sunroof','Люк'],['sunroof_drains','Дренажи люка']
+  ]],
+  ['Безопасность',[
+    ['airbag_driver','Подушка безопасности водителя'],['airbag_passenger','Подушка безопасности пассажира'],['airbags_side','Боковые подушки безопасности'],['airbags_curtain','Шторки безопасности'],['seat_belts','Ремни безопасности'],['seat_belt_pretensioners','Преднатяжители ремней'],['srs_module','Блок SRS'],['impact_sensors','Датчики удара']
+  ]],
+  ['Электроника и ассистенты',[
+    ['instrument_cluster','Панель приборов'],['infotainment','Мультимедийная система'],['speakers','Динамики'],['audio_amplifier','Аудиоусилитель'],['rear_camera','Камера заднего вида'],['parking_sensors','Парктроники'],['adas_camera','Камера ADAS'],['radar_sensor','Радар ADAS'],['cruise_control','Круиз-контроль']
+  ]],
+  ['Гибрид и электромобиль',[
+    ['traction_battery','Тяговая батарея'],['inverter','Инвертор'],['dc_dc_converter','DC/DC-преобразователь'],['onboard_charger','Бортовое зарядное устройство'],['traction_motor_front','Передний тяговый электромотор'],['traction_motor_rear','Задний тяговый электромотор'],['reduction_gear','Редуктор электропривода'],['charge_port','Зарядный порт'],['high_voltage_cables','Высоковольтная проводка'],['battery_cooling','Система охлаждения батареи'],['battery_cooling_filter','Фильтр охлаждения батареи']
+  ]],
+  ['ГБО / CNG',[
+    ['lpg_tank','Баллон ГБО'],['lpg_multivalve','Мультиклапан ГБО'],['lpg_reducer','Редуктор ГБО'],['lpg_liquid_filter','Фильтр жидкой фазы ГБО'],['lpg_vapor_filter','Фильтр паровой фазы ГБО'],['lpg_injectors','Газовые форсунки'],['lpg_ecu','ЭБУ ГБО'],['lpg_lines','Газовые магистрали']
+  ]],
+  ['Жидкости и расходные материалы',[
+    ['engine_oil','Моторное масло'],['oil_filter','Масляный фильтр'],['coolant','Охлаждающая жидкость'],['brake_fluid','Тормозная жидкость'],['clutch_fluid','Жидкость сцепления'],['power_steering_fluid','Жидкость ГУР'],['transmission_fluid','Масло / жидкость КПП'],['transfer_case_fluid','Масло раздаточной коробки'],['front_diff_fluid','Масло переднего дифференциала'],['rear_diff_fluid','Масло заднего дифференциала'],['washer_fluid','Омывающая жидкость'],['ac_refrigerant','Хладагент кондиционера'],['adblue_fluid','AdBlue']
+  ]],
+  ['Прочее и дополнительное оборудование',[
+    ['tow_hitch','Фаркоп'],['roof_rack','Багажник / рейлинги на крыше'],['alarm_system','Охранная система'],['dashcam','Видеорегистратор'],['aux_heater','Предпусковой подогреватель'],['winch','Лебёдка'],['other_equipment','Другое дополнительное оборудование']
+  ]]
+];
+const VEHICLE_SYSTEM_MAP=new Map(VEHICLE_SYSTEM_GROUPS.flatMap(([group,items])=>items.map(([key,label])=>[key,{key,label,group}])));
+const SYSTEM_ALIASES={
+  spark_plugs:['свечи','свечи зажигания'],ignition_coils:['катушка','катушки','катушка зажигания','катушки зажигания'],
+  engine_oil:['моторное масло','масло двигателя'],oil_filter:['масляный фильтр'],air_filter:['воздушный фильтр'],
+  cabin_filter:['салонный фильтр'],fuel_filter:['топливный фильтр'],timing_belt:['ремень грм'],timing_chain:['цепь грм'],
+  front_brake_pads:['передние колодки','передние тормозные колодки'],rear_brake_pads:['задние колодки','задние тормозные колодки'],
+  front_brake_discs:['передние диски','передние тормозные диски'],rear_brake_discs:['задние диски','задние тормозные диски'],
+  battery_12v:['аккумулятор','акб'],wiper_blade_left:['левая щетка','левая щётка'],wiper_blade_right:['правая щетка','правая щётка']
+};
+function normalizeLabel(v=''){return String(v).toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/g,' ').trim();}
+function inferSystemKey(...values){
+  const texts=values.map(normalizeLabel).filter(Boolean);
+  for(const [key,info] of VEHICLE_SYSTEM_MAP){const label=normalizeLabel(info.label);if(texts.some(t=>t===label||t.includes(label)||label.includes(t)))return key;}
+  for(const [key,aliases] of Object.entries(SYSTEM_ALIASES))if(texts.some(t=>aliases.map(normalizeLabel).some(a=>t===a||t.includes(a))))return key;
+  return '';
+}
+function vehicleSystemInfo(key){return VEHICLE_SYSTEM_MAP.get(String(key||''))||null;}
+function groupedVehicleSystemField(label,name,value='',required=false){
+  const tracked=new Set(carItems(state.components).map(c=>c.systemKey).filter(Boolean));
+  return `<div class="field"><label for="${name}">${label}</label><select class="input" id="${name}" name="${name}" ${required?'required':''}><option value="">— Не выбран —</option>${VEHICLE_SYSTEM_GROUPS.map(([group,items])=>`<optgroup label="${esc(group)}">${items.map(([key,text])=>`<option value="${key}" ${key===value?'selected':''}>${esc(text)}${tracked.has(key)?' • отслеживается':''}</option>`).join('')}</optgroup>`).join('')}</select></div>`;
+}
+
+const CAR_SPEC_SECTIONS=[
+  ['Кузов и идентификация',[
+    ['generation','Поколение'],['bodyType','Тип кузова'],['bodyCode','Код кузова'],['productionDate','Дата / месяц производства'],['countryOfOrigin','Страна производства'],['assemblyPlant','Завод сборки'],['colorName','Цвет'],['paintCode','Код краски'],['doors','Количество дверей'],['seats','Количество мест'],['steeringPosition','Расположение руля']
+  ]],
+  ['Габариты и массы',[
+    ['lengthMm','Длина, мм'],['widthMm','Ширина, мм'],['heightMm','Высота, мм'],['wheelbaseMm','Колёсная база, мм'],['trackFrontMm','Колея передняя, мм'],['trackRearMm','Колея задняя, мм'],['groundClearanceMm','Клиренс, мм'],['curbWeightKg','Снаряжённая масса, кг'],['grossWeightKg','Полная масса, кг'],['payloadKg','Грузоподъёмность, кг'],['trunkMinL','Багажник минимум, л'],['trunkMaxL','Багажник максимум, л'],['roofLoadKg','Допустимая нагрузка на крышу, кг'],['towingBrakedKg','Прицеп с тормозами, кг'],['towingUnbrakedKg','Прицеп без тормозов, кг']
+  ]],
+  ['Двигатель',[
+    ['engine','Код / модель двигателя','root'],['engineFamily','Семейство двигателя'],['engineVolume','Рабочий объём, л','root'],['displacementCc','Рабочий объём, см³'],['cylinders','Количество цилиндров'],['cylinderLayout','Расположение цилиндров'],['boreMm','Диаметр цилиндра, мм'],['strokeMm','Ход поршня, мм'],['compressionRatio','Степень сжатия'],['valves','Количество клапанов'],['aspiration','Наддув'],['injectionType','Система впрыска'],['powerHp','Мощность, л.с.','root'],['powerKw','Мощность, кВт'],['powerRpm','Обороты максимальной мощности, об/мин'],['torqueNm','Крутящий момент, Н·м'],['torqueRpm','Обороты максимального момента, об/мин'],['firingOrder','Порядок работы цилиндров'],['emissionStandard','Экологический класс']
+  ]],
+  ['Свечи и зажигание',[
+    ['sparkPlugModel','Модель / артикул свечей'],['sparkPlugThread','Резьба свечи'],['sparkPlugHexMm','Размер ключа свечи, мм'],['sparkPlugReachMm','Длина резьбовой части свечи, мм'],['sparkPlugGapMm','Зазор свечи, мм'],['sparkPlugTorqueNm','Момент затяжки свечи, Н·м'],['sparkPlugHeatRange','Калильное число'],['sparkPlugElectrode','Тип / материал электрода'],['ignitionCoilModel','Модель катушки зажигания'],['highVoltageWireModel','Модель ВВ-проводов']
+  ]],
+  ['ГРМ и ремни',[
+    ['timingDriveType','Привод ГРМ: ремень / цепь'],['timingBeltPart','Артикул / размер ремня ГРМ'],['timingChainPart','Артикул цепи ГРМ'],['timingIntervalKm','Регламент ГРМ, км'],['timingIntervalMonths','Регламент ГРМ, мес.'],['accessoryBeltPart','Размер / артикул приводного ремня'],['alternatorBeltPart','Размер ремня генератора'],['powerSteeringBeltPart','Размер ремня ГУР'],['acBeltPart','Размер ремня кондиционера']
+  ]],
+  ['Топливная система',[
+    ['fuelType','Основное топливо','root'],['recommendedOctane','Рекомендуемое октановое число'],['fuelTankCapacityL','Объём топливного бака, л'],['fuelReserveL','Резерв топлива, л'],['fuelSystem','Тип топливной системы'],['fuelPressureBar','Давление топлива, бар'],['fuelPumpModel','Топливный насос'],['fuelFilterPart','Артикул топливного фильтра'],['injectorModel','Модель форсунок']
+  ]],
+  ['Трансмиссия',[
+    ['transmission','Тип коробки передач','root'],['transmissionModel','Модель / код КПП'],['gearCount','Количество передач'],['clutchType','Тип сцепления'],['finalDriveRatio','Передаточное число главной пары'],['transmissionFluidSpec','Жидкость / масло КПП'],['transmissionOilVolume','Полный объём масла КПП, л','root'],['transmissionServiceFillL','Сервисный объём замены КПП, л'],['transmissionFilterPart','Артикул фильтра КПП']
+  ]],
+  ['Привод и редукторы',[
+    ['driveType','Тип привода'],['transferCaseFluid','Масло раздаточной коробки'],['transferCaseCapacityL','Объём раздаточной коробки, л'],['frontDiffFluid','Масло переднего дифференциала'],['frontDiffCapacityL','Объём переднего дифференциала, л'],['rearDiffFluid','Масло заднего дифференциала'],['rearDiffCapacityL','Объём заднего дифференциала, л']
+  ]],
+  ['Моторное масло и фильтры',[
+    ['engineOil','Вязкость / масло двигателя','root'],['engineOilSpec','Допуск производителя масла'],['engineOilApi','Класс API'],['engineOilAcea','Класс ACEA'],['engineOilVolume','Объём масла с фильтром, л','root'],['engineOilWithoutFilterL','Объём масла без фильтра, л'],['oilFilterPart','Артикул масляного фильтра'],['oilDrainPlugThread','Резьба сливной пробки'],['oilDrainPlugTorqueNm','Момент сливной пробки, Н·м'],['oilFilterTorqueNm','Момент затяжки масляного фильтра, Н·м'],['airFilterPart','Артикул воздушного фильтра'],['cabinFilterPart','Артикул салонного фильтра']
+  ]],
+  ['Охлаждение',[
+    ['coolantType','Тип / спецификация антифриза'],['coolantVolume','Объём охлаждающей жидкости, л','root'],['thermostatTempC','Температура открытия термостата, °C'],['radiatorCapBar','Давление крышки радиатора / бачка, бар'],['waterPumpPart','Артикул помпы']
+  ]],
+  ['Тормозная система',[
+    ['brakeFluidType','Тип тормозной жидкости'],['brakeFluidVolume','Объём тормозной жидкости, л','root'],['frontBrakeType','Передние тормоза'],['frontDiscDiameterMm','Диаметр переднего диска, мм'],['frontDiscThicknessMm','Толщина нового переднего диска, мм'],['frontDiscMinThicknessMm','Минимальная толщина переднего диска, мм'],['rearBrakeType','Задние тормоза'],['rearDiscDiameterMm','Диаметр заднего диска, мм'],['rearDiscThicknessMm','Толщина нового заднего диска, мм'],['rearDiscMinThicknessMm','Минимальная толщина заднего диска, мм'],['parkingBrakeType','Стояночный тормоз']
+  ]],
+  ['Рулевое управление',[
+    ['steeringType','Тип рулевого усилителя'],['steeringFluidType','Жидкость ГУР / ЭГУР'],['steeringFluidVolume','Объём жидкости ГУР, л','root'],['steeringRackType','Тип / модель рулевой рейки'],['turningCircleM','Диаметр разворота, м']
+  ]],
+  ['Подвеска',[
+    ['frontSuspension','Передняя подвеска'],['rearSuspension','Задняя подвеска'],['frontShockPart','Артикул передних амортизаторов / стоек'],['rearShockPart','Артикул задних амортизаторов'],['frontSpringPart','Артикул передних пружин'],['rearSpringPart','Артикул задних пружин']
+  ]],
+  ['Колёса и шины',[
+    ['tireSize','Размер шин передний / основной','root'],['rearTireSize','Размер шин задний'],['wheelSizeFront','Размер дисков передний'],['wheelSizeRear','Размер дисков задний'],['pcd','Разболтовка PCD'],['centerBoreMm','Диаметр ЦО, мм'],['offsetFront','Вылет ET передний'],['offsetRear','Вылет ET задний'],['wheelBoltThread','Резьба колёсных болтов / гаек'],['wheelTorqueNm','Момент затяжки колёс, Н·м'],['tirePressureFrontBar','Давление шин перед, бар'],['tirePressureRearBar','Давление шин зад, бар'],['spareTireSize','Размер запасного колеса']
+  ]],
+  ['Электрика и аккумулятор',[
+    ['systemVoltageV','Напряжение бортсети, В'],['batteryType','Тип аккумулятора'],['batteryCapacityAh','Ёмкость аккумулятора, А·ч'],['batteryCcaA','Пусковой ток аккумулятора, А'],['batteryDimensions','Размер аккумулятора'],['batteryPolarity','Полярность аккумулятора'],['alternatorAmps','Ток генератора, А'],['starterPowerKw','Мощность стартера, кВт'],['fuseType','Тип предохранителей']
+  ]],
+  ['Освещение',[
+    ['lowBeamBulb','Лампа ближнего света'],['highBeamBulb','Лампа дальнего света'],['fogBulb','Лампа ПТФ'],['drlBulb','ДХО'],['frontTurnBulb','Передний поворотник'],['rearTurnBulb','Задний поворотник'],['brakeBulb','Стоп-сигнал'],['tailBulb','Габарит задний'],['reverseBulb','Задний ход'],['licenseBulb','Подсветка номера']
+  ]],
+  ['Кондиционер и отопление',[
+    ['acRefrigerant','Хладагент кондиционера'],['acRefrigerantGrams','Заправочный объём хладагента, г'],['acCompressorOil','Масло компрессора кондиционера'],['acCompressorOilMl','Объём масла компрессора, мл'],['heaterCoreType','Радиатор отопителя / тип'],['cabinFilterSize','Размер салонного фильтра']
+  ]],
+  ['Прочие жидкости',[
+    ['washerTankCapacityL','Объём бачка омывателя, л'],['clutchFluidType','Жидкость сцепления'],['clutchFluidCapacityL','Объём жидкости сцепления, л']
+  ]],
+  ['Динамика и заводской расход',[
+    ['topSpeedKmh','Максимальная скорость, км/ч'],['acceleration0100','0–100 км/ч, с'],['fuelConsumptionCity','Расход город, л/100 км'],['fuelConsumptionHighway','Расход трасса, л/100 км'],['fuelConsumptionCombined','Расход смешанный, л/100 км'],['co2Gkm','CO₂, г/км']
+  ]],
+  ['Гибрид / электромобиль',[
+    ['tractionBatteryKwh','Ёмкость тяговой батареи, кВт·ч'],['tractionBatteryUsableKwh','Полезная ёмкость батареи, кВт·ч'],['tractionBatteryVoltage','Напряжение HV-батареи, В'],['electricMotorPowerKw','Мощность электромотора, кВт'],['acChargeKw','Максимум AC-зарядки, кВт'],['dcChargeKw','Максимум DC-зарядки, кВт'],['reductionGearFluid','Масло редуктора электропривода'],['reductionGearCapacityL','Объём масла редуктора, л']
+  ]],
+  ['ГБО / CNG',[
+    ['gasSystemGeneration','Поколение ГБО'],['gasTankCapacityL','Объём газового баллона, л'],['gasReducerModel','Модель редуктора'],['gasInjectorModel','Модель газовых форсунок'],['gasFilterLiquidPart','Фильтр жидкой фазы'],['gasFilterVaporPart','Фильтр паровой фазы']
+  ]]
+];
+const CAR_SPEC_ROOTS=new Set(CAR_SPEC_SECTIONS.flatMap(([,fields])=>fields.filter(f=>f[2]==='root').map(f=>f[0])));
+function normalizeCarSpecs(c={}){
+  const raw=c.specs&&typeof c.specs==='object'?c.specs:{},out={};
+  for(const [,fields] of CAR_SPEC_SECTIONS)for(const [key,,kind] of fields)if(kind!=='root')out[key]=String(raw[key]??'');
+  return out;
+}
+function carSpecValueRaw(c,key,kind){if(kind==='root'){const v=c?.[key];if(key==='powerHp'&&!nonneg(v))return '';return String(v??'');}return String(c?.specs?.[key]??'');}
+function carSpecEditor(c={}){
+  return CAR_SPEC_SECTIONS.map(([title,fields],index)=>`<details class="v5-spec-editor" ${index<2?'open':''}><summary>${esc(title)}<span>${fields.length}</span></summary><div class="v5-spec-editor-grid">${fields.map(([key,label,kind])=>{const value=carSpecValueRaw(c,key,kind),name=kind==='root'?key:`spec__${key}`;if(key==='transmission')return selectField(label,name,['','МКПП','АКПП','Робот','Вариатор','Одноступенчатый редуктор','Другое'],value);if(key==='fuelType')return selectField(label,name,['','АИ-92','АИ-95','АИ-98','АИ-100','Дизель','Газ','CNG','Электричество','Гибрид','Другое'],value);return inputField(label,name,value,'text','autocomplete="off"');}).join('')}</div></details>`).join('');
+}
+function carSpecDisplaySections(c={}){
+  return CAR_SPEC_SECTIONS.map(([title,fields])=>({title,rows:fields.map(([key,label,kind])=>[label,carSpecValueRaw(c,key,kind)]).filter(([,v])=>String(v||'').trim())})).filter(x=>x.rows.length);
+}
+function collectCarSpecs(d){
+  const out={};for(const [,fields] of CAR_SPEC_SECTIONS)for(const [key,,kind] of fields)if(kind!=='root')out[key]=String(d[`spec__${key}`]??'').trim();return out;
+}
+
 const defaultState = () => ({
   version: APP_VERSION,
   settings: {
@@ -118,19 +299,19 @@ function migrate(raw) {
   const base=defaultState(), rs=raw.settings&&typeof raw.settings==='object'?raw.settings:{};
   const cars=(Array.isArray(raw.cars)?raw.cars:[]).map(c=>({
     ...c,id:String(c.id||uid()),make:String(c.make||''),model:String(c.model||''),year:String(c.year||''),engine:String(c.engine||''),plate:String(c.plate||''),vin:String(c.vin||''),
-    photo:safeImageData(c.photo),trim:String(c.trim||''),fuelType:String(c.fuelType||''),engineVolume:String(c.engineVolume||''),transmission:String(c.transmission||''),powerHp:nonneg(c.powerHp),tireSize:String(c.tireSize||''),engineOil:String(c.engineOil||''),engineOilVolume:String(c.engineOilVolume||''),coolantVolume:String(c.coolantVolume||''),transmissionOilVolume:String(c.transmissionOilVolume||''),brakeFluidVolume:String(c.brakeFluidVolume||''),steeringFluidVolume:String(c.steeringFluidVolume||''),customSpecs:String(c.customSpecs||''),
+    photo:safeImageData(c.photo),trim:String(c.trim||''),fuelType:String(c.fuelType||''),engineVolume:String(c.engineVolume||''),transmission:String(c.transmission||''),powerHp:nonneg(c.powerHp),tireSize:String(c.tireSize||''),engineOil:String(c.engineOil||''),engineOilVolume:String(c.engineOilVolume||''),coolantVolume:String(c.coolantVolume||''),transmissionOilVolume:String(c.transmissionOilVolume||''),brakeFluidVolume:String(c.brakeFluidVolume||''),steeringFluidVolume:String(c.steeringFluidVolume||''),specs:normalizeCarSpecs(c),customSpecs:String(c.customSpecs||''),
     initialOdometer:nonneg(c.initialOdometer),currentOdometer:nonneg(c.currentOdometer),purchasePrice:nonneg(c.purchasePrice),purchaseDate:String(c.purchaseDate||''),trackingStartDate:String(c.trackingStartDate||c.purchaseDate||'')
   }));
   let odometerLogs=(Array.isArray(raw.odometerLogs)?raw.odometerLogs:[]).filter(x=>!['Из сервисной записи','Из расхода'].includes(x?.note)).map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),value:nonneg(x.value),note:String(x.note||''),sourceType:String(x.sourceType||'manual'),sourceId:String(x.sourceId||x.id||uid())}));
   let seq=1;
   const serviceEntries=(Array.isArray(raw.serviceEntries)?raw.serviceEntries:[]).map((x,index)=>({
     ...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),odometer:nonneg(x.odometer),type:String(x.type||'other'),title:String(x.title||''),category:String(x.category||''),faultKey:String(x.faultKey||''),
-    workText:String(x.workText||''),partsText:String(x.partsText||''),partsCost:nonneg(x.partsCost),laborCost:nonneg(x.laborCost),otherCost:nonneg(x.otherCost),componentId:String(x.componentId||''),componentAction:String(x.componentAction||''),notes:String(x.notes||''),
+    workText:String(x.workText||''),partsText:String(x.partsText||''),partsCost:nonneg(x.partsCost),laborCost:nonneg(x.laborCost),otherCost:nonneg(x.otherCost),systemKey:String(x.systemKey||inferSystemKey(x.title,x.category)),componentId:String(x.componentId||''),componentAction:String(x.componentAction||''),componentEventOdometer:nonneg(x.componentEventOdometer??x.odometer),notes:String(x.notes||''),
     photos:Array.isArray(x.photos)?x.photos.filter(f=>f&&safeImageData(f.data)).map(f=>({id:String(f.id||uid()),name:String(f.name||'Фото'),data:safeImageData(f.data)})):[],
     createdAt:String(x.createdAt||`${String(x.date||'0000-00-00')}T00:00:00.000Z#${String(index).padStart(8,'0')}`),seq:nonneg(x.seq,seq++)
   }));
   const components=(Array.isArray(raw.components)?raw.components:[]).map(x=>({
-    ...x,id:String(x.id||uid()),carId:String(x.carId||''),name:String(x.name||''),category:String(x.category||''),brand:String(x.brand||''),partNumber:String(x.partNumber||''),
+    ...x,id:String(x.id||uid()),carId:String(x.carId||''),name:String(x.name||''),category:String(x.category||''),systemKey:String(x.systemKey||inferSystemKey(x.name,x.category)),brand:String(x.brand||''),partNumber:String(x.partNumber||''),
     baseInstalledDate:String(x.baseInstalledDate||x.installedDate||nowISO()),baseInstalledOdometer:nonneg(x.baseInstalledOdometer??x.installedOdometer),
     installedDate:String(x.installedDate||x.baseInstalledDate||nowISO()),installedOdometer:nonneg(x.installedOdometer??x.baseInstalledOdometer),lifeKm:nonneg(x.lifeKm),lifeMonths:nonneg(x.lifeMonths),inspectKm:nonneg(x.inspectKm),inspectMonths:nonneg(x.inspectMonths),
     warnKm:x.warnKm==null?base.settings.defaultWarnKm:nonneg(x.warnKm),warnDays:x.warnDays==null?base.settings.defaultWarnDays:nonneg(x.warnDays),cost:nonneg(x.cost),notes:String(x.notes||''),sourceEntryId:String(x.sourceEntryId||''),lastInspectionDate:String(x.lastInspectionDate||''),lastInspectionOdometer:nonneg(x.lastInspectionOdometer)
@@ -157,7 +338,7 @@ function componentState(comp){
   let installedDate=comp.baseInstalledDate||comp.installedDate||today(), installedOdometer=nonneg(comp.baseInstalledOdometer??comp.installedOdometer);
   let lastInspectionDate=installedDate, lastInspectionOdometer=installedOdometer;
   const actions=state.serviceEntries.filter(e=>e.componentId===comp.id&&['inspect','replace'].includes(e.componentAction)).sort(compareLifecycle);
-  for(const e of actions){ if(e.componentAction==='replace'){installedDate=e.date;installedOdometer=nonneg(e.odometer);lastInspectionDate=e.date;lastInspectionOdometer=nonneg(e.odometer);} else {lastInspectionDate=e.date;lastInspectionOdometer=nonneg(e.odometer);} }
+  for(const e of actions){const eventKm=nonneg(e.componentEventOdometer??e.odometer);if(e.componentAction==='replace'){installedDate=e.date;installedOdometer=eventKm;lastInspectionDate=e.date;lastInspectionOdometer=eventKm;}else{lastInspectionDate=e.date;lastInspectionOdometer=eventKm;}}
   return {installedDate,installedOdometer,lastInspectionDate,lastInspectionOdometer};
 }
 function removeMileageSource(type,id){ state.odometerLogs=state.odometerLogs.filter(x=>!(x.sourceType===type&&x.sourceId===id)); const cid=car()?.id||state.serviceEntries.find(x=>x.id===id)?.carId||state.expenses.find(x=>x.id===id)?.carId; if(cid) recalculateCurrentOdometer(cid); }
@@ -531,22 +712,12 @@ function customSpecRows(text=''){
 }
 function carCardPage(){
   const c=car();if(!c)return `<main class="v5-main"><div class="v5-page">${emptyState('Нет автомобиля','Добавьте автомобиль, чтобы открыть его паспорт.','add-car','Добавить автомобиль')}</div></main>`;
-  const custom=customSpecRows(c.customSpecs);
+  const custom=customSpecRows(c.customSpecs),specSections=carSpecDisplaySections(c);
   return `<main class="v5-main"><div class="v5-page v5-secondary-page">
     <section class="v5-car-passport-hero">${c.photo?`<img src="${c.photo}" alt="${esc(c.make)} ${esc(c.model)}">`:`<div class="v5-car-passport-placeholder"><div class="v5-car-passport-placeholder-inner">${icons.carPassport}<span>Нет фото автомобиля</span></div></div>`}<div><h1>${esc(c.make)} ${esc(c.model)}</h1><p>${[c.year,c.trim,c.plate].filter(Boolean).map(esc).join(' · ')||'Паспорт автомобиля'}</p><strong>${fmtNum(c.currentOdometer)} км</strong></div></section>
     <div class="v5-passport-actions"><button class="v5-primary v5-passport-action" data-action="edit-current-car"><span class="v5-passport-action-icon">${icons.edit}</span><span class="v5-passport-action-label">Изменить</span></button><button class="btn v5-passport-action" data-view="report"><span class="v5-passport-action-icon">${icons.doc}</span><span class="v5-passport-action-label">Отчёт</span></button></div>
-    <section class="v5-passport-section"><h2>Основные данные</h2><div class="v5-spec-grid">
-      <div><span>VIN</span><strong>${carSpecValue(c.vin)}</strong></div><div><span>Госномер</span><strong>${carSpecValue(c.plate)}</strong></div>
-      <div><span>Комплектация</span><strong>${carSpecValue(c.trim)}</strong></div><div><span>Год</span><strong>${carSpecValue(c.year)}</strong></div>
-      <div><span>Двигатель</span><strong>${carSpecValue(c.engine)}</strong></div><div><span>Объём</span><strong>${carSpecValue(c.engineVolume,c.engineVolume?' л':'')}</strong></div>
-      <div><span>Мощность</span><strong>${c.powerHp?`${fmtNum(c.powerHp)} л.с.`:'—'}</strong></div><div><span>Коробка</span><strong>${carSpecValue(c.transmission)}</strong></div>
-      <div><span>Топливо</span><strong>${carSpecValue(c.fuelType)}</strong></div><div><span>Шины</span><strong>${carSpecValue(c.tireSize)}</strong></div>
-    </div></section>
-    <section class="v5-passport-section"><h2>Масла и жидкости</h2><div class="v5-spec-grid">
-      <div><span>Моторное масло</span><strong>${carSpecValue(c.engineOil)}</strong></div><div><span>Объём масла</span><strong>${carSpecValue(c.engineOilVolume,c.engineOilVolume?' л':'')}</strong></div>
-      <div><span>Охлаждающая жидкость</span><strong>${carSpecValue(c.coolantVolume,c.coolantVolume?' л':'')}</strong></div><div><span>Масло КПП</span><strong>${carSpecValue(c.transmissionOilVolume,c.transmissionOilVolume?' л':'')}</strong></div>
-      <div><span>Тормозная жидкость</span><strong>${carSpecValue(c.brakeFluidVolume,c.brakeFluidVolume?' л':'')}</strong></div><div><span>Жидкость ГУР</span><strong>${carSpecValue(c.steeringFluidVolume,c.steeringFluidVolume?' л':'')}</strong></div>
-    </div></section>
+    <section class="v5-passport-section"><h2>Основные данные</h2><div class="v5-spec-grid"><div><span>VIN</span><strong>${carSpecValue(c.vin)}</strong></div><div><span>Госномер</span><strong>${carSpecValue(c.plate)}</strong></div><div><span>Комплектация</span><strong>${carSpecValue(c.trim)}</strong></div><div><span>Год</span><strong>${carSpecValue(c.year)}</strong></div></div></section>
+    ${specSections.map(sec=>`<section class="v5-passport-section"><h2>${esc(sec.title)}</h2><div class="v5-spec-grid">${sec.rows.map(([label,value])=>`<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}</div></section>`).join('')}
     ${custom.length?`<section class="v5-passport-section"><h2>Дополнительные характеристики</h2><div class="v5-spec-list">${custom.map(([k,v])=>`<div><span>${esc(k)}</span><strong>${esc(v||'—')}</strong></div>`).join('')}</div></section>`:''}
     <section class="v5-passport-section"><h2>Покупка и учёт</h2><div class="v5-spec-grid"><div><span>Дата покупки</span><strong>${fmtDate(c.purchaseDate)}</strong></div><div><span>Цена покупки</span><strong>${c.purchasePrice?money(c.purchasePrice):'—'}</strong></div><div><span>Пробег начала учёта</span><strong>${fmtNum(c.initialOdometer)} км</strong></div><div><span>Текущий пробег</span><strong>${fmtNum(c.currentOdometer)} км</strong></div></div></section>
   </div></main>`;
@@ -557,18 +728,21 @@ function reportTable(title,headers,rows){
 }
 function reportPage(){
   const c=car();if(!c)return `<main class="v5-main"><div class="v5-page">${emptyState('Нет автомобиля','Для отчёта нужен автомобиль.','add-car','Добавить автомобиль')}</div></main>`;
-  const full=ui.reportMode==='full',entries=carItems(state.serviceEntries).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))),replacements=entries.filter(x=>x.componentAction==='replace'||x.type==='replacement'),components=carItems(state.components),docs=carItems(state.documents),expenses=carItems(state.expenses),refs=carItems(state.refuels||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))),fuel=fuelJournalStats(refs),totalExpenses=expenses.reduce((sum,x)=>sum+nonneg(x.amount),0),reminders=allReminders();
-  const specs=[[c.trim,'Комплектация'],[c.engine,'Двигатель'],[c.engineVolume&&`${c.engineVolume} л`,'Объём двигателя'],[c.powerHp&&`${fmtNum(c.powerHp)} л.с.`,'Мощность'],[c.transmission,'Коробка'],[c.fuelType,'Топливо'],[c.tireSize,'Шины'],[c.engineOil,'Моторное масло']].filter(x=>x[0]);
+  const full=ui.reportMode==='full',entries=carItems(state.serviceEntries).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))),replacements=entries.filter(x=>x.componentAction==='replace'||x.type==='replacement'),components=carItems(state.components),docs=carItems(state.documents),expenses=carItems(state.expenses),refs=carItems(state.refuels||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))),fuel=fuelJournalStats(refs),totalExpenses=expenses.reduce((sum,x)=>sum+nonneg(x.amount),0),reminders=allReminders(),specSections=carSpecDisplaySections(c);
+  const shortKeys=new Set(['engine','engineVolume','powerHp','fuelType','transmission','fuelTankCapacityL','engineOil','engineOilVolume','sparkPlugModel','sparkPlugThread','sparkPlugHexMm','tireSize']);
+  const shortSpecs=[];for(const [,fields] of CAR_SPEC_SECTIONS)for(const [key,label,kind] of fields)if(shortKeys.has(key)){const v=carSpecValueRaw(c,key,kind);if(v)shortSpecs.push([label,v]);}
+  const fullSpecs=specSections.map(sec=>reportTable(sec.title,['Характеристика','Значение'],sec.rows)).join('');
   return `<main class="v5-main v5-report-main"><div class="v5-page v5-secondary-page v5-report-page">
     <div class="v5-report-controls"><div class="v5-segment v5-report-mode"><button class="${!full?'active':''}" data-action="report-mode" data-value="short">Короткий</button><button class="${full?'active':''}" data-action="report-mode" data-value="full">Полный</button></div><button class="v5-primary v5-wide" data-action="print-report">${icons.export} Сохранить PDF</button><p>Откроется системное окно печати. На iPhone из предпросмотра можно сохранить или отправить PDF.</p></div>
     <article class="v5-report-paper">
       <header class="v5-report-header">${c.photo?`<img src="${c.photo}" alt="">`:''}<div><div class="v5-report-brand">AutoJournal</div><h1>${esc(c.make)} ${esc(c.model)}</h1><p>${[c.year,c.trim,c.plate].filter(Boolean).map(esc).join(' · ')}</p><strong>${fmtNum(c.currentOdometer)} км</strong></div></header>
-      <section class="v5-report-section"><h2>Паспорт автомобиля</h2><div class="v5-report-specs"><div><span>VIN</span><strong>${esc(c.vin||'—')}</strong></div>${specs.map(([v,k])=>`<div><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('')}</div></section>
+      <section class="v5-report-section"><h2>Паспорт автомобиля</h2><div class="v5-report-specs"><div><span>VIN</span><strong>${esc(c.vin||'—')}</strong></div>${shortSpecs.map(([label,value])=>`<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}</div></section>
       <section class="v5-report-section"><h2>Сводка эксплуатации</h2><div class="v5-report-kpis"><div><span>Расходы</span><strong>${money(totalExpenses)}</strong></div><div><span>Сервисных записей</span><strong>${entries.length}</strong></div><div><span>Средний расход</span><strong>${fuelConsumptionText(fuel.all.consumption)}</strong></div><div><span>Стоимость 100 км</span><strong>${fuelCost100Text(fuel.all.cost100)}</strong></div><div><span>Заправок</span><strong>${refs.length}</strong></div><div><span>Требует внимания</span><strong>${reminders.filter(x=>x.status!=='ok').length}</strong></div></div></section>
       ${reportTable('Ближайшее обслуживание',['Событие','Срок'],reminders.slice(0,8).map(x=>[x.title,describeDue(x)]))}
+      ${full?fullSpecs:''}
       ${full?reportTable('История обслуживания',['Дата','Пробег','Запись','Стоимость'],entries.map(x=>[fmtDate(x.date),x.odometer?`${fmtNum(x.odometer)} км`:'—',x.title,money(totalServiceCost(x))])):''}
       ${full?reportTable('Замены деталей',['Дата','Пробег','Деталь / работа','Стоимость'],replacements.map(x=>[fmtDate(x.date),x.odometer?`${fmtNum(x.odometer)} км`:'—',x.title,money(totalServiceCost(x))])):''}
-      ${full?reportTable('Узлы и детали',['Узел','Установлено','Пробег установки','Ресурс / проверка'],components.map(x=>[x.name,fmtDate(x.installedDate),`${fmtNum(x.installedOdometer)} км`,[x.lifeKm?`${fmtNum(x.lifeKm)} км`:'',x.lifeMonths?`${fmtNum(x.lifeMonths)} мес.`:'',x.inspectKm?`проверка ${fmtNum(x.inspectKm)} км`:'',x.inspectMonths?`проверка ${fmtNum(x.inspectMonths)} мес.`:''].filter(Boolean).join(' · ')])):''}
+      ${full?reportTable('Узлы и детали',['Узел','Установлено','Пробег установки','Ресурс / проверка'],components.map(x=>[x.name,fmtDate(componentState(x).installedDate),`${fmtNum(componentState(x).installedOdometer)} км`,[x.lifeKm?`${fmtNum(x.lifeKm)} км`:'',x.lifeMonths?`${fmtNum(x.lifeMonths)} мес.`:'',x.inspectKm?`проверка ${fmtNum(x.inspectKm)} км`:'',x.inspectMonths?`проверка ${fmtNum(x.inspectMonths)} мес.`:''].filter(Boolean).join(' · ')])):''}
       ${full?reportTable('Документы',['Документ','Номер','Выдан','Действует до'],docs.map(x=>[x.title,x.number||'—',fmtDate(x.issueDate),fmtDate(x.expiryDate)])):''}
       ${full?reportTable('Расходы',['Дата','Категория','Описание','Сумма'],expenses.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(x=>[fmtDate(x.date),x.category,x.description||'',money(x.amount)])):''}
       ${full?reportTable('Заправки',['Дата','Пробег','АЗС','Топливо','Объём','Сумма'],refs.map(x=>[fmtDate(x.date),`${fmtNum(x.odometer)} км`,x.station||'—',x.fuelType,`${fmtNum(x.liters,2)} л`,money(x.amount)])):''}
@@ -655,20 +829,11 @@ function carSheet(id=null){
       <div class="field-grid two" style="margin-top:8px">${inputField('Год','year',x?.year||'','number','inputmode="numeric"')}${inputField('Комплектация','trim',x?.trim||'','text','placeholder="Comfort, Style…"')}</div>
       <div class="field" style="margin-top:8px"><label>Фото автомобиля</label>${x?.photo?`<img class="v5-car-form-photo" src="${x.photo}" alt="Фото автомобиля">`:''}<input class="input" id="carPhoto" name="carPhoto" type="file" accept="image/*">${x?.photo?'<label class="v5-check-line"><input type="checkbox" name="removePhoto"> Удалить текущее фото</label>':''}</div>
     </div>
-    <div class="form-section"><div class="form-title">Двигатель и трансмиссия</div>
-      <div class="field-grid two">${inputField('Код / модификация двигателя','engine',x?.engine||'')}${inputField('Объём двигателя, л','engineVolume',x?.engineVolume||'','number','min="0" step="0.1" inputmode="decimal"')}</div>
-      <div class="field-grid two" style="margin-top:8px">${inputField('Мощность, л.с.','powerHp',x?.powerHp||'','number','min="0" inputmode="numeric"')}${selectField('Коробка передач','transmission',['','МКПП','АКПП','Робот','Вариатор','Другое'],x?.transmission||'')}</div>
-      <div class="field-grid two" style="margin-top:8px">${selectField('Основное топливо','fuelType',['','АИ-92','АИ-95','АИ-98','АИ-100','Дизель','Газ','Электричество','Гибрид','Другое'],x?.fuelType||'')}${inputField('Размер шин','tireSize',x?.tireSize||'','text','placeholder="205/60 R16"')}</div>
-    </div>
-    <div class="form-section"><div class="form-title">Масла и жидкости</div>
-      <div class="field-grid two">${inputField('Масло двигателя','engineOil',x?.engineOil||'','text','placeholder="5W-40, допуск…"')}${inputField('Масло двигателя, л','engineOilVolume',x?.engineOilVolume||'','number','min="0" step="0.1" inputmode="decimal"')}</div>
-      <div class="field-grid two" style="margin-top:8px">${inputField('Охлаждающая жидкость, л','coolantVolume',x?.coolantVolume||'','number','min="0" step="0.1" inputmode="decimal"')}${inputField('Масло КПП, л','transmissionOilVolume',x?.transmissionOilVolume||'','number','min="0" step="0.1" inputmode="decimal"')}</div>
-      <div class="field-grid two" style="margin-top:8px">${inputField('Тормозная жидкость, л','brakeFluidVolume',x?.brakeFluidVolume||'','number','min="0" step="0.1" inputmode="decimal"')}${inputField('Жидкость ГУР, л','steeringFluidVolume',x?.steeringFluidVolume||'','number','min="0" step="0.1" inputmode="decimal"')}</div>
-    </div>
     <div class="form-section"><div class="form-title">Идентификация</div><div class="field-grid two">${inputField('Госномер','plate',x?.plate||'')}${inputField('VIN','vin',x?.vin||'')}</div></div>
     <div class="form-section"><div class="form-title">Пробег</div><div class="field-grid two">${inputField('Пробег при начале учёта, км','initialOdometer',x?.initialOdometer??0,'number','min="0" inputmode="numeric"')}${inputField('Текущий пробег, км','currentOdometer',x?.currentOdometer??0,'number','min="0" inputmode="numeric" required')}</div></div>
-    <div class="form-section"><div class="field-grid two">${inputField('Дата покупки','purchaseDate',x?.purchaseDate||'','date')}${inputField('Цена покупки, ₽','purchasePrice',x?.purchasePrice||'','number','min="0" step="0.01" inputmode="decimal"')}</div></div>
-    <div class="form-section"><div class="field"><label>Пользовательские характеристики</label><textarea class="input" name="customSpecs" placeholder="По одной характеристике на строку, например:&#10;Клиренс: 155 мм&#10;Аккумулятор: 60 А·ч">${esc(x?.customSpecs||'')}</textarea></div></div>
+    <div class="form-section"><div class="form-title">Покупка</div><div class="field-grid two">${inputField('Дата покупки','purchaseDate',x?.purchaseDate||'','date')}${inputField('Цена покупки, ₽','purchasePrice',x?.purchasePrice||'','number','min="0" step="0.01" inputmode="decimal"')}</div></div>
+    <div class="form-section v5-all-specs"><div class="form-title">Все технические характеристики</div><div class="helper">Разделы можно раскрывать по мере необходимости. Пустые характеристики в паспорте не показываются.</div>${carSpecEditor(x||{})}</div>
+    <div class="form-section"><div class="field"><label>Пользовательские характеристики</label><textarea class="input" name="customSpecs" placeholder="Если нужной характеристики всё же нет в стандартном паспорте — добавьте её здесь. По одной на строку.">${esc(x?.customSpecs||'')}</textarea></div></div>
   </form>`;
   const foot=`<button class="btn primary block" form="car-form" type="submit">${x?'Сохранить':'Добавить автомобиль'}</button>${x?`<button class="btn danger block" style="margin-top:8px" data-action="delete-car" data-id="${x.id}">Удалить автомобиль</button>`:''}`;
   return sheetWrap(x?'Автомобиль':'Новый автомобиль',body,foot);
@@ -690,17 +855,24 @@ function odometerSheet(){
 function entrySheet(id=null){
   const x=id?state.serviceEntries.find(e=>e.id===id):null;
   const comp=x?.componentId?state.components.find(c=>c.id===x.componentId):null;
+  const selectedSystem=x?.systemKey||comp?.systemKey||inferSystemKey(x?.title,x?.category)||'';
   const odoValue=x&&nonneg(x.odometer)>0?x.odometer:'';
   const lastKm=currentKm();
+  const currentAction=x?.componentAction==='replace'?'replace':x?.componentAction==='inspect'?'inspect':x?.componentId?'work':'none';
   const body=`<form id="entry-form"><input type="hidden" name="id" value="${x?.id||''}">
     <div class="form-section"><div class="field-grid">
-      ${inputField('Название','title',x?.title||'','text','placeholder="Например: моторное масло" required')}
+      ${inputField('Название','title',x?.title||'','text','placeholder="Например: замена свечей зажигания" required')}
       ${selectField('Тип записи','type',[['maintenance','Техническое обслуживание'],['repair','Ремонт'],['replacement','Замена'],['inspection','Проверка'],['other','Другое']],x?.type||'maintenance')}
     </div></div>
     <div class="form-section"><div class="form-title">Когда</div><div class="field-grid two">
       ${inputField('Дата','date',x?.date||nowISO(),'date','required')}
       ${inputField('Пробег, км · необязательно','odometer',odoValue,'number',`min="0" inputmode="numeric" placeholder="${lastKm}"`)}
-    </div><div class="helper">Последний сохранённый пробег: ${fmtNum(lastKm)} км. Можно оставить поле пустым.</div></div>
+    </div><div class="helper">Последний сохранённый пробег: ${fmtNum(lastKm)} км. Если пробег не указан, для сброса ресурса зафиксируется текущий пробег ${fmtNum(lastKm)} км.</div></div>
+    <div class="form-section"><div class="form-title">Связь с узлом автомобиля <span class="v5-optional">необязательно</span></div>
+      <div class="field-grid">${groupedVehicleSystemField('Узел автомобиля','systemKey',selectedSystem)}
+      ${selectField('Действие с контролем','componentActionChoice',[['none','Не связывать с контролем'],['work','Связать, но не сбрасывать цикл'],['inspect','Проверено — сбросить только цикл проверки'],['replace','Заменено — начать ресурс и проверку заново']],currentAction)}</div>
+      <div class="helper" id="system-link-hint">${comp?`Связано с контролем «${esc(comp.name)}».`:'Если выбранный узел уже отслеживается, приложение найдёт его автоматически.'}</div>
+    </div>
     <div class="form-section"><div class="form-title">Стоимость</div><div class="field-grid two">
       ${inputField('Товар / детали, ₽','partsCost',x?.partsCost||'','number','min="0" inputmode="decimal"')}
       ${inputField('Работа, ₽','laborCost',x?.laborCost||'','number','min="0" inputmode="decimal"')}
@@ -712,9 +884,8 @@ function entrySheet(id=null){
       ${inputField('Проверять каждые, мес.','inspectMonths',comp?.inspectMonths||'','number','min="0" inputmode="numeric"')}
       ${inputField('Предупредить за, км','warnKm',comp?.warnKm??state.settings.defaultWarnKm,'number','min="0" inputmode="numeric"')}
       ${inputField('Предупредить за, дней','warnDays',comp?.warnDays??state.settings.defaultWarnDays,'number','min="0" inputmode="numeric"')}
-    </div><div class="helper">Срок службы и период проверки независимы друг от друга.</div></div>
+    </div><div class="helper">При ранней замене существующий ресурс узла не теряется: он просто начнёт отсчитываться заново от даты и пробега этой записи.</div></div>
     <div class="form-section"><div class="field-grid">
-      ${inputField('Категория / узел','category',x?.category||'','text','placeholder="Двигатель, тормоза…"')}
       <div class="field"><label>Выполненные работы</label><textarea class="input" name="workText">${esc(x?.workText||'')}</textarea></div>
       <div class="field"><label>Запчасти / материалы</label><textarea class="input" name="partsText">${esc(x?.partsText||'')}</textarea></div>
       <div class="field"><label>Комментарий</label><textarea class="input" name="notes">${esc(x?.notes||'')}</textarea></div>
@@ -724,7 +895,20 @@ function entrySheet(id=null){
   return sheetWrap(x?'Изменить запись':'Новая запись',body,`<button class="btn primary block" form="entry-form">${x?'Сохранить':'Добавить запись'}</button>`);
 }
 
-function componentSheet(id=null){ const x=id?state.components.find(c=>c.id===id):null; const body=`<form id="component-form"><input type="hidden" name="id" value="${x?.id||''}"><div class="form-section"><div class="field-grid">${inputField('Название узла / расходника','name',x?.name||'','text','placeholder="Например: передние тормозные колодки" required')}<div class="field-grid two">${inputField('Категория','category',x?.category||'')}${inputField('Бренд','brand',x?.brand||'')}</div>${inputField('Артикул','partNumber',x?.partNumber||'')}</div></div><div class="form-section"><div class="form-title">Установка</div><div class="field-grid two">${inputField('Дата','installedDate',x?.installedDate||nowISO(),'date','required')}${inputField('Пробег, км','installedOdometer',x?.installedOdometer??currentKm(),'number','min="0" inputmode="numeric" required')}</div></div><div class="form-section"><div class="form-title">Срок службы</div><div class="field-grid two">${inputField('Ресурс, км','lifeKm',x?.lifeKm||'','number','min="0" inputmode="numeric" placeholder="например 40000"')}${inputField('Ресурс, месяцев','lifeMonths',x?.lifeMonths||'','number','min="0" inputmode="numeric" placeholder="например 24"')}</div><div class="helper">Если заданы оба значения, предупреждение сработает по тому лимиту, который наступит раньше.</div></div><div class="form-section"><div class="form-title">График проверки</div><div class="field-grid two">${inputField('Проверять каждые, км','inspectKm',x?.inspectKm||'','number','min="0" inputmode="numeric" placeholder="например 10000"')}${inputField('Проверять каждые, месяцев','inspectMonths',x?.inspectMonths||'','number','min="0" inputmode="numeric" placeholder="например 6"')}</div></div><div class="form-section"><div class="form-title">Предупреждать заранее</div><div class="field-grid two">${inputField('За сколько км','warnKm',x?.warnKm??state.settings.defaultWarnKm,'number','min="0" inputmode="numeric"')}${inputField('За сколько дней','warnDays',x?.warnDays??state.settings.defaultWarnDays,'number','min="0" inputmode="numeric"')}</div></div><div class="form-section">${inputField('Стоимость детали, ₽','cost',x?.cost||'','number','min="0" inputmode="decimal"')}<div class="field" style="margin-top:8px"><label for="notes">Заметки</label><textarea class="input" id="notes" name="notes">${esc(x?.notes||'')}</textarea></div></div></form>`; return sheetWrap(x?'Редактировать узел':'Новый узел',body,`<button class="btn primary block" form="component-form">Сохранить</button>`); }
+function componentSheet(id=null){
+  const x=id?state.components.find(c=>c.id===id):null,selected=x?.systemKey||inferSystemKey(x?.name,x?.category)||'';
+  const body=`<form id="component-form"><input type="hidden" name="id" value="${x?.id||''}">
+    <div class="form-section"><div class="field-grid">${groupedVehicleSystemField('Узел автомобиля','systemKey',selected,true)}
+      <div class="field-grid two">${inputField('Бренд','brand',x?.brand||'')}${inputField('Артикул','partNumber',x?.partNumber||'')}</div>
+    </div></div>
+    <div class="form-section"><div class="form-title">Установка</div><div class="field-grid two">${inputField('Дата','installedDate',x?.installedDate||nowISO(),'date','required')}${inputField('Пробег, км','installedOdometer',x?.installedOdometer??currentKm(),'number','min="0" inputmode="numeric" required')}</div></div>
+    <div class="form-section"><div class="form-title">Срок службы</div><div class="field-grid two">${inputField('Ресурс, км','lifeKm',x?.lifeKm||'','number','min="0" inputmode="numeric" placeholder="например 40000"')}${inputField('Ресурс, месяцев','lifeMonths',x?.lifeMonths||'','number','min="0" inputmode="numeric" placeholder="например 24"')}</div><div class="helper">Если заданы оба значения, предупреждение сработает по тому лимиту, который наступит раньше.</div></div>
+    <div class="form-section"><div class="form-title">График проверки</div><div class="field-grid two">${inputField('Проверять каждые, км','inspectKm',x?.inspectKm||'','number','min="0" inputmode="numeric" placeholder="например 10000"')}${inputField('Проверять каждые, месяцев','inspectMonths',x?.inspectMonths||'','number','min="0" inputmode="numeric" placeholder="например 6"')}</div></div>
+    <div class="form-section"><div class="form-title">Предупреждать заранее</div><div class="field-grid two">${inputField('За сколько км','warnKm',x?.warnKm??state.settings.defaultWarnKm,'number','min="0" inputmode="numeric"')}${inputField('За сколько дней','warnDays',x?.warnDays??state.settings.defaultWarnDays,'number','min="0" inputmode="numeric"')}</div></div>
+    <div class="form-section">${inputField('Стоимость детали, ₽','cost',x?.cost||'','number','min="0" inputmode="decimal"')}<div class="field" style="margin-top:8px"><label for="notes">Заметки</label><textarea class="input" id="notes" name="notes">${esc(x?.notes||'')}</textarea></div></div>
+  </form>`;
+  return sheetWrap(x?'Редактировать узел':'Новый узел',body,`<button class="btn primary block" form="component-form">Сохранить</button>`);
+}
 
 function expenseSheet(id=null){
   const x=id?state.expenses.find(e=>e.id===id):null;
@@ -829,20 +1013,20 @@ async function handleSubmit(e){
     if(!d.make.trim()||!d.model.trim()){toast('Укажи марку и модель автомобиля');return;}
     if(requested<initial){toast('Текущий пробег не может быть меньше пробега начала учёта');return;}
     if(d.year&&(Number(d.year)<1886||Number(d.year)>new Date().getFullYear()+1)){toast('Проверь год автомобиля');return;}
-    let photo=x?.photo||'';
-    if(d.removePhoto)photo='';
+    let photo=x?.photo||'';if(d.removePhoto)photo='';
     const photoFile=f.elements.carPhoto?.files?.[0];
-    if(photoFile){
-      if(photoFile.size>12*1024*1024){toast('Фото автомобиля больше 12 МБ');return;}
-      try{const data=await fileToDataURL(photoFile,true);if(!safeImageData(data)){toast('Не удалось обработать фото автомобиля');return;}photo=data;}catch{toast('Не удалось обработать фото автомобиля');return;}
-    }
-    const details={id,make:d.make.trim(),model:d.model.trim(),year:d.year,engine:d.engine,plate:d.plate.trim(),vin:d.vin.trim(),photo,trim:String(d.trim||'').trim(),fuelType:String(d.fuelType||''),engineVolume:String(d.engineVolume||''),transmission:String(d.transmission||''),powerHp:nonneg(d.powerHp),tireSize:String(d.tireSize||'').trim(),engineOil:String(d.engineOil||'').trim(),engineOilVolume:String(d.engineOilVolume||''),coolantVolume:String(d.coolantVolume||''),transmissionOilVolume:String(d.transmissionOilVolume||''),brakeFluidVolume:String(d.brakeFluidVolume||''),steeringFluidVolume:String(d.steeringFluidVolume||''),customSpecs:String(d.customSpecs||'').trim(),initialOdometer:initial,purchaseDate:d.purchaseDate,purchasePrice:nonneg(d.purchasePrice)};
+    if(photoFile){if(photoFile.size>12*1024*1024){toast('Фото автомобиля больше 12 МБ');return;}try{const data=await fileToDataURL(photoFile,true);if(!safeImageData(data)){toast('Не удалось обработать фото автомобиля');return;}photo=data;}catch{toast('Не удалось обработать фото автомобиля');return;}}
+    const details={
+      id,make:d.make.trim(),model:d.model.trim(),year:d.year,trim:String(d.trim||'').trim(),plate:d.plate.trim(),vin:d.vin.trim(),photo,
+      engine:String(d.engine||'').trim(),engineVolume:String(d.engineVolume||'').trim(),powerHp:nonneg(d.powerHp),transmission:String(d.transmission||''),fuelType:String(d.fuelType||''),
+      tireSize:String(d.tireSize||'').trim(),engineOil:String(d.engineOil||'').trim(),engineOilVolume:String(d.engineOilVolume||'').trim(),coolantVolume:String(d.coolantVolume||'').trim(),
+      transmissionOilVolume:String(d.transmissionOilVolume||'').trim(),brakeFluidVolume:String(d.brakeFluidVolume||'').trim(),steeringFluidVolume:String(d.steeringFluidVolume||'').trim(),
+      specs:collectCarSpecs(d),customSpecs:String(d.customSpecs||'').trim(),initialOdometer:initial,purchaseDate:d.purchaseDate,purchasePrice:nonneg(d.purchasePrice)
+    };
     if(x){
       const floor=linkedMileageFloor(id);if(requested<floor){toast(`В истории есть запись на ${fmtNum(floor)} км. Сначала исправь её.`);return;}
-      Object.assign(x,details);
-      state.odometerLogs=state.odometerLogs.filter(v=>!(v.carId===id&&v.sourceType==='manual'&&nonneg(v.value)>requested));
-      state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Из карточки автомобиля',sourceType:'manual',sourceId:uid()});
-      recalculateCurrentOdometer(id);
+      Object.assign(x,details);state.odometerLogs=state.odometerLogs.filter(v=>!(v.carId===id&&v.sourceType==='manual'&&nonneg(v.value)>requested));
+      state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Из карточки автомобиля',sourceType:'manual',sourceId:uid()});recalculateCurrentOdometer(id);
     }else{
       const obj={...details,currentOdometer:requested,trackingStartDate:nowISO()};state.cars.push(obj);state.activeCarId=id;
       state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Начало учёта',sourceType:'car-start',sourceId:id});
@@ -851,67 +1035,57 @@ async function handleSubmit(e){
   }
   if(formId==='odometer-form'){const d=formObject(f);if(!updateCarMileage(d.value,nowISO(),'Обновление пробега'))return;await persist();ui.sheet=null;toast('Пробег обновлён');render();return;}
   if(formId==='entry-form'){
-    const d=formObject(f), id=d.id||uid();
-    let x=state.serviceEntries.find(v=>v.id===id);
-    const oldComponentId=x?.componentId||'';
-    const photos=x?.photos?[...x.photos]:[];
+    const d=formObject(f),id=d.id||uid();let x=state.serviceEntries.find(v=>v.id===id);
+    const oldComponentId=x?.componentId||'',photos=x?.photos?[...x.photos]:[];
     for(const file of f.elements.photos.files){
       if(file.size>12*1024*1024){toast(`Фото ${file.name} слишком большое`);continue;}
-      try{
-        const data=await fileToDataURL(file,true);
-        if(safeImageData(data))photos.push({id:uid(),name:file.name,data});
-        else toast(`Формат ${file.name} не поддерживается`);
-      }catch{toast(`Не удалось обработать ${file.name}`);}
+      try{const data=await fileToDataURL(file,true);if(safeImageData(data))photos.push({id:uid(),name:file.name,data});else toast(`Формат ${file.name} не поддерживается`);}catch{toast(`Не удалось обработать ${file.name}`);}
     }
-    const hasMileage=String(d.odometer??'').trim()!=='';
-    const obj={
-      id,carId:car().id,date:d.date,odometer:hasMileage?nonneg(d.odometer):0,type:d.type,
-      title:String(d.title||'').trim(),category:String(d.category||'').trim(),
-      faultKey:x?.faultKey||'',workText:d.workText||'',partsText:d.partsText||'',
-      partsCost:nonneg(d.partsCost),laborCost:nonneg(d.laborCost),otherCost:x?.otherCost||0,
-      componentId:x?.componentId||'',componentAction:x?.componentAction||'',
-      notes:d.notes||'',photos,createdAt:x?.createdAt||new Date().toISOString(),
-      seq:x?.seq!=null?nonneg(x.seq):nextSeq()
-    };
-    if(!obj.title){toast('Укажите название записи');return;}
-    if(!dateOK(obj.date)){toast('Укажите корректную дату');return;}
-    const err=hasMileage?mileageConsistencyError(obj.odometer,obj.date,'service',id):null;
-    if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;}
-    if(x)Object.assign(x,obj);else state.serviceEntries.push(obj);
+    const hasMileage=String(d.odometer??'').trim()!=='',systemKey=String(d.systemKey||''),system=vehicleSystemInfo(systemKey);
+    const actionChoice=['none','work','inspect','replace'].includes(d.componentActionChoice)?d.componentActionChoice:'none';
+    const lifecycleAction=['inspect','replace'].includes(actionChoice)?actionChoice:'',eventKm=hasMileage?nonneg(d.odometer):currentKm();
+    const obj={id,carId:car().id,date:d.date,odometer:hasMileage?nonneg(d.odometer):0,type:d.type,title:String(d.title||'').trim(),category:system?.group||x?.category||'',systemKey,
+      faultKey:x?.faultKey||'',workText:d.workText||'',partsText:d.partsText||'',partsCost:nonneg(d.partsCost),laborCost:nonneg(d.laborCost),otherCost:x?.otherCost||0,
+      componentId:'',componentAction:lifecycleAction,componentEventOdometer:eventKm,notes:d.notes||'',photos,createdAt:x?.createdAt||new Date().toISOString(),seq:x?.seq!=null?nonneg(x.seq):nextSeq()};
+    if(!obj.title){toast('Укажите название записи');return;}if(!dateOK(obj.date)){toast('Укажите корректную дату');return;}
+    const err=hasMileage?mileageConsistencyError(obj.odometer,obj.date,'service',id):null;if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;}
 
-    const lifeKm=nonneg(d.lifeKm), lifeMonths=nonneg(d.lifeMonths),
-          inspectKm=nonneg(d.inspectKm), inspectMonths=nonneg(d.inspectMonths),
-          warnKm=nonneg(d.warnKm), warnDays=nonneg(d.warnDays);
-    if(lifeKm||lifeMonths||inspectKm||inspectMonths){
-      let comp=obj.componentId?state.components.find(c=>c.id===obj.componentId):null;
-      if(!comp){
-        comp={
-          id:uid(),carId:obj.carId,name:obj.title,category:obj.category||'',brand:'',partNumber:'',
-          baseInstalledDate:obj.date,baseInstalledOdometer:hasMileage?obj.odometer:currentKm(),
-          installedDate:obj.date,installedOdometer:hasMileage?obj.odometer:currentKm(),
-          lifeKm,lifeMonths,inspectKm,inspectMonths,warnKm,warnDays,
-          cost:obj.partsCost,notes:'Создано из записи',sourceEntryId:obj.id,
-          lastInspectionDate:obj.date,lastInspectionOdometer:hasMileage?obj.odometer:currentKm()
-        };
-        state.components.push(comp);
-        obj.componentId=comp.id;
-      }else{
-        const sourceOwned=comp.sourceEntryId===obj.id||(!comp.sourceEntryId&&comp.notes==='Создано из записи'&&obj.componentId===comp.id);
-        Object.assign(comp,{name:obj.title||comp.name,category:obj.category||comp.category,lifeKm,lifeMonths,inspectKm,inspectMonths,warnKm,warnDays,cost:obj.partsCost||comp.cost,sourceEntryId:sourceOwned?obj.id:comp.sourceEntryId});
-        if(sourceOwned){const baselineKm=hasMileage?obj.odometer:currentKm();Object.assign(comp,{baseInstalledDate:obj.date,baseInstalledOdometer:baselineKm,installedDate:obj.date,installedOdometer:baselineKm});if(!state.serviceEntries.some(e=>e.id!==obj.id&&e.componentId===comp.id&&e.componentAction==='inspect')){comp.lastInspectionDate=obj.date;comp.lastInspectionOdometer=baselineKm;}}
+    const lifeKm=nonneg(d.lifeKm),lifeMonths=nonneg(d.lifeMonths),inspectKm=nonneg(d.inspectKm),inspectMonths=nonneg(d.inspectMonths),warnKm=nonneg(d.warnKm),warnDays=nonneg(d.warnDays);
+    const intervalSpecified=Boolean(lifeKm||lifeMonths||inspectKm||inspectMonths);
+    let comp=oldComponentId?state.components.find(c=>c.id===oldComponentId):null;
+    if(systemKey&&(!comp||comp.systemKey!==systemKey)){
+      comp=state.components.filter(c=>c.carId===obj.carId&&c.systemKey===systemKey).sort((p,q)=>String(componentState(q).installedDate).localeCompare(String(componentState(p).installedDate)))[0]||null;
+    }
+    const needsLink=Boolean(systemKey&&(actionChoice!=='none'||intervalSpecified));
+    if(needsLink&&!comp){
+      comp={id:uid(),carId:obj.carId,name:system?.label||obj.title,category:system?.group||'',systemKey,brand:'',partNumber:'',baseInstalledDate:obj.date,baseInstalledOdometer:eventKm,installedDate:obj.date,installedOdometer:eventKm,
+        lifeKm,lifeMonths,inspectKm,inspectMonths,warnKm,warnDays,cost:obj.partsCost,notes:'Создано из сервисной записи',sourceEntryId:intervalSpecified?obj.id:'',lastInspectionDate:obj.date,lastInspectionOdometer:eventKm};
+      state.components.push(comp);
+    }
+    if(comp&&needsLink){
+      obj.componentId=comp.id;comp.systemKey=systemKey||comp.systemKey;comp.name=system?.label||comp.name;comp.category=system?.group||comp.category;
+      const sourceOwned=comp.sourceEntryId===obj.id||(!comp.sourceEntryId&&oldComponentId===comp.id&&comp.notes==='Создано из сервисной записи');
+      if(sourceOwned){
+        Object.assign(comp,{lifeKm,lifeMonths,inspectKm,inspectMonths,warnKm,warnDays,cost:obj.partsCost||comp.cost,sourceEntryId:obj.id,baseInstalledDate:obj.date,baseInstalledOdometer:eventKm,installedDate:obj.date,installedOdometer:eventKm});
+        if(!state.serviceEntries.some(e=>e.id!==obj.id&&e.componentId===comp.id&&e.componentAction==='inspect')){comp.lastInspectionDate=obj.date;comp.lastInspectionOdometer=eventKm;}
+      }else if(intervalSpecified){
+        if(lifeKm)comp.lifeKm=lifeKm;if(lifeMonths)comp.lifeMonths=lifeMonths;if(inspectKm)comp.inspectKm=inspectKm;if(inspectMonths)comp.inspectMonths=inspectMonths;
+        comp.warnKm=warnKm;comp.warnDays=warnDays;if(obj.partsCost)comp.cost=obj.partsCost;
       }
-    }else if(oldComponentId&&obj.componentId){
-      const comp=state.components.find(c=>c.id===obj.componentId);
-      if(comp){const sourceOwned=comp.sourceEntryId===obj.id||(!comp.sourceEntryId&&comp.notes==='Создано из записи'),otherRefs=state.serviceEntries.filter(e=>e.id!==obj.id&&e.componentId===comp.id);if(sourceOwned&&!otherRefs.length){state.components=state.components.filter(c=>c.id!==comp.id);obj.componentId='';removeMileageSource('component',comp.id);}else if(sourceOwned)Object.assign(comp,{lifeKm:0,lifeMonths:0,inspectKm:0,inspectMonths:0,warnKm:0,warnDays:0,sourceEntryId:''});else Object.assign(comp,{name:obj.title||comp.name,category:obj.category||comp.category});}
     }
-
-    syncEntryExpense(obj);
-    if(hasMileage)recordMileageObservation(obj.odometer,obj.date,'Из сервисной записи','service',id);else removeMileageSource('service',id);
-    await persist();ui.sheet=null;toast('Запись сохранена');render();return;
+    if(oldComponentId&&(!obj.componentId||obj.componentId!==oldComponentId)){
+      const oldComp=state.components.find(c=>c.id===oldComponentId);
+      if(oldComp?.sourceEntryId===obj.id){const refs=state.serviceEntries.filter(e=>e.id!==obj.id&&e.componentId===oldComp.id);if(!refs.length){state.components=state.components.filter(c=>c.id!==oldComp.id);removeMileageSource('component',oldComp.id);}else oldComp.sourceEntryId='';}
+    }
+    if(x)Object.assign(x,obj);else state.serviceEntries.push(obj);
+    syncEntryExpense(obj);if(hasMileage)recordMileageObservation(obj.odometer,obj.date,'Из сервисной записи','service',id);else removeMileageSource('service',id);
+    await persist();ui.sheet=null;toast(lifecycleAction==='replace'?'Запись сохранена · ресурс узла начат заново':lifecycleAction==='inspect'?'Запись сохранена · проверка отмечена':'Запись сохранена');render();return;
   }
   if(formId==='component-form'){
-    const d=formObject(f), id=d.id||uid(); let x=state.components.find(v=>v.id===id); const installKm=nonneg(d.installedOdometer); if(installKm>currentKm()){toast('Пробег установки не может быть больше текущего пробега');return;} if(d.installedDate>today()){toast('Дата установки не может быть в будущем');return;}
-    const obj={id,carId:car().id,name:d.name.trim(),category:d.category,brand:d.brand,partNumber:d.partNumber,baseInstalledDate:d.installedDate,baseInstalledOdometer:installKm,installedDate:d.installedDate,installedOdometer:installKm,lifeKm:nonneg(d.lifeKm),lifeMonths:nonneg(d.lifeMonths),inspectKm:nonneg(d.inspectKm),inspectMonths:nonneg(d.inspectMonths),warnKm:nonneg(d.warnKm),warnDays:nonneg(d.warnDays),cost:nonneg(d.cost),notes:d.notes,sourceEntryId:x?.sourceEntryId||'',lastInspectionDate:d.installedDate,lastInspectionOdometer:installKm}; if(x)Object.assign(x,obj);else state.components.push(obj); recordMileageObservation(installKm,d.installedDate,'Установка узла','component',id); await persist();ui.sheet=null;toast('Узел сохранён');render();return;
+    const d=formObject(f),id=d.id||uid();let x=state.components.find(v=>v.id===id);const info=vehicleSystemInfo(d.systemKey);if(!info){toast('Выберите узел автомобиля');return;}
+    const installKm=nonneg(d.installedOdometer);if(installKm>currentKm()){toast('Пробег установки не может быть больше текущего пробега');return;}if(d.installedDate>today()){toast('Дата установки не может быть в будущем');return;}
+    const obj={id,carId:car().id,name:info.label,category:info.group,systemKey:info.key,brand:d.brand,partNumber:d.partNumber,baseInstalledDate:d.installedDate,baseInstalledOdometer:installKm,installedDate:d.installedDate,installedOdometer:installKm,lifeKm:nonneg(d.lifeKm),lifeMonths:nonneg(d.lifeMonths),inspectKm:nonneg(d.inspectKm),inspectMonths:nonneg(d.inspectMonths),warnKm:nonneg(d.warnKm),warnDays:nonneg(d.warnDays),cost:nonneg(d.cost),notes:d.notes,sourceEntryId:x?.sourceEntryId||'',lastInspectionDate:x?.lastInspectionDate||d.installedDate,lastInspectionOdometer:x?.lastInspectionOdometer||installKm};
+    if(x)Object.assign(x,obj);else state.components.push(obj);recordMileageObservation(installKm,d.installedDate,'Установка узла','component',id);await persist();ui.sheet=null;toast('Узел сохранён');render();return;
   }
   if(formId==='expense-form'){
     const d=formObject(f), id=d.id||uid(); let x=state.expenses.find(v=>v.id===id); if(x?.linkedServiceId){toast('Связанный расход изменяется через сервисную запись');return;} const obj={id,carId:car().id,date:d.date,odometer:nonneg(d.odometer),category:d.category,amount:nonneg(d.amount),description:d.description.trim(),note:d.note,linkedServiceId:''}; if(!dateOK(obj.date)){toast('Укажи корректную дату');return;} const err=obj.odometer?mileageConsistencyError(obj.odometer,obj.date,'expense',id):null;if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;} if(x)Object.assign(x,obj);else state.expenses.push(obj); if(obj.odometer)recordMileageObservation(obj.odometer,obj.date,'Из расхода','expense',id);else removeMileageSource('expense',id); await persist();ui.sheet=null;toast('Расход сохранён');render();return;
@@ -1060,6 +1234,14 @@ document.addEventListener('input', e=>{
   if(key==='history-search'){ui.search=e.target.value; const pos=$('.v5-main')?.scrollTop||0; render(); const ms=$('.v5-main'); if(ms)ms.scrollTop=pos; $('#app input[data-input="history-search"]')?.focus();}
 });
 document.addEventListener('change', async e=>{
+  if(e.target.id==='systemKey'&&e.target.closest('#entry-form')){
+    const form=e.target.closest('#entry-form'),key=e.target.value,info=vehicleSystemInfo(key);
+    const comp=state.components.filter(c=>c.carId===car()?.id&&c.systemKey===key).sort((a,b)=>String(componentState(b).installedDate).localeCompare(String(componentState(a).installedDate)))[0];
+    const hint=form.querySelector('#system-link-hint');
+    if(hint)hint.textContent=comp?`Узел уже отслеживается: ${comp.name}. Его текущие интервалы будут сохранены.`:'Для этого узла контроль ещё не создан. При необходимости задайте ресурс или период проверки.';
+    if(info&&!form.elements.title.value.trim())form.elements.title.value=info.label;
+    if(comp)for(const name of ['lifeKm','lifeMonths','inspectKm','inspectMonths','warnKm','warnDays'])if(!String(form.elements[name]?.value||'').trim()&&nonneg(comp[name])>0)form.elements[name].value=comp[name];
+  }
   const key=e.target.dataset.input;
   if(key==='history-type'){ui.historyType=e.target.value;render();}
   if(key==='expense-filter'){ui.expenseFilter=e.target.value;render();}
@@ -1232,7 +1414,7 @@ document.addEventListener('touchcancel',()=>{
   else sheetSwipe=null;
 },{passive:true});
 
-async function markComponent(id,action){ const c=state.components.find(x=>x.id===id); if(!c)return; const km=currentKm(), date=nowISO(); const entry={id:uid(),carId:c.carId,date,odometer:km,type:action==='inspect'?'inspection':'replacement',title:`${action==='inspect'?'Проверка':'Замена'}: ${c.name}`,category:c.category||'',faultKey:'',workText:'',partsText:action==='replace'?[c.brand,c.partNumber].filter(Boolean).join(' · '):'',partsCost:action==='replace'?nonneg(c.cost):0,laborCost:0,otherCost:0,componentId:c.id,componentAction:action,notes:'Отмечено из карточки узла',photos:[],createdAt:new Date().toISOString(),seq:nextSeq()}; state.serviceEntries.push(entry); syncEntryExpense(entry); recordMileageObservation(km,date,'Из сервисной записи','service',entry.id); await persist();toast(action==='inspect'?'Проверка отмечена':'Замена отмечена, циклы сброшены');ui.sheet='component-detail';render(); }
+async function markComponent(id,action){ const c=state.components.find(x=>x.id===id); if(!c)return; const km=currentKm(), date=nowISO(); const entry={id:uid(),carId:c.carId,date,odometer:km,type:action==='inspect'?'inspection':'replacement',title:`${action==='inspect'?'Проверка':'Замена'}: ${c.name}`,category:c.category||'',faultKey:'',workText:'',partsText:action==='replace'?[c.brand,c.partNumber].filter(Boolean).join(' · '):'',partsCost:action==='replace'?nonneg(c.cost):0,laborCost:0,otherCost:0,systemKey:c.systemKey||inferSystemKey(c.name,c.category),componentId:c.id,componentAction:action,componentEventOdometer:km,notes:'Отмечено из карточки узла',photos:[],createdAt:new Date().toISOString(),seq:nextSeq()}; state.serviceEntries.push(entry); syncEntryExpense(entry); recordMileageObservation(km,date,'Из сервисной записи','service',entry.id); await persist();toast(action==='inspect'?'Проверка отмечена':'Замена отмечена, циклы сброшены');ui.sheet='component-detail';render(); }
 
 function openStoredFile(docId,index){ const d=state.documents.find(x=>x.id===docId); const f=d?.files?.[index]; if(!f)return; const a=document.createElement('a');a.href=f.data;a.download=f.name;a.target='_blank';document.body.append(a);a.click();a.remove(); }
 

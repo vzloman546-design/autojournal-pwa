@@ -399,21 +399,119 @@ test('fuel journal calculates full-tank consumption with partial fills', async({
   await expect(page.locator('.v5-main')).toContainText('557 ₽/100 км');
 });
 
+test('service record links to standard node and early replacement resets existing resource', async({page})=>{
+  await addCar(page,{initial:'100000',current:'109000'});
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="parts"]').click();
+  await page.locator('[data-action="add-component"]').last().click();
+  await expect(page.locator('#systemKey optgroup')).toHaveCount(25);
+  expect(await page.locator('#systemKey option').count()).toBeGreaterThan(180);
+  await page.locator('#systemKey').selectOption('spark_plugs');
+  await page.locator('#installedOdometer').fill('100000');
+  await page.locator('#lifeKm').fill('10000');
+  await page.locator('button[form="component-form"]').click();
+  await expect(page.locator('#component-form')).toHaveCount(0);
+
+  let s=await state(page);
+  expect(s.components).toHaveLength(1);
+  expect(s.components[0].systemKey).toBe('spark_plugs');
+  expect(s.components[0].lifeKm).toBe(10000);
+
+  await page.locator('[data-action="go-back"]').click();
+  await page.locator('[data-action="go-back"]').click();
+  await page.locator('[data-action="add-entry"]').first().click();
+  await page.locator('#title').fill('Ранняя замена свечей');
+  await page.locator('#systemKey').selectOption('spark_plugs');
+  await page.locator('#componentActionChoice').selectOption('replace');
+  await expect(page.locator('#system-link-hint')).toContainText('уже отслеживается');
+  await expect(page.locator('#lifeKm')).toHaveValue('10000');
+  await page.locator('button[form="entry-form"]').click();
+  await expect(page.locator('#entry-form')).toHaveCount(0);
+
+  s=await state(page);
+  expect(s.components).toHaveLength(1);
+  const entry=s.serviceEntries.find(x=>x.title==='Ранняя замена свечей');
+  expect(entry.systemKey).toBe('spark_plugs');
+  expect(entry.componentId).toBe(s.components[0].id);
+  expect(entry.componentAction).toBe('replace');
+  expect(entry.odometer).toBe(0);
+  expect(entry.componentEventOdometer).toBe(109000);
+  expect(s.components[0].lifeKm).toBe(10000);
+
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="parts"]').click();
+  await page.locator('[data-action="component-detail"]',{hasText:'Свечи зажигания'}).click();
+  await expect(page.locator('.sheet')).toContainText('109 000 км');
+  await expect(page.locator('.sheet')).toContainText('через 10 000 км');
+});
+
+test('expanded passport stores spark plug tank and detailed technical data', async({page})=>{
+  await addCar(page);
+  await page.locator('[data-action="car-switch"]').click();
+  await page.locator('[data-action="edit-current-car"]').click();
+
+  await page.locator('.v5-spec-editor summary',{hasText:'Свечи и зажигание'}).click();
+  await page.locator('#spec__sparkPlugModel').fill('Denso IK16TT');
+  await page.locator('#spec__sparkPlugThread').fill('M14x1.25');
+  await page.locator('#spec__sparkPlugHexMm').fill('16');
+  await page.locator('#spec__sparkPlugGapMm').fill('1.1');
+  await page.locator('#spec__sparkPlugTorqueNm').fill('25');
+
+  await page.locator('.v5-spec-editor summary',{hasText:'Топливная система'}).click();
+  await page.locator('#spec__fuelTankCapacityL').fill('65');
+  await page.locator('#spec__recommendedOctane').fill('95');
+
+  await page.locator('.v5-spec-editor summary',{hasText:'Моторное масло и фильтры'}).click();
+  await page.locator('#engineOil').fill('5W-40');
+  await page.locator('#spec__engineOilSpec').fill('ACEA A3/B4');
+  await page.locator('#engineOilVolume').fill('4.0');
+  await page.locator('#spec__oilDrainPlugTorqueNm').fill('35');
+
+  await page.locator('.v5-spec-editor summary',{hasText:'Колёса и шины'}).click();
+  await page.locator('#spec__pcd').fill('5x114.3');
+  await page.locator('#spec__wheelBoltThread').fill('M12x1.5');
+  await page.locator('#spec__wheelTorqueNm').fill('110');
+
+  await page.locator('button[form="car-form"]').click();
+  await expect(page.locator('#car-form')).toHaveCount(0);
+
+  const s=await state(page),c=s.cars[0];
+  expect(c.specs.sparkPlugThread).toBe('M14x1.25');
+  expect(c.specs.fuelTankCapacityL).toBe('65');
+  expect(c.specs.engineOilSpec).toBe('ACEA A3/B4');
+  expect(c.specs.wheelBoltThread).toBe('M12x1.5');
+
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="carcard"]').click();
+  for(const text of ['Denso IK16TT','M14x1.25','Размер ключа свечи, мм','65','ACEA A3/B4','5x114.3','M12x1.5','110']){
+    await expect(page.locator('.v5-main')).toContainText(text);
+  }
+});
+
 test('vehicle passport stores photo and technical specifications', async({page})=>{
   await addCar(page);
   await page.locator('[data-action="car-switch"]').click();
   await page.locator('[data-action="edit-current-car"]').click();
   await page.locator('#trim').fill('Style');
+  await page.locator('.v5-spec-editor summary',{hasText:'Двигатель'}).click();
   await page.locator('#engineVolume').fill('2.0');
   await page.locator('#powerHp').fill('137');
+  await page.locator('.v5-spec-editor summary',{hasText:'Трансмиссия'}).click();
   await page.locator('#transmission').selectOption('МКПП');
+  await page.locator('.v5-spec-editor summary',{hasText:'Топливная система'}).click();
   await page.locator('#fuelType').selectOption('АИ-95');
+  await page.locator('.v5-spec-editor summary',{hasText:'Колёса и шины'}).click();
   await page.locator('#tireSize').fill('205/60 R16');
+  await page.locator('.v5-spec-editor summary',{hasText:'Моторное масло и фильтры'}).click();
   await page.locator('#engineOil').fill('5W-40');
   await page.locator('#engineOilVolume').fill('4.0');
+  await page.locator('.v5-spec-editor summary',{hasText:'Охлаждение'}).click();
   await page.locator('#coolantVolume').fill('7.0');
+  await page.locator('.v5-spec-editor summary',{hasText:'Трансмиссия'}).click();
   await page.locator('#transmissionOilVolume').fill('2.0');
+  await page.locator('.v5-spec-editor summary',{hasText:'Тормозная система'}).click();
   await page.locator('#brakeFluidVolume').fill('0.8');
+  await page.locator('.v5-spec-editor summary',{hasText:'Рулевое управление'}).click();
   await page.locator('#steeringFluidVolume').fill('1.0');
   await page.locator('textarea[name="customSpecs"]').fill('Клиренс: 155 мм\nАккумулятор: 60 А·ч');
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64');
@@ -443,7 +541,7 @@ test('vehicle passport stores photo and technical specifications', async({page})
   expect(actionLayout.align).toBe('center');
   expect(actionLayout.justify).toBe('center');
   expect(Math.abs((actionLayout.icon.y+actionLayout.icon.height/2)-(actionLayout.label.y+actionLayout.label.height/2))).toBeLessThan(2);
-  for(const text of ['Style','137 л.с.','МКПП','АИ-95','205/60 R16','5W-40','Клиренс','155 мм','Аккумулятор','60 А·ч']){
+  for(const text of ['Style','Мощность, л.с.','137','МКПП','АИ-95','205/60 R16','5W-40','Клиренс','155 мм','Аккумулятор','60 А·ч']){
     await expect(page.locator('.v5-main')).toContainText(text);
   }
   await expect(page.locator('.v5-tabbar')).toHaveCount(0);
@@ -495,7 +593,7 @@ test.describe('offline PWA',()=>{
     await addCar(page);
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.4.4');
+    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.5.0');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
