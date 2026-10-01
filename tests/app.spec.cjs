@@ -41,6 +41,47 @@ function isoOffset(days){
   const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+days);
   return d.toISOString().slice(0,10);
 }
+async function installSyncRelayMock(page){
+  await page.evaluate(()=>{
+    localStorage.setItem('autojournal-sync-api','https://sync.test');
+    const realFetch=window.fetch.bind(window);
+    window.__syncMock={sessions:{}};
+    window.fetch=async(input,init={})=>{
+      const url=typeof input==='string'?input:input.url;
+      if(!String(url).startsWith('https://sync.test'))return realFetch(input,init);
+      const method=String(init.method||(typeof input!=='string'&&input.method)||'GET').toUpperCase();
+      const path=new URL(url).pathname;
+      const headers=new Headers(init.headers||(typeof input!=='string'?input.headers:undefined));
+      const auth=headers.get('Authorization')||'';
+      const json=(status,value)=>Promise.resolve(new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json'}}));
+      const text=(status,value)=>Promise.resolve(new Response(value,{status,headers:{'Content-Type':'text/plain'}}));
+      if(path==='/v1/sessions'&&method==='POST'){
+        const body=JSON.parse(String(init.body||'{}')),id=body.id;
+        window.__syncMock.sessions[id]={id,status:'waiting',mode:null,chunks:{},totalChunks:null,iv:null,sender:null,authHeaders:[],expiresAt:Date.now()+600000};
+        return json(201,{ok:true,expiresAt:Date.now()+600000});
+      }
+      const match=path.match(/^\/v1\/sessions\/([^/]+)(?:\/(.*))?$/);
+      if(!match)return json(404,{error:'not_found'});
+      const id=match[1],tail=match[2]||'',s=window.__syncMock.sessions[id];
+      if(!s)return json(404,{error:'not_found'});
+      if(auth)s.authHeaders.push(auth);
+      if(!tail&&method==='GET')return json(200,{id,status:s.status,mode:s.mode,totalChunks:s.totalChunks,iv:s.iv,sender:s.sender,expiresAt:s.expiresAt});
+      if(tail==='request'&&method==='POST'){
+        const body=JSON.parse(String(init.body||'{}'));s.mode=body.mode;s.status='requested';
+        return json(200,{ok:true,mode:s.mode,status:s.status});
+      }
+      const chunk=tail.match(/^chunks\/(\d+)$/);
+      if(chunk&&method==='PUT'){s.chunks[Number(chunk[1])]=String(init.body||'');s.status='uploading';return json(200,{ok:true});}
+      if(chunk&&method==='GET')return text(200,s.chunks[Number(chunk[1])]||'');
+      if(tail==='complete'&&method==='POST'){
+        const body=JSON.parse(String(init.body||'{}'));s.totalChunks=body.totalChunks;s.iv=body.iv;s.sender=body.sender;s.status='ready';
+        return json(200,{ok:true,status:'ready'});
+      }
+      if(tail==='consume'&&method==='POST'){s.status='consumed';s.chunks={};return json(200,{ok:true,status:'consumed'});}
+      return json(404,{error:'not_found'});
+    };
+  });
+}
 
 async function addRefuel(page,{date,odometer,amount,liters,station='АЗС',fullTank=false}){
   await page.locator('.v5-tabbar [data-view="refuels"]').click();
@@ -667,28 +708,7 @@ test.describe('offline PWA',()=>{
 
 
 test('QR transfer exposes directional modes and generates one-time QR session', async({page})=>{
-  let sessionId='';
-  const cors={
-    'Access-Control-Allow-Origin':'*',
-    'Access-Control-Allow-Methods':'GET,POST,PUT,OPTIONS',
-    'Access-Control-Allow-Headers':'Authorization,Content-Type'
-  };
-  await page.route('https://sync.test/**',async route=>{
-    const req=route.request(),url=new URL(req.url()),path=url.pathname;
-    if(req.method()==='OPTIONS'){
-      await route.fulfill({status:204,headers:cors,body:''});return;
-    }
-    if(path==='/v1/sessions'&&req.method()==='POST'){
-      const body=JSON.parse(req.postData()||'{}');sessionId=body.id;
-      await route.fulfill({status:201,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({ok:true,expiresAt:Date.now()+600000})});return;
-    }
-    if(path===`/v1/sessions/${sessionId}`&&req.method()==='GET'){
-      await route.fulfill({status:200,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({id:sessionId,status:'waiting',mode:null,expiresAt:Date.now()+600000})});return;
-    }
-    await route.fulfill({status:404,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({error:'not_found'})});
-  });
-  await page.goto('/');
-  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api','https://sync.test'));
+  await installSyncRelayMock(page);
   await openProfile(page);
   await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
@@ -703,52 +723,13 @@ test('QR transfer exposes directional modes and generates one-time QR session', 
   await page.locator('[data-action="sync-show-qr"]').click();
   await expect(page.locator('[data-sync-qr] svg')).toBeVisible();
   await expect(page.locator('[data-sync-status]')).toContainText('Ждём сканирования');
-  expect(sessionId.length).toBeGreaterThan(20);
+  const sessions=await page.evaluate(()=>Object.values(window.__syncMock.sessions));
+  expect(sessions).toHaveLength(1);
+  expect(sessions[0].id.length).toBeGreaterThan(20);
 });
 
-
 test('QR relay payload is encrypted and relay auth is not the QR encryption secret', async({page})=>{
-  let sessionId='',status='waiting',mode=null,totalChunks=null,iv=null,sender=null;
-  const chunks=new Map(),authHeaders=[];
-  const cors={
-    'Access-Control-Allow-Origin':'*',
-    'Access-Control-Allow-Methods':'GET,POST,PUT,OPTIONS',
-    'Access-Control-Allow-Headers':'Authorization,Content-Type'
-  };
-  await page.route('https://sync.test/**',async route=>{
-    const req=route.request(),url=new URL(req.url()),path=url.pathname;
-    if(req.method()==='OPTIONS'){
-      await route.fulfill({status:204,headers:cors,body:''});return;
-    }
-    const auth=req.headers()['authorization']||'';
-    if(auth)authHeaders.push(auth);
-    if(path==='/v1/sessions'&&req.method()==='POST'){
-      const body=JSON.parse(req.postData()||'{}');sessionId=body.id;
-      await route.fulfill({status:201,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({ok:true,expiresAt:Date.now()+600000})});return;
-    }
-    if(path===`/v1/sessions/${sessionId}/request`&&req.method()==='POST'){
-      mode=JSON.parse(req.postData()||'{}').mode;status='requested';
-      await route.fulfill({status:200,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({ok:true,mode,status})});return;
-    }
-    const chunk=path.match(new RegExp('^/v1/sessions/'+sessionId+'/chunks/(\\d+)$'));
-    if(chunk&&req.method()==='PUT'){
-      chunks.set(Number(chunk[1]),req.postData()||'');status='uploading';
-      await route.fulfill({status:200,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({ok:true})});return;
-    }
-    if(path===`/v1/sessions/${sessionId}/complete`&&req.method()==='POST'){
-      const body=JSON.parse(req.postData()||'{}');totalChunks=body.totalChunks;iv=body.iv;sender=body.sender;status='ready';
-      await route.fulfill({status:200,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({ok:true,status})});return;
-    }
-    if(chunk&&req.method()==='GET'){
-      await route.fulfill({status:200,headers:{...cors,'Content-Type':'text/plain'},body:chunks.get(Number(chunk[1]))||''});return;
-    }
-    if(path===`/v1/sessions/${sessionId}`&&req.method()==='GET'){
-      await route.fulfill({status:200,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({id:sessionId,status,mode,totalChunks,iv,sender,expiresAt:Date.now()+600000})});return;
-    }
-    await route.fulfill({status:404,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify({error:'not_found'})});
-  });
-  await page.goto('/');
-  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api','https://sync.test'));
+  await installSyncRelayMock(page);
   const result=await page.evaluate(async()=>{
     const sync=await import(new URL('./sync.js',location.href).href);
     const pair=await sync.createSyncSession();
@@ -756,12 +737,12 @@ test('QR relay payload is encrypted and relay auth is not the QR encryption secr
     const sample={version:7,cars:[{id:'car-secret',make:'SecretMake',model:'SecretModel'}],serviceEntries:[],components:[],expenses:[],documents:[],refuels:[],odometerLogs:[],settings:{theme:'system'},nextSeq:1,activeCarId:'car-secret'};
     await sync.uploadSyncState(pair,sample,'scanner');
     const envelope=await sync.downloadSyncState(pair);
-    return {secret:pair.secret,state:envelope.state};
+    const relay=window.__syncMock.sessions[pair.id];
+    return {secret:pair.secret,state:envelope.state,authHeaders:relay.authHeaders,ciphertext:Object.keys(relay.chunks).sort((a,b)=>Number(a)-Number(b)).map(k=>relay.chunks[k]).join('')};
   });
   expect(result.state.cars[0].make).toBe('SecretMake');
-  expect(authHeaders.length).toBeGreaterThan(0);
-  expect(authHeaders).not.toContain(`Bearer ${result.secret}`);
-  const ciphertext=[...chunks.values()].join('');
-  expect(ciphertext).not.toContain('SecretMake');
-  expect(ciphertext).not.toContain('SecretModel');
+  expect(result.authHeaders.length).toBeGreaterThan(0);
+  expect(result.authHeaders).not.toContain(`Bearer ${result.secret}`);
+  expect(result.ciphertext).not.toContain('SecretMake');
+  expect(result.ciphertext).not.toContain('SecretModel');
 });
