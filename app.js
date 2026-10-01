@@ -569,6 +569,44 @@ function tabbar(){
 function emptyState(title,text,action,label,icon=icons.car){ return `<div class="empty"><div class="empty-icon">${icon}</div><div class="empty-title">${title}</div><div class="empty-text">${text}</div>${action?`<button class="btn primary" data-action="${action}">${label}</button>`:''}</div>`; }
 function statusPill(status){ const t={ok:'В норме',soon:'Скоро',due:'Срок наступил',overdue:'Просрочено',neutral:'Нет срока'}[status]||status; return `<span class="status-pill ${status}"><span class="status-dot"></span>${t}</span>`; }
 
+function journalIsEmpty(){
+  return !state.cars.length
+    && !state.odometerLogs.length
+    && !state.serviceEntries.length
+    && !state.components.length
+    && !state.expenses.length
+    && !state.documents.length
+    && !(state.refuels||[]).length;
+}
+function shouldShowFirstRun(){
+  return journalIsEmpty()&&!loadSyncVault();
+}
+function firstRunPage(){
+  const syncReady=Boolean(getSyncApiUrl());
+  return `<main class="v5-first-run">
+    <div class="v5-first-run-shell">
+      <div class="v5-first-run-brand"><div class="v5-first-run-logo">${icons.car}</div><span>АвтоЖурнал</span></div>
+      <div class="v5-first-run-copy">
+        <h1>Как начать?</h1>
+        <p>Перенесите существующий журнал с другого устройства или создайте новый.</p>
+      </div>
+      <div class="v5-first-run-actions">
+        <button class="v5-first-run-card receive" data-action="first-run-receive" ${syncReady?'':'disabled'}>
+          <span class="v5-first-run-card-icon">↓</span>
+          <span class="v5-first-run-card-text"><strong>Получить данные</strong><small>Отсканировать QR-код другого устройства и перенести журнал сюда</small></span>
+          <b>›</b>
+        </button>
+        <button class="v5-first-run-card new" data-action="add-car">
+          <span class="v5-first-run-card-icon">${icons.plus}</span>
+          <span class="v5-first-run-card-text"><strong>Новый журнал</strong><small>Добавить автомобиль и начать вести историю с нуля</small></span>
+          <b>›</b>
+        </button>
+      </div>
+      <div class="v5-first-run-note">Аккаунт не нужен. Данные хранятся локально, а синхронизация между устройствами шифруется.</div>
+    </div>
+  </main>`;
+}
+
 function homePage(){
   const c=car();
   if(!c)return `<main class="v5-main"><div class="v5-page">
@@ -1482,6 +1520,14 @@ function goBack(){
 }
 function render(){
   const root=$('#app');
+  if(shouldShowFirstRun()){
+    root.dataset.secondary='false';
+    root.dataset.firstRun='true';
+    root.innerHTML=`${firstRunPage()}${renderSheet()}`;
+    if(nextTransition)nextTransition='';
+    return;
+  }
+  delete root.dataset.firstRun;
   const page={home:homePage,records:historyPage,refuels:refuelsPage,notifications:notificationsPage,profile:profilePage,carcard:carCardPage,report:reportPage,parts:partsPage,analytics:analyticsPage,documents:documentsPage,more:morePage}[ui.view]||homePage;
   const secondary=!primaryViews.has(ui.view);
   root.dataset.secondary=secondary?'true':'false';
@@ -1828,6 +1874,12 @@ document.addEventListener('click', async e=>{
   }
   if(a==='download-ready-pdf'){downloadPendingPdf();return;}
   if(a==='notif-tab'){ui.notificationTab=el.dataset.value||'auto';render();return;}
+  if(a==='first-run-receive'){
+    if(!getSyncApiUrl()){toast('Сервер синхронизации недоступен');return;}
+    resetSyncTransient();syncMode='pull';ui.sheet='sync-scan';render();
+    await startSyncCamera();
+    return;
+  }
   if(a==='add-car'){ui.sheet='car';ui.sheetId=null;render();return;}
   if(a==='edit-current-car'){ui.sheet='car';ui.sheetId=state.activeCarId;render();return;}
   if(a==='car-switch'){ui.sheet='garage';ui.sheetId=null;render();return;}
