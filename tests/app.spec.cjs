@@ -549,6 +549,7 @@ test('backup roundtrip and calendar export', async({page})=>{
 
   await page.evaluate(async()=>{const db=await import('./db.js');await db.clearState();});
   await page.reload();
+  await addCar(page,{make:'Temporary',model:'Restore',initial:'1',current:'1'});
   await openProfile(page); await page.locator('.v5-menu [data-view="more"]').click();
   page.once('dialog',d=>d.accept());
   await page.locator('#backup-input').setInputFiles(backupPath);
@@ -923,6 +924,7 @@ test.describe('offline PWA',()=>{
 
 test('QR transfer exposes directional modes and generates one-time QR session', async({page})=>{
   await installSyncRelayMock(page);
+  await addCar(page);
   await openProfile(page);
   await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
@@ -1036,7 +1038,12 @@ test('two linked devices sync a document with attachment from PC to phone', asyn
   await addCar(page);
 
   const link=await page.evaluate(async()=>{
-    const sync=await import(new URL('./sync.js',location.href).href);
+    let sync,lastError;
+    for(let i=0;i<3;i++){
+      try{sync=await import(new URL('./sync.js?qa-two-device=1',location.href).href);break;}
+      catch(err){lastError=err;await new Promise(r=>setTimeout(r,250));}
+    }
+    if(!sync)throw lastError||new Error('sync module did not load');
     const vault=sync.createSyncVaultLink();
     await sync.registerSyncVault(vault);
     await sync.adoptSyncVault(vault);
@@ -1049,7 +1056,12 @@ test('two linked devices sync a document with attachment from PC to phone', asyn
   await phone.goto('/');
   await phone.evaluate(async link=>{
     localStorage.setItem('autojournal-sync-api','https://sync.test');
-    const sync=await import(new URL('./sync.js',location.href).href);
+    let sync,lastError;
+    for(let i=0;i<3;i++){
+      try{sync=await import(new URL('./sync.js?qa-two-device=1',location.href).href);break;}
+      catch(err){lastError=err;await new Promise(r=>setTimeout(r,250));}
+    }
+    if(!sync)throw lastError||new Error('sync module did not load');
     await sync.adoptSyncVault(link);
     window.dispatchEvent(new Event('focus'));
   },link);
