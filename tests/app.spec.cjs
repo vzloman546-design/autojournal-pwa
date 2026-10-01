@@ -819,6 +819,7 @@ test('persistent vault auto-sync pushes local changes and pulls remote changes',
   await page.locator('#title').fill('Документ для автосинхронизации');
   await page.locator('#type').fill('Прочее');
   await page.locator('#number').fill('SYNC-DOC-1');
+  await page.locator('#files').setInputFiles({name:'sync-note.txt',mimeType:'text/plain',buffer:Buffer.from('persistent sync document attachment')});
   await page.locator('button[form="document-form"]').click();
   await expect.poll(()=>page.evaluate(()=>{
     const v=Object.values(window.__syncMock.vaults)[0];
