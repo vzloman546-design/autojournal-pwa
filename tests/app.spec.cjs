@@ -567,7 +567,19 @@ test('short and full vehicle reports render and invoke system PDF print', async(
   await page.locator('#laborCost').fill('1000');
   await page.locator('button[form="entry-form"]').click();
 
-  await page.evaluate(()=>{window.print=()=>{window.__reportPrinted=true;};});
+  await page.evaluate(()=>{
+    window.__reportPrinted=false;
+    window.__reportPrintSameTask=false;
+    document.addEventListener('click',e=>{
+      if(!e.target.closest('[data-action="print-report"]'))return;
+      window.__reportPrintClickTask=true;
+      setTimeout(()=>{window.__reportPrintClickTask=false;},0);
+    },true);
+    window.print=()=>{
+      window.__reportPrinted=true;
+      window.__reportPrintSameTask=window.__reportPrintClickTask===true;
+    };
+  });
   await openProfile(page);
   await page.locator('.v5-menu [data-view="report"]').click();
   await expect(page.locator('.v5-subbar-title')).toHaveText('Отчёт автомобиля');
@@ -584,6 +596,7 @@ test('short and full vehicle reports render and invoke system PDF print', async(
 
   await page.locator('[data-action="print-report"]').click();
   await expect.poll(()=>page.evaluate(()=>window.__reportPrinted===true)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>window.__reportPrintSameTask===true)).toBe(true);
   await expect(page.locator('.v5-tabbar')).toHaveCount(0);
 });
 
@@ -594,7 +607,7 @@ test.describe('offline PWA',()=>{
     await addCar(page);
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.5.1');
+    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.5.2');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
