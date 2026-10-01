@@ -45,19 +45,51 @@ async function installSyncRelayMock(page){
   await page.evaluate(()=>{
     localStorage.setItem('autojournal-sync-api','https://sync.test');
     const realFetch=window.fetch.bind(window);
-    window.__syncMock={sessions:{}};
+    window.__syncMock={sessions:{},vaults:{}};
     window.fetch=async(input,init={})=>{
-      const url=typeof input==='string'?input:input.url;
-      if(!String(url).startsWith('https://sync.test'))return realFetch(input,init);
-      const method=String(init.method||(typeof input!=='string'&&input.method)||'GET').toUpperCase();
-      const path=new URL(url).pathname;
+      const rawUrl=typeof input==='string'?input:input.url;
+      if(!String(rawUrl).startsWith('https://sync.test'))return realFetch(input,init);
+      const parsedUrl=new URL(rawUrl),method=String(init.method||(typeof input!=='string'&&input.method)||'GET').toUpperCase();
+      const path=parsedUrl.pathname;
       const headers=new Headers(init.headers||(typeof input!=='string'?input.headers:undefined));
       const auth=headers.get('Authorization')||'';
       const json=(status,value)=>Promise.resolve(new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json'}}));
       const text=(status,value)=>Promise.resolve(new Response(value,{status,headers:{'Content-Type':'text/plain'}}));
+
+      if(path==='/v1/vaults'&&method==='POST'){
+        const body=JSON.parse(String(init.body||'{}')),id=body.id;
+        const existing=window.__syncMock.vaults[id];
+        if(existing&&existing.verifier!==body.verifier)return json(409,{error:'vault_conflict'});
+        window.__syncMock.vaults[id]=existing||{id,verifier:body.verifier,revision:0,records:{},authHeaders:[]};
+        return json(existing?200:201,{ok:true,id,revision:window.__syncMock.vaults[id].revision,created:!existing});
+      }
+      const vaultMatch=path.match(/^\/v1\/vaults\/([^/]+)(?:\/(.*))?$/);
+      if(vaultMatch){
+        const id=vaultMatch[1],tail=vaultMatch[2]||'',v=window.__syncMock.vaults[id];
+        if(!v)return json(404,{error:'vault_not_found'});
+        if(auth)v.authHeaders.push(auth);
+        if(!tail&&method==='GET')return json(200,{id,revision:v.revision});
+        if(tail==='records'&&method==='PUT'){
+          const body=JSON.parse(String(init.body||'{}'));v.revision++;
+          for(const rec of body.records||[]){
+            v.records[rec.collection+':'+rec.id]={
+              collection:rec.collection,id:rec.id,deleted:Boolean(rec.deleted),iv:rec.iv||null,
+              chunks:Array.isArray(rec.chunks)?rec.chunks:[],version:v.revision,deviceId:body.deviceId||''
+            };
+          }
+          return json(200,{ok:true,revision:v.revision,records:(body.records||[]).length});
+        }
+        if(tail==='changes'&&method==='GET'){
+          const since=Number(parsedUrl.searchParams.get('since')||0);
+          const records=Object.values(v.records).filter(x=>x.version>since).map(x=>({...x}));
+          return json(200,{ok:true,revision:v.revision,records});
+        }
+        return json(404,{error:'not_found'});
+      }
+
       if(path==='/v1/sessions'&&method==='POST'){
         const body=JSON.parse(String(init.body||'{}')),id=body.id;
-        window.__syncMock.sessions[id]={id,status:'waiting',mode:null,chunks:{},totalChunks:null,iv:null,sender:null,authHeaders:[],expiresAt:Date.now()+600000};
+        window.__syncMock.sessions[id]={id,status:'waiting',mode:null,chunks:{},pairing:null,totalChunks:null,iv:null,sender:null,authHeaders:[],expiresAt:Date.now()+600000};
         return json(201,{ok:true,expiresAt:Date.now()+600000});
       }
       const match=path.match(/^\/v1\/sessions\/([^/]+)(?:\/(.*))?$/);
@@ -66,6 +98,13 @@ async function installSyncRelayMock(page){
       if(!s)return json(404,{error:'not_found'});
       if(auth)s.authHeaders.push(auth);
       if(!tail&&method==='GET')return json(200,{id,status:s.status,mode:s.mode,totalChunks:s.totalChunks,iv:s.iv,sender:s.sender,expiresAt:s.expiresAt});
+      if(tail==='pairing'&&method==='PUT'){
+        const body=JSON.parse(String(init.body||'{}'));s.pairing={payload:body.payload,iv:body.iv};return json(200,{ok:true});
+      }
+      if(tail==='pairing'&&method==='GET'){
+        if(!s.pairing)return json(409,{error:'pairing_not_ready'});
+        return json(200,s.pairing);
+      }
       if(tail==='request'&&method==='POST'){
         const body=JSON.parse(String(init.body||'{}'));s.mode=body.mode;s.status='requested';
         return json(200,{ok:true,mode:s.mode,status:s.status});
@@ -77,7 +116,7 @@ async function installSyncRelayMock(page){
         const body=JSON.parse(String(init.body||'{}'));s.totalChunks=body.totalChunks;s.iv=body.iv;s.sender=body.sender;s.status='ready';
         return json(200,{ok:true,status:'ready'});
       }
-      if(tail==='consume'&&method==='POST'){s.status='consumed';s.chunks={};return json(200,{ok:true,status:'consumed'});}
+      if(tail==='consume'&&method==='POST'){s.status='consumed';s.chunks={};s.pairing=null;return json(200,{ok:true,status:'consumed'});}
       return json(404,{error:'not_found'});
     };
   });
@@ -745,4 +784,58 @@ test('QR relay payload is encrypted and relay auth is not the QR encryption secr
   expect(result.authHeaders).not.toContain(`Bearer ${result.secret}`);
   expect(result.ciphertext).not.toContain('SecretMake');
   expect(result.ciphertext).not.toContain('SecretModel');
+});
+
+
+test('persistent vault auto-sync pushes local changes and pulls remote changes', async({page})=>{
+  await installSyncRelayMock(page);
+  await addCar(page);
+  const linked=await page.evaluate(async()=>{
+    const sync=await import(new URL('./sync.js',location.href).href);
+    const vault=sync.createSyncVaultLink();
+    await sync.registerSyncVault(vault);
+    await sync.adoptSyncVault(vault);
+    window.__qaVault={id:vault.id,secret:vault.secret,api:vault.api};
+    return {id:vault.id};
+  });
+  expect(linked.id.length).toBeGreaterThan(20);
+
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await expect.poll(()=>page.evaluate(()=>{
+    const v=Object.values(window.__syncMock.vaults)[0];
+    return Object.keys(v?.records||{}).some(k=>k.startsWith('cars:'));
+  }),{timeout:10000}).toBe(true);
+
+  await page.locator('[data-action="add-odometer"]').click();
+  await page.locator('#value').fill('211234');
+  await page.locator('button[form="odometer-form"]').click();
+  await expect.poll(()=>page.evaluate(()=>{
+    const v=Object.values(window.__syncMock.vaults)[0];
+    return Object.keys(v?.records||{}).some(k=>k.startsWith('odometerLogs:'));
+  }),{timeout:10000}).toBe(true);
+
+  const carId=(await state(page)).cars[0].id;
+  await page.evaluate(async carId=>{
+    const sync=await import(new URL('./sync.js',location.href).href);
+    const base=window.__qaVault;
+    const remote={...base,deviceId:'remote-device',lastRevision:0,shadow:{}};
+    const entry={
+      id:'remote-service-entry',carId,date:new Date().toISOString().slice(0,10),odometer:211234,
+      type:'maintenance',title:'Запись с другого устройства',category:'',faultKey:'',workText:'',
+      partsText:'',partsCost:0,laborCost:0,otherCost:0,systemKey:'',componentId:'',
+      componentAction:'',componentEventOdometer:211234,notes:'',photos:[],createdAt:new Date().toISOString(),seq:999
+    };
+    const hash=await sync.hashSyncData(entry);
+    await sync.pushVaultChanges(remote,[{collection:'serviceEntries',id:entry.id,data:entry,hash,deleted:false}]);
+  },carId);
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await expect.poll(async()=>{
+    const s=await state(page);
+    return s.serviceEntries.some(x=>x.id==='remote-service-entry'&&x.title==='Запись с другого устройства');
+  },{timeout:10000}).toBe(true);
+
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="more"]').click();
+  await page.locator('[data-action="sync-open"]').click();
+  await expect(page.locator('.sheet')).toContainText('Автосинхронизация включена');
 });
