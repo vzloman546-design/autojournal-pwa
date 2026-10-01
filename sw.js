@@ -1,4 +1,4 @@
-const CACHE='autojournal-v5.11.0';
+const CACHE='autojournal-v5.11.1';
 const APP_SHELL=[
   './','./index.html','./styles.css','./app.js','./db.js','./manifest.webmanifest',
   './icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png',
