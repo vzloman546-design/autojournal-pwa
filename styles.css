@@ -1155,3 +1155,54 @@ body.v5-sheet-settling .sheet-backdrop{
   .v5-passport-action{min-height:54px!important}
   .v5-car-silhouette{width:96px}
 }
+
+
+/* AutoJournal v5.4.4 — unmistakable side-profile vehicle placeholder */
+.v5-car-passport-placeholder-inner{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:13px;
+}
+.v5-car-passport-placeholder-inner>span{
+  color:var(--v5-muted);
+  font-size:12px;
+  font-weight:650;
+  letter-spacing:.01em;
+}
+.v5-car-silhouette{
+  width:156px!important;
+  max-width:52vw;
+  height:auto;
+  overflow:visible;
+}
+.v5-car-silhouette .car-outline,
+.v5-car-silhouette .car-detail{
+  fill:none;
+  stroke:currentColor;
+  stroke-width:3;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.v5-car-silhouette .car-window{
+  fill:color-mix(in srgb,var(--v5-bg) 78%,transparent);
+  stroke:currentColor;
+  stroke-width:2.4;
+  stroke-linejoin:round;
+}
+.v5-car-silhouette .car-wheel{
+  fill:var(--v5-bg);
+  stroke:currentColor;
+  stroke-width:3.2;
+}
+.v5-car-silhouette .car-hub{
+  fill:currentColor;
+  stroke:none;
+}
+@supports not (fill:color-mix(in srgb,white,black)){
+  .v5-car-silhouette .car-window{fill:var(--v5-bg)}
+}
+@media(max-width:359px){
+  .v5-car-silhouette{width:132px!important}
+}

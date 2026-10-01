@@ -454,6 +454,7 @@ test('vehicle passport fallback is a recognizable dedicated car silhouette', asy
   await openProfile(page);
   await page.locator('.v5-menu [data-view="carcard"]').click();
   await expect(page.locator('.v5-car-passport-placeholder .v5-car-silhouette')).toBeVisible();
+  await expect(page.locator('.v5-car-passport-placeholder')).toContainText('Нет фото автомобиля');
   const box=await page.locator('.v5-car-silhouette').boundingBox();
   expect(box.width).toBeGreaterThan(80);
   expect(box.width).toBeGreaterThan(box.height);
@@ -494,7 +495,7 @@ test.describe('offline PWA',()=>{
     await addCar(page);
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.4.3');
+    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.4.4');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
