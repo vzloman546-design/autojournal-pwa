@@ -1863,7 +1863,7 @@ document.addEventListener('click', async e=>{
   if(a==='share-stored-file'){await shareStoredFile(el.dataset.doc,Number(el.dataset.index));return;}
   if(a==='remove-stored-file'){const d=state.documents.find(x=>x.id===el.dataset.doc),i=Number(el.dataset.index);if(d?.files?.[i]&&confirm(`Удалить файл «${d.files[i].name}»?`)){d.files.splice(i,1);await persist();render();toast('Файл удалён');}return;}
   if(a==='open-image'){window.open(el.getAttribute('src'),'_blank');return;}
-  if(a==='sync-open'){resetSyncTransient();ui.sheet='sync';render();return;}
+  if(a==='sync-open'){resetSyncTransient();ui.sheet='sync';render();if(loadSyncVault())autoSyncNow(false);return;}
   if(a==='sync-now'){await autoSyncNow(true);return;}
   if(a==='sync-unlink'){if(confirm('Отключить автоматическую синхронизацию только на этом устройстве? Данные на устройстве не удалятся.')){if(autoSyncTimer){clearTimeout(autoSyncTimer);autoSyncTimer=0;}clearSyncVault();autoSyncStatus='idle';autoSyncLastError='';autoSyncPending=0;toast('Автосинхронизация отключена на этом устройстве');render();}return;}
   if(a==='sync-show-qr'){await startSyncDisplaySession();return;}
@@ -2265,7 +2265,7 @@ async function init(){
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(autoSyncNeedsRender&&!ui.sheet){autoSyncNeedsRender=false;render();}scheduleAutoSync(120);}});
   window.addEventListener('focus',()=>scheduleAutoSync(120));
   if(autoSyncInterval)clearInterval(autoSyncInterval);
-  autoSyncInterval=setInterval(()=>{if(document.visibilityState==='visible')autoSyncNow(false);},30000);
+  autoSyncInterval=setInterval(()=>{if(document.visibilityState==='visible')autoSyncNow(false);},5000);
   if(loadSyncVault())scheduleAutoSync(300);
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(state.settings.theme==='system')applyTheme();});
 }
