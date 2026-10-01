@@ -428,6 +428,100 @@ test('statistics categories and periods render without cross-period leakage', as
   await expect(page.locator('.v5-main')).not.toContainText('10 776');
 });
 
+
+
+test('analytics keeps same-day mileage delta stable across period switches', async({page})=>{
+  await addCar(page,{initial:'200000',current:'200000'});
+  await page.locator('[data-action="add-odometer"]').click();
+  await page.locator('#value').fill('200123');
+  await page.locator('button[form="odometer-form"]').click();
+
+  await page.locator('button.v5-stats-card').click();
+  await page.locator('[data-action="analytics-tab"][data-value="mileage"]').click();
+
+  const distance=page.locator('[data-stat="mileage-distance"]');
+  await expect(distance).toContainText('123 км');
+  await expect(distance).toContainText('200 000 → 200 123 км');
+
+  for(const period of ['year','90','all','month','all','month']){
+    await page.locator('[data-input="analytics-period"]').selectOption(period);
+    await expect(distance).toContainText('123 км');
+    await expect(distance).toContainText('200 000 → 200 123 км');
+  }
+
+  await page.locator('[data-input="analytics-period"]').selectOption('lastMonth');
+  await expect(distance).toContainText('0 км');
+  await page.locator('[data-input="analytics-period"]').selectOption('month');
+  await expect(distance).toContainText('123 км');
+});
+
+test('analytics period boundaries stay consistent for mileage expenses and refuels', async({page})=>{
+  await addCar(page,{initial:'100000',current:'100000'});
+  const seeded=await state(page),carId=seeded.cars[0].id;
+  const now=new Date();
+  const y=now.getFullYear(),m=now.getMonth();
+  const ymd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const prevStart=ymd(new Date(y,m-1,1,12));
+  const prevMid=ymd(new Date(y,m-1,15,12));
+  const currentDate=ymd(new Date(y,m,Math.max(1,Math.min(now.getDate(),15)),12));
+
+  seeded.cars[0].trackingStartDate=prevStart;
+  seeded.cars[0].initialOdometer=100000;
+  seeded.cars[0].currentOdometer=100700;
+  seeded.odometerLogs=[
+    {id:'prev-odo',carId,date:prevMid,value:100500,note:'prev',sourceType:'manual',sourceId:'prev-odo'},
+    {id:'current-odo',carId,date:currentDate,value:100700,note:'current',sourceType:'manual',sourceId:'current-odo'}
+  ];
+  seeded.expenses=[
+    {id:'prev-exp',carId,date:prevMid,odometer:100500,category:'Ремонт',amount:1000,description:'Предыдущий месяц',note:'',linkedServiceId:'',linkedRefuelId:''},
+    {id:'current-exp',carId,date:currentDate,odometer:100700,category:'Мойка',amount:400,description:'Текущий месяц',note:'',linkedServiceId:'',linkedRefuelId:''}
+  ];
+  seeded.refuels=[
+    {id:'prev-ref',carId,date:prevMid,odometer:100500,fuelType:'Бензин',amount:3000,liters:50,pricePerLiter:60,fullTank:false,station:'АЗС prev',address:'',notes:'',createdAt:new Date().toISOString()},
+    {id:'current-ref',carId,date:currentDate,odometer:100700,fuelType:'Бензин',amount:1200,liters:20,pricePerLiter:60,fullTank:false,station:'АЗС current',address:'',notes:'',createdAt:new Date().toISOString()}
+  ];
+  await page.evaluate(async data=>{const db=await import('./db.js');await db.saveState(data);},seeded);
+  await page.reload();
+
+  await page.locator('button.v5-stats-card').click();
+  await page.locator('[data-action="analytics-tab"][data-value="mileage"]').click();
+
+  await page.locator('[data-input="analytics-period"]').selectOption('lastMonth');
+  await expect(page.locator('[data-stat="mileage-distance"]')).toContainText('500 км');
+  await expect(page.locator('[data-stat="mileage-distance"]')).toContainText('100 000 → 100 500 км');
+
+  await page.locator('[data-input="analytics-period"]').selectOption('month');
+  await expect(page.locator('[data-stat="mileage-distance"]')).toContainText('200 км');
+  await expect(page.locator('[data-stat="mileage-distance"]')).toContainText('100 500 → 100 700 км');
+
+  await page.locator('[data-action="analytics-tab"][data-value="expenses"]').click();
+  await expect(page.locator('[data-stat="expense-total"]')).toContainText('400');
+  await expect(page.locator('[data-stat="expense-count"]')).toContainText('1');
+  await expect(page.locator('[data-stat="expense-per-km"]')).toContainText('2');
+
+  await page.locator('[data-input="analytics-period"]').selectOption('lastMonth');
+  await expect(page.locator('[data-stat="expense-total"]')).toContainText('1 000');
+  await expect(page.locator('[data-stat="expense-count"]')).toContainText('1');
+  await expect(page.locator('[data-stat="expense-per-km"]')).toContainText('2');
+
+  await page.locator('[data-action="analytics-tab"][data-value="refuels"]').click();
+  await expect(page.locator('[data-stat="refuel-count"]')).toContainText('1');
+  await expect(page.locator('[data-stat="refuel-spend"]')).toContainText('3 000');
+
+  await page.locator('[data-input="analytics-period"]').selectOption('month');
+  await expect(page.locator('[data-stat="refuel-count"]')).toContainText('1');
+  await expect(page.locator('[data-stat="refuel-spend"]')).toContainText('1 200');
+
+  await page.locator('[data-input="analytics-period"]').selectOption('all');
+  await page.locator('[data-action="analytics-tab"][data-value="mileage"]').click();
+  await expect(page.locator('[data-stat="mileage-distance"]')).toContainText('700 км');
+  await page.locator('[data-action="analytics-tab"][data-value="expenses"]').click();
+  await expect(page.locator('[data-stat="expense-total"]')).toContainText('1 400');
+  await page.locator('[data-action="analytics-tab"][data-value="refuels"]').click();
+  await expect(page.locator('[data-stat="refuel-count"]')).toContainText('2');
+  await expect(page.locator('[data-stat="refuel-spend"]')).toContainText('4 200');
+});
+
 test('backup roundtrip and calendar export', async({page})=>{
   await addCar(page);
   await page.locator('[data-action="add-entry"]').first().click();
