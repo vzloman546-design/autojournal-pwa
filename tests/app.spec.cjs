@@ -25,6 +25,11 @@ async function openProfile(page){
 }
 async function gotoSecondary(page,view){
   await openProfile(page);
+  if(view==='documents'){
+    await page.locator('.v5-menu [data-view="more"]').click();
+    await page.locator('.v5-menu-page [data-view="documents"]').click();
+    return;
+  }
   await page.locator('.v5-menu [data-view="'+view+'"]').click();
 }
 async function closeSheet(page){
@@ -325,10 +330,11 @@ test('document file, expiry reminder, edit and delete full cycle', async({page})
 
   await page.locator('[data-action="go-back"]').click();
   await page.locator('[data-action="go-back"]').click();
+  await page.locator('[data-action="go-back"]').click();
   await page.locator('.v5-tabbar [data-view="notifications"]').click();
   await expect(page.getByText(/Документ: ОСАГО QA изменено/)).toBeVisible();
 
-  await openProfile(page); await page.locator('.v5-menu [data-view="documents"]').click();
+  await gotoSecondary(page,'documents');
   await page.locator('[data-action="document-detail"]',{hasText:'ОСАГО QA изменено'}).click();
   page.once('dialog',d=>d.accept());
   await page.locator('[data-action="delete-document"]').click();
@@ -616,12 +622,18 @@ test('secondary screens hide bottom nav and no horizontal overflow at mobile wid
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.locator('[data-action="open-profile"]').click();
     await expect(page.locator('.v5-tabbar')).toHaveCount(0);
-    for(const view of ['analytics','documents','parts','more']){
+    for(const view of ['analytics','parts','more']){
       await page.locator('[data-view="'+view+'"]').click();
       await expect(page.locator('.v5-tabbar')).toHaveCount(0);
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
       await page.locator('[data-action="go-back"]').click();
     }
+    await page.locator('[data-view="more"]').click();
+    await page.locator('.v5-menu-page [data-view="documents"]').click();
+    await expect(page.locator('.v5-tabbar')).toHaveCount(0);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.locator('[data-action="go-back"]').click();
+    await page.locator('[data-action="go-back"]').click();
     await page.locator('[data-action="go-back"]').click();
     await expect(page.locator('.v5-tabbar')).toBeVisible();
   }
@@ -710,6 +722,38 @@ test('fuel journal calculates full-tank consumption with partial fills', async({
   await page.locator('[data-input="analytics-period"]').selectOption('all');
   await expect(page.locator('.v5-main')).toContainText('9,29 л/100 км');
   await expect(page.locator('.v5-main')).toContainText('557 ₽/100 км');
+});
+
+test('profile exposes Vehicle Health instead of Documents and basic plan opens preselected node', async({page})=>{
+  await addCar(page,{initial:'200000',current:'200000'});
+  await openProfile(page);
+  const menu=page.locator('.v5-menu');
+  await expect(menu.getByText('Здоровье автомобиля',{exact:true})).toBeVisible();
+  await expect(menu.getByText('Документы',{exact:true})).toHaveCount(0);
+  await expect(menu.getByText('Контроль обслуживания',{exact:true})).toHaveCount(0);
+
+  await menu.locator('[data-view="parts"]').click();
+  await expect(page.locator('.v5-subbar-title')).toHaveText('Здоровье автомобиля');
+  await expect(page.locator('.v5-health-hero')).toContainText('Базовый план заполнен: 0 из');
+  await expect(page.locator('.v5-health-list').first()).toContainText('Моторное масло');
+  await expect(page.locator('[data-action="add-health-component"][data-system-key="engine_oil"]')).toBeVisible();
+
+  await page.locator('[data-action="add-health-component"][data-system-key="engine_oil"]').click();
+  await expect(page.locator('#component-form')).toBeVisible();
+  await expect(page.locator('#systemKey')).toHaveValue('engine_oil');
+  await expect(page.locator('#systemKeySearch')).toHaveValue('Моторное масло');
+  await page.locator('#installedOdometer').fill('200000');
+  await page.locator('#lifeKm').fill('10000');
+  await page.locator('button[form="component-form"]').click();
+
+  await expect(page.locator('.v5-health-hero')).toContainText('Базовый план заполнен: 1 из');
+  const oil=page.locator('[data-action="component-detail"]',{hasText:'Моторное масло'});
+  await expect(oil).toBeVisible();
+  await expect(oil).toContainText('В норме');
+
+  await page.locator('[data-action="go-back"]').click();
+  await page.locator('.v5-menu [data-view="more"]').click();
+  await expect(page.locator('.v5-menu-page [data-view="documents"]')).toContainText('Документы');
 });
 
 test('service record links to standard node and early replacement resets existing resource', async({page})=>{
@@ -1073,6 +1117,7 @@ test('persistent vault auto-sync pushes local changes and pulls remote changes',
     return s.serviceEntries.some(x=>x.id==='remote-service-entry'&&x.title==='Запись с другого устройства');
   },{timeout:10000}).toBe(true);
 
+  await page.locator('[data-action="go-back"]').click();
   await page.locator('[data-action="go-back"]').click();
   await expect(page.locator('.v5-subbar-title')).toHaveText('Профиль');
   await page.locator('.v5-menu [data-view="more"]').click();
