@@ -687,3 +687,55 @@ test('QR transfer exposes directional modes and generates one-time QR session', 
   await expect(page.locator('[data-sync-status]')).toContainText('Ждём сканирования');
   expect(sessionId.length).toBeGreaterThan(20);
 });
+
+
+test('QR relay payload is encrypted and relay auth is not the QR encryption secret', async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('autojournal-sync-api','https://sync.test'));
+  let sessionId='',status='waiting',mode=null,totalChunks=null,iv=null,sender=null;
+  const chunks=new Map(),authHeaders=[];
+  await page.route('https://sync.test/**',async route=>{
+    const req=route.request(),url=new URL(req.url()),path=url.pathname;
+    const auth=req.headers()['authorization']||'';
+    if(auth)authHeaders.push(auth);
+    if(path==='/v1/sessions'&&req.method()==='POST'){
+      const body=JSON.parse(req.postData()||'{}');sessionId=body.id;
+      await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ok:true,expiresAt:Date.now()+600000})});return;
+    }
+    if(path===`/v1/sessions/${sessionId}/request`&&req.method()==='POST'){
+      mode=JSON.parse(req.postData()||'{}').mode;status='requested';
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,mode,status})});return;
+    }
+    const chunk=path.match(new RegExp('^/v1/sessions/'+sessionId+'/chunks/(\\d+)$'));
+    if(chunk&&req.method()==='PUT'){
+      chunks.set(Number(chunk[1]),req.postData()||'');status='uploading';
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true})});return;
+    }
+    if(path===`/v1/sessions/${sessionId}/complete`&&req.method()==='POST'){
+      const body=JSON.parse(req.postData()||'{}');totalChunks=body.totalChunks;iv=body.iv;sender=body.sender;status='ready';
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,status})});return;
+    }
+    if(chunk&&req.method()==='GET'){
+      await route.fulfill({status:200,contentType:'text/plain',body:chunks.get(Number(chunk[1]))||''});return;
+    }
+    if(path===`/v1/sessions/${sessionId}`&&req.method()==='GET'){
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:sessionId,status,mode,totalChunks,iv,sender,expiresAt:Date.now()+600000})});return;
+    }
+    await route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:'not_found'})});
+  });
+  await page.goto('/');
+  const result=await page.evaluate(async()=>{
+    const sync=await import('./sync.js');
+    const pair=await sync.createSyncSession();
+    await sync.requestSyncMode(pair,'push');
+    const sample={version:7,cars:[{id:'car-secret',make:'SecretMake',model:'SecretModel'}],serviceEntries:[],components:[],expenses:[],documents:[],refuels:[],odometerLogs:[],settings:{theme:'system'},nextSeq:1,activeCarId:'car-secret'};
+    await sync.uploadSyncState(pair,sample,'scanner');
+    const envelope=await sync.downloadSyncState(pair);
+    return {secret:pair.secret,state:envelope.state};
+  });
+  expect(result.state.cars[0].make).toBe('SecretMake');
+  expect(authHeaders.length).toBeGreaterThan(0);
+  expect(authHeaders).not.toContain(`Bearer ${result.secret}`);
+  const ciphertext=[...chunks.values()].join('');
+  expect(ciphertext).not.toContain('SecretMake');
+  expect(ciphertext).not.toContain('SecretModel');
+});
