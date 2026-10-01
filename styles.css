@@ -1584,3 +1584,94 @@ body.v5-sheet-settling .sheet-backdrop{
   .v5-stored-file-card{padding:12px}
   .v5-stored-file-preview{width:min(100%,218px)}
 }
+
+
+/* Vehicle Health */
+.v5-health-page{display:grid;gap:16px}
+.v5-health-hero{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  gap:14px;
+  align-items:center;
+  padding:18px;
+  border:1px solid var(--line);
+  border-radius:22px;
+  background:var(--surface);
+  box-shadow:0 12px 34px rgba(0,0,0,.055)
+}
+.v5-health-hero-icon{
+  width:50px;height:50px;display:grid;place-items:center;
+  border-radius:16px;background:color-mix(in srgb,var(--accent) 14%,var(--surface-2));
+  color:var(--accent)
+}
+.v5-health-hero-icon .icon{width:27px;height:27px}
+.v5-health-hero-copy{display:grid;gap:3px;min-width:0}
+.v5-health-hero-copy>span{font-size:11px;color:var(--muted);font-weight:700}
+.v5-health-hero-copy strong{font-size:17px;line-height:1.25}
+.v5-health-hero-copy small{font-size:11px;color:var(--muted);line-height:1.35}
+.v5-health-score{text-align:right;display:grid;gap:1px}
+.v5-health-score strong{font-size:22px;line-height:1}
+.v5-health-score span{font-size:10px;color:var(--muted)}
+.v5-health-progress{grid-column:1/-1;height:7px;border-radius:999px;background:var(--surface-2);overflow:hidden}
+.v5-health-progress span{display:block;height:100%;border-radius:inherit;background:var(--accent)}
+
+.v5-health-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.v5-health-summary>div{
+  min-width:0;display:grid;gap:3px;padding:12px;
+  border:1px solid var(--line);border-radius:15px;background:var(--surface)
+}
+.v5-health-summary span{font-size:10px;color:var(--muted);line-height:1.25}
+.v5-health-summary strong{font-size:19px}
+
+.v5-health-section{display:grid;gap:10px}
+.v5-health-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.v5-health-section-head h2{margin:0;font-size:19px}
+.v5-health-section-head p{margin:3px 0 0;color:var(--muted);font-size:11px;line-height:1.35}
+.v5-health-list{
+  display:grid;overflow:hidden;
+  border:1px solid var(--line);border-radius:18px;background:var(--surface)
+}
+.v5-health-item{
+  width:100%;display:grid;
+  grid-template-columns:40px minmax(0,1fr) auto auto;
+  align-items:center;gap:10px;padding:12px 13px;text-align:left;color:inherit;
+  border:0;border-bottom:1px solid var(--line);background:transparent
+}
+.v5-health-item:last-child{border-bottom:0}
+.v5-health-item:active{background:var(--surface-2)}
+.v5-health-item-icon{
+  width:40px;height:40px;display:grid;place-items:center;border-radius:13px;
+  background:var(--surface-2);color:var(--muted)
+}
+.v5-health-item-icon .icon{width:21px;height:21px}
+.v5-health-item:not(.is-empty) .v5-health-item-icon{color:var(--accent)}
+.v5-health-item-main{display:grid;gap:3px;min-width:0}
+.v5-health-item-main strong{font-size:13px;line-height:1.25}
+.v5-health-item-main small{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:var(--muted);font-size:10px;line-height:1.3
+}
+.v5-health-item>b{font-size:22px;font-weight:400;color:var(--muted)}
+.v5-health-state{
+  padding:5px 8px;border-radius:999px;white-space:nowrap;
+  font-size:9px;font-weight:800;background:var(--surface-2);color:var(--muted)
+}
+.v5-health-state.ok{background:rgba(41,170,91,.12);color:#29aa5b}
+.v5-health-state.soon{background:rgba(245,166,35,.13);color:#c98208}
+.v5-health-state.due,.v5-health-state.overdue{background:rgba(235,77,75,.13);color:#d44240}
+.v5-health-state.neutral{background:var(--surface-2);color:var(--muted)}
+.v5-health-item.is-empty{opacity:.92}
+.v5-health-note{
+  padding:11px 12px;border-radius:14px;background:var(--surface-2);
+  color:var(--muted);font-size:10px;line-height:1.45
+}
+@media(max-width:430px){
+  .v5-health-hero{grid-template-columns:auto minmax(0,1fr);padding:15px}
+  .v5-health-score{grid-column:1/-1;text-align:left;display:flex;align-items:baseline;gap:5px}
+  .v5-health-summary{grid-template-columns:1fr 1fr 1fr}
+  .v5-health-item{grid-template-columns:38px minmax(0,1fr) auto;padding:11px 10px}
+  .v5-health-item-icon{width:38px;height:38px}
+  .v5-health-state{grid-column:2/3;justify-self:start}
+  .v5-health-item>b{grid-column:3/4;grid-row:1/3}
+  .v5-health-item-main small{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+}
