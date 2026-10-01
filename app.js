@@ -744,9 +744,8 @@ function analyticsMileage(c,bounds){
   if(!bounds.start){
     const endValue=Math.max(initial,currentKm(),...observations.map(x=>nonneg(x.value)));
     const startDate=trackingDate,endDate=observations.at(-1)?.date||trackingDate;
-    const days=Math.max(1,daysBetween(startDate,endDate)+1);
     const distance=Math.max(0,endValue-initial);
-    return {distance,avg:distance/days,startValue:initial,endValue,logs:timeline.slice().reverse(),startDate,endDate};
+    return {distance,avg:averageKmPerDay(c),startValue:initial,endValue,logs:timeline.slice().reverse(),startDate,endDate};
   }
   const periodLogs=timeline.filter(x=>dateInAnalyticsPeriod(x.date,bounds)).reverse();
   if(trackingDate>bounds.end)return {distance:0,avg:0,startValue:initial,endValue:initial,logs:periodLogs,startDate:null,endDate:null};
