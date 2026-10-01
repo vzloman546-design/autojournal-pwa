@@ -277,7 +277,6 @@ async function encryptVaultRecord(vault,change){
 }
 export async function pushVaultChanges(vault,changes=[]){
   if(!changes.length)return {revision:null,uploaded:[]};
-  await registerSyncVault(vault);
   const encrypted=[];
   for(const change of changes)encrypted.push(await encryptVaultRecord(vault,change));
   const groups=[];let group=[],size=0;
@@ -298,7 +297,6 @@ export async function pushVaultChanges(vault,changes=[]){
   return {revision,uploaded:encrypted.map(x=>({collection:x.collection,id:x.id,deleted:x.deleted,hash:x.hash}))};
 }
 export async function pullVaultChanges(vault,since=0){
-  await registerSyncVault(vault);
   const res=await apiRequest(vault,`/v1/vaults/${encodeURIComponent(vault.id)}/changes?since=${Math.max(0,Number(since)||0)}`);
   const data=await res.json(),changes=[];
   for(const rec of Array.isArray(data.records)?data.records:[]){
