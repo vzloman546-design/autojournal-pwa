@@ -336,6 +336,61 @@ test('document file, expiry reminder, edit and delete full cycle', async({page})
   expect(s.documents).toHaveLength(0);
 });
 
+
+test('document detail shows thumbnail, opens by thumbnail and has one share button', async({page})=>{
+  await addCar(page);
+  await gotoSecondary(page,'documents');
+  await page.locator('[data-action="add-document"]').last().click();
+  await page.locator('#title').fill('PDF документ QA');
+  await page.locator('#type').fill('Страховка');
+  const pdf=Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 420] >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF');
+  await page.locator('#files').setInputFiles({name:'policy-preview.pdf',mimeType:'application/pdf',buffer:pdf});
+  await page.locator('button[form="document-form"]').click();
+
+  await page.locator('[data-action="document-detail"]',{hasText:'PDF документ QA'}).click();
+  const card=page.locator('.v5-stored-file-card');
+  await expect(card).toHaveCount(1);
+  await expect(card).toContainText('policy-preview.pdf');
+  await expect(card.locator('.v5-stored-file-preview')).toBeVisible();
+  await expect(card.locator('.v5-stored-file-preview-pdf')).toHaveCount(1);
+  await expect(card.getByRole('button',{name:'Поделиться'})).toHaveCount(1);
+  await expect(card.getByRole('button',{name:'Открыть'})).toHaveCount(0);
+
+  const order=await card.evaluate(el=>[...el.children].map(x=>x.className));
+  expect(String(order[0])).toContain('v5-stored-file-open');
+  expect(String(order[1])).toContain('v5-stored-file-share');
+
+  await page.evaluate(()=>{
+    window.__storedOpenProbe=[];
+    window.__origAnchorClick=HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click=function(){
+      window.__storedOpenProbe.push({href:this.href,target:this.target,download:this.download,rel:this.rel});
+    };
+  });
+  await card.locator('.v5-stored-file-open').click();
+  const opened=await page.evaluate(()=>window.__storedOpenProbe?.[0]||null);
+  expect(opened).toBeTruthy();
+  expect(opened.href).toMatch(/^blob:/);
+  expect(opened.target).toBe('_blank');
+  expect(opened.download).toBe('');
+  expect(opened.rel).toContain('noopener');
+  await page.evaluate(()=>{if(window.__origAnchorClick)HTMLAnchorElement.prototype.click=window.__origAnchorClick;});
+
+  await page.evaluate(()=>{
+    window.__sharedStoredFile=null;
+    Object.defineProperty(navigator,'canShare',{configurable:true,value:opts=>Boolean(opts?.files?.length)});
+    Object.defineProperty(navigator,'share',{configurable:true,value:async opts=>{
+      const f=opts.files?.[0];
+      window.__sharedStoredFile={title:opts.title,name:f?.name,type:f?.type,size:f?.size};
+    }});
+  });
+  await card.getByRole('button',{name:'Поделиться'}).click();
+  const shared=await page.evaluate(()=>window.__sharedStoredFile);
+  expect(shared.name).toBe('policy-preview.pdf');
+  expect(shared.type).toBe('application/pdf');
+  expect(shared.size).toBeGreaterThan(0);
+});
+
 test('maintenance inspect and replace reset independent cycles', async({page})=>{
   await addCar(page);
   await gotoSecondary(page,'parts');
