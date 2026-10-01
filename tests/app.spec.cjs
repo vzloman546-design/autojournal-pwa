@@ -812,7 +812,7 @@ test.describe('offline PWA',()=>{
     });
     if(!await page.evaluate(()=>!!navigator.serviceWorker.controller))await page.reload();
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.10.1');
+    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.11.0');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
