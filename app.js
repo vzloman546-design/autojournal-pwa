@@ -755,7 +755,7 @@ function partsPage(){
     </section>
 
     <div class="v5-health-summary">
-      <div><span>В норме</span><strong>${okM</strong></div>
+      <div><span>В норме</span><strong>${ok}</strong></div>
       <div><span>Требуют внимания</span><strong>${attention}</strong></div>
       <div><span>Отслеживается</span><strong>${comps.length}</strong></div>
     </div>
