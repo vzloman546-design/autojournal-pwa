@@ -14,7 +14,6 @@ async function addCar(page,{make='Hyundai',model='Sonata',initial='200000',curre
   await page.locator('#make').fill(make);
   await page.locator('#model').fill(model);
   await page.locator('#year').fill('2008');
-  await page.locator('#engine').fill('2.0');
   await page.locator('#initialOdometer').fill(initial);
   await page.locator('#currentOdometer').fill(current);
   await page.locator('button[form="car-form"]').click();
