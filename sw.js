@@ -1,4 +1,4 @@
-const CACHE='autojournal-v5.9.0';
+const CACHE='autojournal-v5.9.1';
 const APP_SHELL=[
   './','./index.html','./styles.css','./app.js','./db.js','./manifest.webmanifest',
   './icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png',
@@ -25,6 +25,6 @@ self.addEventListener('fetch',event=>{
   if(event.request.method!=='GET')return;
   const url=new URL(event.request.url);
   if(url.origin!==location.origin)return;
-  const core=event.request.mode==='navigate'||/\/(?:app|db|sw)\.js$/.test(url.pathname)||/\/styles\.css$/.test(url.pathname)||/\/manifest\.webmanifest$/.test(url.pathname);
+  const core=event.request.mode==='navigate'||/\/(?:app|db|sw|sync|sync-config)\.js$/.test(url.pathname)||/\/styles\.css$/.test(url.pathname)||/\/manifest\.webmanifest$/.test(url.pathname);
   event.respondWith(core?networkFirst(event.request):caches.match(event.request).then(hit=>hit||networkFirst(event.request)));
 });
