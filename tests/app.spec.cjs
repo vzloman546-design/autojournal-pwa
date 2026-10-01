@@ -559,7 +559,7 @@ test('vehicle passport fallback is a recognizable dedicated car silhouette', asy
   expect(box.width).toBeGreaterThan(box.height);
 });
 
-test('short and full vehicle reports render and invoke system PDF print', async({page})=>{
+test('short and full vehicle reports render and download a real PDF file', async({page})=>{
   await addCar(page);
   await page.locator('[data-action="add-entry"]').first().click();
   await page.locator('#title').fill('Замена масла для отчёта');
@@ -567,19 +567,7 @@ test('short and full vehicle reports render and invoke system PDF print', async(
   await page.locator('#laborCost').fill('1000');
   await page.locator('button[form="entry-form"]').click();
 
-  await page.evaluate(()=>{
-    window.__reportPrinted=false;
-    window.__reportPrintSameTask=false;
-    document.addEventListener('click',e=>{
-      if(!e.target.closest('[data-action="print-report"]'))return;
-      window.__reportPrintClickTask=true;
-      setTimeout(()=>{window.__reportPrintClickTask=false;},0);
-    },true);
-    window.print=()=>{
-      window.__reportPrinted=true;
-      window.__reportPrintSameTask=window.__reportPrintClickTask===true;
-    };
-  });
+  await page.evaluate(()=>{window.print=()=>{window.__unexpectedSystemPrint=true;};});
   await openProfile(page);
   await page.locator('.v5-menu [data-view="report"]').click();
   await expect(page.locator('.v5-subbar-title')).toHaveText('Отчёт автомобиля');
@@ -594,9 +582,17 @@ test('short and full vehicle reports render and invoke system PDF print', async(
   await expect(page.locator('.v5-report-paper')).toContainText('Расходы');
   await expect(page.locator('.v5-report-paper')).toContainText('Заправки');
 
-  await page.locator('[data-action="print-report"]').click();
-  await expect.poll(()=>page.evaluate(()=>window.__reportPrinted===true)).toBe(true);
-  await expect.poll(()=>page.evaluate(()=>window.__reportPrintSameTask===true)).toBe(true);
+  const [download]=await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('[data-action="print-report"]').click()
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^AutoJournal-.*\.pdf$/);
+  const pdfPath=await download.path();
+  expect(pdfPath).toBeTruthy();
+  const pdf=await fs.readFile(pdfPath);
+  expect(pdf.subarray(0,5).toString('ascii')).toBe('%PDF-');
+  expect(pdf.length).toBeGreaterThan(10000);
+  expect(await page.evaluate(()=>window.__unexpectedSystemPrint===true)).toBe(false);
   await expect(page.locator('.v5-tabbar')).toHaveCount(0);
 });
 
@@ -607,7 +603,7 @@ test.describe('offline PWA',()=>{
     await addCar(page);
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.5.2');
+    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.6.0');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
