@@ -1274,7 +1274,31 @@ document.addEventListener('click', async e=>{
   if(a==='go-back'){goBack();return;}
   if(a==='analytics-tab'){ui.analyticsTab=el.dataset.value||'expenses';nextTransition='fade';render();return;}
   if(a==='report-mode'){ui.reportMode=el.dataset.value==='full'?'full':'short';nextTransition='fade';render();return;}
-  if(a==='print-report'){const old=document.title,c=car();document.title=`AutoJournal-${c?.make||'auto'}-${c?.model||'report'}-${today()}`;document.body.classList.add('v5-print-report');setTimeout(()=>{window.print();setTimeout(()=>{document.body.classList.remove('v5-print-report');document.title=old;},200);},60);return;}
+  if(a==='print-report'){
+    const old=document.title,c=car();
+    document.title=`AutoJournal-${c?.make||'auto'}-${c?.model||'report'}-${today()}`;
+    document.body.classList.add('v5-print-report');
+    let cleaned=false;
+    const cleanupPrint=()=>{
+      if(cleaned)return;
+      cleaned=true;
+      document.body.classList.remove('v5-print-report');
+      document.title=old;
+    };
+    window.addEventListener('afterprint',cleanupPrint,{once:true});
+    try{
+      // Safari/iOS requires print() to run in the original user activation.
+      // A setTimeout here makes the installed PWA silently ignore the request.
+      void document.body.offsetHeight;
+      window.print();
+      setTimeout(cleanupPrint,2000);
+    }catch(err){
+      console.error('Unable to open print dialog',err);
+      cleanupPrint();
+      toast('Не удалось открыть системное окно печати');
+    }
+    return;
+  }
   if(a==='notif-tab'){ui.notificationTab=el.dataset.value||'auto';render();return;}
   if(a==='add-car'){ui.sheet='car';ui.sheetId=null;render();return;}
   if(a==='edit-current-car'){ui.sheet='car';ui.sheetId=state.activeCarId;render();return;}
