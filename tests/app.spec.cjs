@@ -736,9 +736,9 @@ test('profile exposes Vehicle Health instead of Documents and basic plan opens p
   await expect(page.locator('.v5-subbar-title')).toHaveText('Здоровье автомобиля');
   await expect(page.locator('.v5-health-hero')).toContainText('Базовый план заполнен: 0 из');
   await expect(page.locator('.v5-health-list').first()).toContainText('Моторное масло');
-  await expect(page.locator('[data-action="add-health-component"][data-system-key="engine_oil"]')).toBeVisible();
+  await expect(page.locator('[data-action="add-health-component"][data-health-system-key="engine_oil"]')).toBeVisible();
 
-  await page.locator('[data-action="add-health-component"][data-system-key="engine_oil"]').click();
+  await page.locator('[data-action="add-health-component"][data-health-system-key="engine_oil"]').click();
   await expect(page.locator('#component-form')).toBeVisible();
   await expect(page.locator('#systemKey')).toHaveValue('engine_oil');
   await expect(page.locator('#systemKeySearch')).toHaveValue('Моторное масло');
