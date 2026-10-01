@@ -1,4 +1,9 @@
 import { loadState, saveState, clearState } from './db.js';
+import {
+  getSyncApiUrl, createSyncSession, pairingQrSvg, pairingCodeShort, parsePairingCode,
+  getSyncSession, requestSyncMode, uploadSyncState, downloadSyncState,
+  consumeSyncSession, summarizeSyncState
+} from './sync.js';
 
 const APP_VERSION = 7;
 const $ = (sel, root=document) => root.querySelector(sel);
@@ -347,6 +352,17 @@ let navStack=[];
 let nextTransition='';
 let pendingPdfFile=null;
 let pendingPdfUrl='';
+let syncPair=null;
+let syncMode='';
+let syncIncoming=null;
+let syncIncomingPair=null;
+let syncQrStatus='Ждём сканирования на другом устройстве…';
+let syncProgressTitle='';
+let syncProgressText='';
+let syncPollTimer=0;
+let syncMediaStream=null;
+let syncScanFrame=0;
+let syncBusy=false;
 function isIOSStandalone(){
   const ua=String(navigator.userAgent||'');
   const isiOS=/iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&Number(navigator.maxTouchPoints)>1);
@@ -699,7 +715,8 @@ function docRow(d){
 async function storageInfoText(){ try{if(!navigator.storage?.estimate)return 'Недоступно'; const {usage=0,quota=0}=await navigator.storage.estimate(); return `${fmtNum(usage/1024/1024,1)} из ${fmtNum(quota/1024/1024,0)} МБ`; }catch{return 'Недоступно';}}
 
 function morePage(){
-  return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Настройки</h1><div class="v5-menu-page"><div class="v5-setting-row"><div><strong>Тема</strong><span>Системная, светлая или тёмная</span></div><select data-input="theme"><option value="system" ${state.settings.theme==='system'?'selected':''}>Система</option><option value="light" ${state.settings.theme==='light'?'selected':''}>Светлая</option><option value="dark" ${state.settings.theme==='dark'?'selected':''}>Тёмная</option></select></div><button data-action="calendar-export">${icons.calendar}<span><strong>Экспорт напоминаний</strong><small>Файл .ics для системного календаря</small></span><b>›</b></button><button data-action="backup-export">${icons.export}<span><strong>Резервная копия</strong><small>Все локальные данные в JSON</small></span><b>›</b></button><button data-action="backup-import">${icons.import}<span><strong>Восстановить копию</strong><small>Заменит текущие данные после подтверждения</small></span><b>›</b></button><button data-action="persist-storage">${icons.check}<span><strong>Защитить хранилище</strong><small>Запросить persistent storage</small></span><b>›</b></button></div><section class="section"><button class="btn danger block" data-action="reset-all">Удалить все локальные данные</button></section></div><input id="backup-input" type="file" accept="application/json,.json" hidden></main>`;
+  const syncReady=Boolean(getSyncApiUrl());
+  return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Настройки</h1><div class="v5-menu-page"><div class="v5-setting-row"><div><strong>Тема</strong><span>Системная, светлая или тёмная</span></div><select data-input="theme"><option value="system" ${state.settings.theme==='system'?'selected':''}>Система</option><option value="light" ${state.settings.theme==='light'?'selected':''}>Светлая</option><option value="dark" ${state.settings.theme==='dark'?'selected':''}>Тёмная</option></select></div><button data-action="sync-open">${icons.import}<span><strong>Передача данных по QR</strong><small>${syncReady?'Без аккаунта · зашифрованный обмен между устройствами':'Модуль готов · требуется подключить бесплатный relay'}</small></span><b>›</b></button><button data-action="calendar-export">${icons.calendar}<span><strong>Экспорт напоминаний</strong><small>Файл .ics для системного календаря</small></span><b>›</b></button><button data-action="backup-export">${icons.export}<span><strong>Резервная копия</strong><small>Все локальные данные в JSON</small></span><b>›</b></button><button data-action="backup-import">${icons.import}<span><strong>Восстановить копию</strong><small>Заменит текущие данные после подтверждения</small></span><b>›</b></button><button data-action="persist-storage">${icons.check}<span><strong>Защитить хранилище</strong><small>Запросить persistent storage</small></span><b>›</b></button></div><section class="section"><button class="btn danger block" data-action="reset-all">Удалить все локальные данные</button></section></div><input id="backup-input" type="file" accept="application/json,.json" hidden></main>`;
 }
 
 
@@ -1219,6 +1236,61 @@ function syncRefuelExpense(r){
 function remindersSheet(){ const list=allReminders(); return sheetWrap('Напоминания', list.length?`<div>${list.map(reminderCard).join('')}</div><div class="install-note" style="margin-top:16px"><strong>Важно:</strong> километровые сроки обновляются, когда ты вносишь текущий пробег. Если есть история пробега, экспорт в Календарь также прогнозирует дату по среднему километражу в день.</div>`:emptyState('Всё в порядке','Сейчас нет приближающихся или просроченных событий.',null,null,icons.check)); }
 
 function sheetWrap(title,body,foot=''){ return `<div class="sheet-backdrop" data-action="close-sheet"></div><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><div class="sheet-head"><div class="sheet-handle"></div><div class="sheet-title-row"><div class="sheet-title" id="sheet-title">${title}</div><button class="sheet-close" data-action="close-sheet" aria-label="Закрыть">${icons.close}</button></div></div><div class="sheet-body">${body}</div>${foot?`<div class="sheet-foot">${foot}</div>`:''}</section>`; }
+function syncErrorText(err){
+  const code=String(err?.message||err||'');
+  if(code.includes('SYNC_NOT_CONFIGURED'))return 'Сервер обмена ещё не подключён. Код приложения уже готов — осталось развернуть бесплатный Cloudflare Worker.';
+  if(code.includes('INVALID_QR'))return 'Это не QR-код AutoJournal.';
+  if(code.includes('session_expired')||err?.status===410)return 'Срок действия QR истёк. Покажите новый QR-код.';
+  if(code.includes('session_already_used')||err?.status===409)return 'Этот QR уже используется или обмен уже начался. Создайте новый QR.';
+  if(code.includes('SYNC_TOO_LARGE'))return 'Пакет данных слишком большой для одного обмена. Уменьшите вложения или используйте резервную копию.';
+  if(code.includes('OperationError'))return 'Не удалось расшифровать пакет. Проверьте, что используется QR именно этого сеанса.';
+  return 'Не удалось выполнить обмен данными. Проверьте интернет и попробуйте ещё раз.';
+}
+function syncSummaryHtml(s){
+  const x=summarizeSyncState(s);
+  return `<div class="v5-sync-summary"><div><strong>${x.cars}</strong><span>авто</span></div><div><strong>${x.service}</strong><span>сервис</span></div><div><strong>${x.refuels}</strong><span>заправки</span></div><div><strong>${x.expenses}</strong><span>расходы</span></div><div><strong>${x.components}</strong><span>узлы</span></div><div><strong>${x.documents}</strong><span>документы</span></div></div>`;
+}
+function syncOverviewSheet(){
+  const ready=Boolean(getSyncApiUrl());
+  const body=`<div class="v5-sync-intro"><div class="v5-sync-lock">↔</div><strong>Обмен без аккаунтов</strong><p>На втором устройстве откройте этот же раздел и нажмите «Показать QR». На телефоне выберите направление и отсканируйте его.</p></div>
+    ${!ready?'<div class="install-note"><strong>Relay ещё не подключён.</strong><br>Интерфейс, QR, шифрование и серверный код уже добавлены. Для реального обмена нужен URL бесплатного Cloudflare Worker.</div>':''}
+    <div class="v5-sync-mode-grid">
+      <button class="v5-sync-mode" data-action="sync-scan-push" ${ready?'':'disabled'}><span class="v5-sync-mode-icon">↑</span><strong>Передача данных</strong><small>Сканирую QR другого устройства и отправляю ему данные с этого устройства.</small></button>
+      <button class="v5-sync-mode" data-action="sync-scan-pull" ${ready?'':'disabled'}><span class="v5-sync-mode-icon">↓</span><strong>Получение данных</strong><small>Сканирую QR другого устройства и загружаю его данные на это устройство.</small></button>
+    </div>
+    <button class="btn block v5-sync-show" data-action="sync-show-qr" ${ready?'':'disabled'}>Показать QR на этом устройстве</button>
+    <div class="helper">QR одноразовый и действует ограниченное время. Содержимое журнала перед отправкой шифруется на устройстве.</div>`;
+  return sheetWrap('Передача данных по QR',body);
+}
+function syncQrSheet(){
+  if(!syncPair)return sheetWrap('QR для подключения','<div class="install-note">Сеанс не найден. Создайте QR ещё раз.</div>');
+  let qr='';try{qr=pairingQrSvg(syncPair);}catch{}
+  const body=`<div class="v5-sync-qr-wrap"><div class="v5-sync-qr" data-sync-qr>${qr}</div><strong>Покажите этот QR другому устройству</strong><p>На телефоне выберите «Передача данных» или «Получение данных» и отсканируйте код.</p><div class="v5-sync-code">Сеанс ${esc(pairingCodeShort(syncPair))}</div><div class="v5-sync-status" data-sync-status>${esc(syncQrStatus)}</div></div>`;
+  return sheetWrap('QR для подключения',body);
+}
+function syncScanSheet(){
+  const sending=syncMode==='push';
+  const body=`<div class="v5-sync-scan-intro"><strong>${sending?'Передача данных':'Получение данных'}</strong><p>${sending?'После сканирования данные с этого устройства будут зашифрованы и отправлены устройству с QR.':'После сканирования это устройство запросит зашифрованные данные у устройства с QR.'}</p></div>
+    <div class="v5-sync-camera"><video data-sync-video playsinline muted></video><div class="v5-sync-camera-frame"></div><div class="v5-sync-camera-placeholder" data-sync-camera-placeholder>Камера ещё не запущена</div></div>
+    <button class="btn primary block" data-action="sync-camera-start">Открыть камеру</button>
+    <button class="btn block" style="margin-top:8px" data-action="sync-photo-open">Считать QR с фотографии</button>
+    <input type="file" accept="image/*" capture="environment" data-sync-photo hidden>
+    <div class="v5-sync-manual"><div class="field"><label for="syncManualCode">Или вставьте код вручную</label><textarea class="input" id="syncManualCode" data-sync-manual placeholder="AJ1:…"></textarea></div><button class="btn block" data-action="sync-manual-code">Продолжить</button></div>`;
+  return sheetWrap(sending?'Передача данных':'Получение данных',body);
+}
+function syncProgressSheet(){
+  return sheetWrap(syncProgressTitle||'Обмен данными',`<div class="v5-sync-progress"><div class="v5-sync-spinner"></div><strong>${esc(syncProgressTitle||'Обмен данными')}</strong><p>${esc(syncProgressText||'Выполняется защищённый обмен…')}</p></div>`);
+}
+function syncImportSheet(){
+  const incoming=syncIncoming?.state||{};
+  const body=`<div class="install-note"><strong>Получен зашифрованный журнал.</strong><br>Проверьте состав данных перед сохранением на этом устройстве.</div>${syncSummaryHtml(incoming)}<div class="v5-sync-choice"><div><strong>Объединить</strong><span>Добавить новые данные. При совпадении ID версия с устройства-источника имеет приоритет.</span></div><div><strong>Заменить</strong><span>Полностью заменить локальный журнал полученным.</span></div></div>`;
+  const foot=`<button class="btn primary block" data-action="sync-import-merge">Объединить данные</button><button class="btn danger block" style="margin-top:8px" data-action="sync-import-replace">Заменить данные этого устройства</button>`;
+  return sheetWrap('Получены данные',body,foot);
+}
+function syncSuccessSheet(){
+  return sheetWrap('Обмен завершён','<div class="v5-sync-success"><div class="v5-sync-success-icon">✓</div><strong>Данные переданы</strong><p>Одноразовый сеанс закрыт. QR больше нельзя использовать повторно.</p></div>','<button class="btn primary block" data-action="close-sheet">Готово</button>');
+}
+
 function inputField(label,name,value='',type='text',extra=''){ return `<div class="field"><label for="${name}">${label}</label><input class="input" id="${name}" name="${name}" type="${type}" value="${esc(value??'')}" ${extra}></div>`; }
 function selectField(label,name,options,value=''){ return `<div class="field"><label for="${name}">${label}</label><select class="input" id="${name}" name="${name}">${options.map(o=>{const [v,t]=Array.isArray(o)?o:[o,o];return `<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(t)}</option>`}).join('')}</select></div>`; }
 
@@ -1364,7 +1436,7 @@ function pdfReadySheet(){
   return sheetWrap('PDF готов',body,foot);
 }
 
-function renderSheet(){if(!ui.sheet)return '';if(ui.sheet==='pdf-ready')return pdfReadySheet();if(ui.sheet==='profile')return profileSheet();if(ui.sheet==='reminders')return remindersSheet();if(ui.sheet==='car')return carSheet(ui.sheetId);if(ui.sheet==='garage')return garageSheet();if(ui.sheet==='odometer')return odometerSheet();if(ui.sheet==='entry')return entrySheet(ui.sheetId);if(ui.sheet==='component')return componentSheet(ui.sheetId);if(ui.sheet==='expense')return expenseSheet(ui.sheetId);if(ui.sheet==='document')return documentSheet(ui.sheetId);if(ui.sheet==='refuel')return refuelSheet(ui.sheetId);if(ui.sheet==='entry-detail')return entryDetailSheet(ui.sheetId);if(ui.sheet==='component-detail')return componentDetailSheet(ui.sheetId);if(ui.sheet==='expense-detail')return expenseDetailSheet(ui.sheetId);if(ui.sheet==='document-detail')return documentDetailSheet(ui.sheetId);if(ui.sheet==='refuel-detail')return refuelDetailSheet(ui.sheetId);return '';}
+function renderSheet(){if(!ui.sheet)return '';if(ui.sheet==='sync')return syncOverviewSheet();if(ui.sheet==='sync-qr')return syncQrSheet();if(ui.sheet==='sync-scan')return syncScanSheet();if(ui.sheet==='sync-progress')return syncProgressSheet();if(ui.sheet==='sync-import')return syncImportSheet();if(ui.sheet==='sync-success')return syncSuccessSheet();if(ui.sheet==='pdf-ready')return pdfReadySheet();if(ui.sheet==='profile')return profileSheet();if(ui.sheet==='reminders')return remindersSheet();if(ui.sheet==='car')return carSheet(ui.sheetId);if(ui.sheet==='garage')return garageSheet();if(ui.sheet==='odometer')return odometerSheet();if(ui.sheet==='entry')return entrySheet(ui.sheetId);if(ui.sheet==='component')return componentSheet(ui.sheetId);if(ui.sheet==='expense')return expenseSheet(ui.sheetId);if(ui.sheet==='document')return documentSheet(ui.sheetId);if(ui.sheet==='refuel')return refuelSheet(ui.sheetId);if(ui.sheet==='entry-detail')return entryDetailSheet(ui.sheetId);if(ui.sheet==='component-detail')return componentDetailSheet(ui.sheetId);if(ui.sheet==='expense-detail')return expenseDetailSheet(ui.sheetId);if(ui.sheet==='document-detail')return documentDetailSheet(ui.sheetId);if(ui.sheet==='refuel-detail')return refuelDetailSheet(ui.sheetId);return '';}
 
 function navigateTo(view,{replace=false}={}){
   if(!view)return;
@@ -1677,6 +1749,7 @@ document.addEventListener('keydown',e=>{
   }
 });
 document.addEventListener('change', async e=>{
+  if(e.target.matches('[data-sync-photo]')){await scanSyncImage(e.target.files?.[0]);e.target.value='';return;}
   if(e.target.id==='systemKey'&&e.target.closest('#entry-form')){
     const form=e.target.closest('#entry-form'),key=e.target.value,info=vehicleSystemInfo(key);
     const comp=state.components.filter(c=>c.carId===car()?.id&&c.systemKey===key).sort((a,b)=>String(componentState(b).installedDate).localeCompare(String(componentState(a).installedDate)))[0];
@@ -1705,7 +1778,7 @@ document.addEventListener('click', async e=>{
     return;
   }
   if(a==='system-combobox-select'){chooseSystemComboboxValue(el.closest('[data-system-combobox]'),el.dataset.systemKey);return;}
-  if(a==='close-sheet'){const sheet=document.querySelector('.sheet'),backdrop=document.querySelector('.sheet-backdrop');if(sheet)closeSheetAfterGesture(sheet,backdrop);else{ui.sheet=null;ui.sheetId=null;render();}return;}
+  if(a==='close-sheet'){if(String(ui.sheet||'').startsWith('sync')){stopSyncPolling();stopSyncScanner();}const sheet=document.querySelector('.sheet'),backdrop=document.querySelector('.sheet-backdrop');if(sheet)closeSheetAfterGesture(sheet,backdrop);else{ui.sheet=null;ui.sheetId=null;render();}return;}
   if(a==='open-reminders'){ui.sheet='reminders';render();return;}
   if(a==='open-profile'){navigateTo('profile');return;}
   if(a==='go-back'){goBack();return;}
@@ -1760,6 +1833,15 @@ document.addEventListener('click', async e=>{
   if(a==='share-stored-file'){await shareStoredFile(el.dataset.doc,Number(el.dataset.index));return;}
   if(a==='remove-stored-file'){const d=state.documents.find(x=>x.id===el.dataset.doc),i=Number(el.dataset.index);if(d?.files?.[i]&&confirm(`Удалить файл «${d.files[i].name}»?`)){d.files.splice(i,1);await persist();render();toast('Файл удалён');}return;}
   if(a==='open-image'){window.open(el.getAttribute('src'),'_blank');return;}
+  if(a==='sync-open'){resetSyncTransient();ui.sheet='sync';render();return;}
+  if(a==='sync-show-qr'){await startSyncDisplaySession();return;}
+  if(a==='sync-scan-push'){syncMode='push';ui.sheet='sync-scan';render();return;}
+  if(a==='sync-scan-pull'){syncMode='pull';ui.sheet='sync-scan';render();return;}
+  if(a==='sync-camera-start'){await startSyncCamera();return;}
+  if(a==='sync-photo-open'){document.querySelector('[data-sync-photo]')?.click();return;}
+  if(a==='sync-manual-code'){const value=document.querySelector('[data-sync-manual]')?.value||'';if(!value.trim()){toast('Вставьте код из QR');return;}await handleScannedSyncCode(value);return;}
+  if(a==='sync-import-merge'){await applyIncomingSync(false);return;}
+  if(a==='sync-import-replace'){await applyIncomingSync(true);return;}
   if(a==='backup-export'){await exportBackup();return;}
   if(a==='backup-import'){$('#backup-input')?.click();return;}
   if(a==='calendar-export'){exportCalendar();return;}
@@ -1884,6 +1966,133 @@ function openStoredFile(docId,index){ const d=state.documents.find(x=>x.id===doc
 async function shareStoredFile(docId,index){ const d=state.documents.find(x=>x.id===docId); const f=d?.files?.[index]; if(!f)return; try{ const res=await fetch(f.data); const blob=await res.blob(); const file=new File([blob],f.name,{type:f.type||blob.type||'application/octet-stream'}); if(navigator.canShare?.({files:[file]})){ await navigator.share({title:d.title,files:[file]}); } else { openStoredFile(docId,index); toast('Системный Share для файлов недоступен — файл открыт'); } }catch{ openStoredFile(docId,index); } }
 
 function downloadText(name,text,type='application/json'){ const blob=new Blob([text],{type}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000); }
+function mergeSyncStates(localRaw,incomingRaw){
+  const local=migrate(localRaw),incoming=migrate(incomingRaw);
+  const result={...local};
+  for(const key of ['cars','odometerLogs','serviceEntries','components','expenses','documents','refuels']){
+    const map=new Map((local[key]||[]).map(x=>[String(x.id),x]));
+    for(const item of incoming[key]||[])map.set(String(item.id),item);
+    result[key]=[...map.values()];
+  }
+  result.settings={...local.settings,...incoming.settings,theme:local.settings.theme,lastBackupAt:local.settings.lastBackupAt};
+  result.nextSeq=Math.max(nonneg(local.nextSeq,1),nonneg(incoming.nextSeq,1));
+  result.activeCarId=result.cars.some(x=>x.id===incoming.activeCarId)?incoming.activeCarId:(result.cars.some(x=>x.id===local.activeCarId)?local.activeCarId:result.cars[0]?.id||null);
+  return migrate(result);
+}
+function stopSyncPolling(){if(syncPollTimer){clearTimeout(syncPollTimer);syncPollTimer=0;}}
+function stopSyncScanner(){
+  if(syncScanFrame){cancelAnimationFrame(syncScanFrame);syncScanFrame=0;}
+  if(syncMediaStream){for(const track of syncMediaStream.getTracks())track.stop();syncMediaStream=null;}
+  const video=document.querySelector('[data-sync-video]');if(video)video.srcObject=null;
+}
+function resetSyncTransient(){
+  stopSyncPolling();stopSyncScanner();syncBusy=false;syncPair=null;syncMode='';syncIncoming=null;syncIncomingPair=null;syncQrStatus='Ждём сканирования на другом устройстве…';syncProgressTitle='';syncProgressText='';
+}
+async function startSyncDisplaySession(){
+  try{
+    resetSyncTransient();syncQrStatus='Создаём защищённый одноразовый сеанс…';
+    syncPair=await createSyncSession();syncQrStatus='Ждём сканирования на другом устройстве…';ui.sheet='sync-qr';render();pollSyncDisplay();
+  }catch(err){console.error('Could not create sync session',err);toast(syncErrorText(err));}
+}
+function scheduleSyncPoll(fn,ms=1100){stopSyncPolling();syncPollTimer=setTimeout(fn,ms);}
+async function pollSyncDisplay(){
+  if(!syncPair||!['sync-qr','sync-progress'].includes(ui.sheet))return;
+  const pair=syncPair;
+  try{
+    const status=await getSyncSession(pair);
+    if(status.status==='requested'&&status.mode==='pull'&&!syncBusy){
+      syncBusy=true;syncQrStatus='Другое устройство запросило данные. Шифруем журнал…';if(ui.sheet==='sync-qr')render();
+      await uploadSyncState(pair,state,'display');
+      syncQrStatus='Данные готовы. Ждём сохранения на другом устройстве…';syncBusy=false;if(ui.sheet==='sync-qr')render();
+    }else if(status.status==='ready'&&status.mode==='push'&&!syncBusy){
+      syncBusy=true;syncQrStatus='Получаем и расшифровываем журнал…';if(ui.sheet==='sync-qr')render();
+      syncIncoming=await downloadSyncState(pair,status);syncIncomingPair=pair;syncBusy=false;stopSyncPolling();ui.sheet='sync-import';render();return;
+    }else if(status.status==='consumed'){
+      stopSyncPolling();ui.sheet='sync-success';render();return;
+    }
+  }catch(err){
+    if(err?.status===404||err?.status===410){stopSyncPolling();toast(syncErrorText(err));ui.sheet='sync';render();return;}
+    console.warn('Sync display poll failed',err);
+  }
+  scheduleSyncPoll(pollSyncDisplay);
+}
+async function startSyncCamera(){
+  const video=document.querySelector('[data-sync-video]'),placeholder=document.querySelector('[data-sync-camera-placeholder]');
+  if(!video)return;
+  if(!navigator.mediaDevices?.getUserMedia){toast('Камера недоступна. Используйте фотографию QR или вставьте код вручную.');return;}
+  stopSyncScanner();
+  try{
+    syncMediaStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    video.srcObject=syncMediaStream;await video.play();if(placeholder)placeholder.hidden=true;
+    const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{willReadFrequently:true});
+    const scan=()=>{
+      if(ui.sheet!=='sync-scan'||!syncMediaStream)return stopSyncScanner();
+      if(video.readyState>=2&&video.videoWidth&&video.videoHeight){
+        const scale=Math.min(1,720/video.videoWidth);canvas.width=Math.max(1,Math.round(video.videoWidth*scale));canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
+        ctx.drawImage(video,0,0,canvas.width,canvas.height);
+        const image=ctx.getImageData(0,0,canvas.width,canvas.height);
+        const result=window.jsQR?.(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
+        if(result?.data){stopSyncScanner();handleScannedSyncCode(result.data);return;}
+      }
+      syncScanFrame=requestAnimationFrame(scan);
+    };
+    scan();
+  }catch(err){console.warn('Camera access failed',err);toast('Не удалось открыть камеру. Можно выбрать фотографию QR или вставить код вручную.');}
+}
+async function scanSyncImage(file){
+  if(!file)return;
+  try{
+    const bitmap=await createImageBitmap(file),canvas=document.createElement('canvas'),max=1400,scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height));
+    canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
+    const image=ctx.getImageData(0,0,canvas.width,canvas.height),result=window.jsQR?.(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
+    if(!result?.data){toast('QR-код на изображении не найден');return;}
+    await handleScannedSyncCode(result.data);
+  }catch(err){console.error('QR image scan failed',err);toast('Не удалось прочитать QR с изображения');}
+}
+async function handleScannedSyncCode(raw){
+  stopSyncScanner();
+  let pair;try{pair=parsePairingCode(raw);}catch(err){toast(syncErrorText(err));return;}
+  syncPair=pair;
+  try{
+    if(syncMode==='push'){
+      syncProgressTitle='Передача данных';syncProgressText='Шифруем журнал и отправляем на другое устройство…';ui.sheet='sync-progress';render();
+      await requestSyncMode(pair,'push');await uploadSyncState(pair,state,'scanner');
+      syncProgressText='Данные отправлены. Подтвердите получение на другом устройстве.';render();pollSyncSenderConsumed();
+    }else if(syncMode==='pull'){
+      syncProgressTitle='Получение данных';syncProgressText='Запрашиваем данные у другого устройства…';ui.sheet='sync-progress';render();
+      await requestSyncMode(pair,'pull');pollSyncReceiverReady();
+    }else throw new Error('INVALID_MODE');
+  }catch(err){console.error('QR sync failed',err);toast(syncErrorText(err));ui.sheet='sync';render();}
+}
+async function pollSyncSenderConsumed(){
+  if(!syncPair||ui.sheet!=='sync-progress')return;
+  try{const status=await getSyncSession(syncPair);if(status.status==='consumed'){stopSyncPolling();ui.sheet='sync-success';render();return;}}catch(err){console.warn('Sync sender poll failed',err);}
+  scheduleSyncPoll(pollSyncSenderConsumed);
+}
+async function pollSyncReceiverReady(){
+  if(!syncPair||ui.sheet!=='sync-progress')return;
+  try{
+    const status=await getSyncSession(syncPair);
+    if(status.status==='ready'){
+      syncProgressText='Расшифровываем полученный журнал…';render();
+      syncIncoming=await downloadSyncState(syncPair,status);syncIncomingPair=syncPair;stopSyncPolling();ui.sheet='sync-import';render();return;
+    }
+  }catch(err){if(err?.status===410){toast(syncErrorText(err));ui.sheet='sync';render();return;}console.warn('Sync receiver poll failed',err);}
+  scheduleSyncPoll(pollSyncReceiverReady);
+}
+async function applyIncomingSync(replace=false){
+  if(!syncIncoming?.state)return;
+  if(replace&&!confirm('Полностью заменить локальные данные полученным журналом? Это действие нельзя отменить без резервной копии.'))return;
+  try{
+    const pair=syncIncomingPair;
+    state=replace?migrate(syncIncoming.state):mergeSyncStates(state,syncIncoming.state);
+    await persist();applyTheme();navStack=[];ui.view='home';ui.sheet='sync-success';render();
+    if(pair)try{await consumeSyncSession(pair);}catch(err){console.warn('Could not close sync session',err);}
+    syncIncoming=null;syncIncomingPair=null;
+  }catch(err){console.error('Could not apply sync data',err);toast('Не удалось сохранить полученные данные');}
+}
+
 async function exportBackup(){state.settings.lastBackupAt=new Date().toISOString();await persist();downloadText(`autojournal-backup-${nowISO()}.json`,JSON.stringify(state,null,2));toast('Резервная копия создана');}
 async function importBackupFile(file){
   if(!file)return;if(file.size>80*1024*1024){toast('Резервная копия слишком большая');return;}
