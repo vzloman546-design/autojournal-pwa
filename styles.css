@@ -1348,3 +1348,20 @@ body.v5-sheet-settling .sheet-backdrop{
   .v5-sync-mode-icon{grid-row:1/3}
   .v5-sync-mode small{grid-column:2}
 }
+
+
+.v5-sync-live{
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;
+  padding:12px;border:1px solid var(--line);border-radius:15px;background:var(--surface-2);margin:12px 0
+}
+.v5-sync-live-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 12%,transparent)}
+.v5-sync-live.syncing .v5-sync-live-dot{animation:v5-sync-pulse 1s ease-in-out infinite}
+.v5-sync-live.offline .v5-sync-live-dot,.v5-sync-live.error .v5-sync-live-dot{background:var(--muted);box-shadow:none}
+.v5-sync-live-main{display:grid;gap:2px;min-width:0}
+.v5-sync-live-main strong{font-size:13px}
+.v5-sync-live-main span{font-size:11px;line-height:1.35;color:var(--muted)}
+@keyframes v5-sync-pulse{50%{transform:scale(.72);opacity:.55}}
+@media(max-width:430px){
+  .v5-sync-live{grid-template-columns:auto minmax(0,1fr)}
+  .v5-sync-live .btn{grid-column:1/-1;width:100%}
+}
