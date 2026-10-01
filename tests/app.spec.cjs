@@ -595,6 +595,29 @@ test('short and full vehicle reports render and download a real PDF file', async
   await expect(page.locator('.v5-tabbar')).toHaveCount(0);
 });
 
+test('iPhone standalone PDF prepares a native shareable PDF file', async({page,browserName})=>{
+  test.skip(browserName!=='webkit','Standalone iPhone share path is WebKit-specific.');
+  await addCar(page);
+  await page.evaluate(()=>{
+    Object.defineProperty(navigator,'standalone',{configurable:true,get:()=>true});
+    navigator.canShare=data=>Array.isArray(data?.files)&&data.files[0]?.type==='application/pdf';
+    navigator.share=async data=>{
+      const file=data.files[0];
+      window.__sharedPdf={name:file.name,type:file.type,size:file.size};
+    };
+  });
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="report"]').click();
+  await page.locator('[data-action="print-report"]').click();
+  await expect(page.locator('.sheet')).toContainText('PDF готов');
+  await expect(page.locator('[data-action="share-ready-pdf"]')).toBeVisible();
+  await page.locator('[data-action="share-ready-pdf"]').click();
+  await expect.poll(()=>page.evaluate(()=>window.__sharedPdf?.type)).toBe('application/pdf');
+  const shared=await page.evaluate(()=>window.__sharedPdf);
+  expect(shared.name).toMatch(/^AutoJournal-.*\.pdf$/);
+  expect(shared.size).toBeGreaterThan(10000);
+});
+
 test.describe('offline PWA',()=>{
   test.use({serviceWorkers:'allow'});
   test('cached shell and IndexedDB remain usable offline',async({page,context,browserName})=>{
