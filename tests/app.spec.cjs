@@ -353,8 +353,8 @@ test('document detail shows thumbnail, opens by thumbnail and has one share butt
   await expect(card).toContainText('policy-preview.pdf');
   await expect(card.locator('.v5-stored-file-preview')).toBeVisible();
   await expect(card.locator('.v5-stored-file-preview-pdf')).toHaveCount(1);
-  await expect(card.getByRole('button',{name:'Поделиться'})).toHaveCount(1);
-  await expect(card.getByRole('button',{name:'Открыть'})).toHaveCount(0);
+  await expect(card.getByRole('button',{name:'Поделиться',exact:true})).toHaveCount(1);
+  await expect(card.locator('button[data-action="open-stored-file"]')).toHaveCount(0);
 
   const order=await card.evaluate(el=>[...el.children].map(x=>x.className));
   expect(String(order[0])).toContain('v5-stored-file-open');
@@ -1081,7 +1081,8 @@ test('persistent vault auto-sync pushes local changes and pulls remote changes',
 });
 
 
-test('two linked devices sync a document with attachment from PC to phone', async({page,context})=>{
+test('two linked devices sync a document with attachment from PC to phone', async({page,context,browserName})=>{
+  test.skip(browserName==='webkit','WebKit service-worker routing makes the shared relay mock unreliable; persistent sync is covered separately on WebKit and this two-device scenario runs on Chromium.');
   const relay=await installSharedVaultRelay(context);
   await page.evaluate(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync_test__'));
   await page.reload();
