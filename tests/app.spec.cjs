@@ -43,7 +43,7 @@ function isoOffset(days){
 }
 async function installSyncRelayMock(page){
   await page.evaluate(()=>{
-    localStorage.setItem('autojournal-sync-api','https://sync.test');
+    localStorage.setItem('autojournal-sync-api',location.origin+'/__sync_test__');
     const realFetch=window.fetch.bind(window);
     window.__syncMock={sessions:{},vaults:{}};
     window.fetch=async(input,init={})=>{
@@ -124,15 +124,10 @@ async function installSyncRelayMock(page){
 
 async function installSharedVaultRelay(context){
   const vaults={};
-  await context.route('https://sync.test/**',async route=>{
-    const req=route.request(),url=new URL(req.url()),method=req.method().toUpperCase(),path=url.pathname;
-    const cors={
-      'Access-Control-Allow-Origin':'*',
-      'Access-Control-Allow-Methods':'GET,POST,PUT,OPTIONS',
-      'Access-Control-Allow-Headers':'Authorization,Content-Type'
-    };
-    const json=(status,value)=>route.fulfill({status,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify(value)});
-    if(method==='OPTIONS')return route.fulfill({status:204,headers:cors,body:''});
+  await context.route('**/__sync_test__/**',async route=>{
+    const req=route.request(),url=new URL(req.url()),method=req.method().toUpperCase(),path=url.pathname.replace(/^\/__sync_test__/,'');
+    const json=(status,value)=>route.fulfill({status,headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
+    if(method==='OPTIONS')return route.fulfill({status:204,body:''});
     if(path==='/v1/vaults'&&method==='POST'){
       const body=JSON.parse(req.postData()||'{}'),id=body.id,existing=vaults[id];
       if(existing&&existing.verifier!==body.verifier)return json(409,{error:'vault_conflict'});
@@ -160,7 +155,7 @@ async function installSharedVaultRelay(context){
     }
     return json(404,{error:'not_found'});
   });
-  await context.addInitScript(()=>localStorage.setItem('autojournal-sync-api','https://sync.test'));
+  await context.addInitScript(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync_test__'));
   return vaults;
 }
 
@@ -1033,7 +1028,7 @@ test('persistent vault auto-sync pushes local changes and pulls remote changes',
 
 test('two linked devices sync a document with attachment from PC to phone', async({page,context})=>{
   const relay=await installSharedVaultRelay(context);
-  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api','https://sync.test'));
+  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync_test__'));
   await page.reload();
   await addCar(page);
 
