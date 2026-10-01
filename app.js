@@ -1893,6 +1893,7 @@ function resetSheetSwipeVisuals(sheet,backdrop){
 }
 function closeSheetAfterGesture(sheet,backdrop){
   if(!sheet||!ui.sheet)return;
+  if(String(ui.sheet||'').startsWith('sync')){stopSyncPolling();stopSyncScanner();}
   document.body.classList.add('v5-sheet-settling');
   sheet.style.transition='transform .2s cubic-bezier(.22,.61,.36,1)';
   sheet.style.transform='translate3d(0,105%,0)';
