@@ -846,7 +846,8 @@ test('persistent vault auto-sync pushes local changes and pulls remote changes',
     return s.serviceEntries.some(x=>x.id==='remote-service-entry'&&x.title==='Запись с другого устройства');
   },{timeout:10000}).toBe(true);
 
-  await openProfile(page);
+  await page.locator('[data-action="go-back"]').click();
+  await expect(page.locator('.v5-subbar-title')).toHaveText('Профиль');
   await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
   await expect(page.locator('.sheet')).toContainText('Автосинхронизация включена');
