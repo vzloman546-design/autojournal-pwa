@@ -507,7 +507,6 @@ test('vehicle passport stores photo and technical specifications', async({page})
   await page.locator('#engineOilVolume').fill('4.0');
   await page.locator('.v5-spec-editor summary',{hasText:'Охлаждение'}).click();
   await page.locator('#coolantVolume').fill('7.0');
-  await page.locator('.v5-spec-editor summary',{hasText:'Трансмиссия'}).click();
   await page.locator('#transmissionOilVolume').fill('2.0');
   await page.locator('.v5-spec-editor summary',{hasText:'Тормозная система'}).click();
   await page.locator('#brakeFluidVolume').fill('0.8');
