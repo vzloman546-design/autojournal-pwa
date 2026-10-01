@@ -1365,3 +1365,108 @@ body.v5-sheet-settling .sheet-backdrop{
   .v5-sync-live{grid-template-columns:auto minmax(0,1fr)}
   .v5-sync-live .btn{grid-column:1/-1;width:100%}
 }
+
+
+/* First launch */
+.v5-first-run{
+  min-height:100dvh;
+  display:grid;
+  place-items:center;
+  padding:24px 18px calc(24px + env(safe-area-inset-bottom));
+  background:var(--bg);
+}
+.v5-first-run-shell{
+  width:min(100%,520px);
+  display:grid;
+  gap:24px;
+}
+.v5-first-run-brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-weight:800;
+  font-size:17px;
+  letter-spacing:-.02em;
+}
+.v5-first-run-logo{
+  width:44px;
+  height:44px;
+  display:grid;
+  place-items:center;
+  border-radius:14px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  box-shadow:0 8px 28px rgba(0,0,0,.06);
+}
+.v5-first-run-logo .icon{width:25px;height:25px}
+.v5-first-run-copy{display:grid;gap:8px}
+.v5-first-run-copy h1{
+  margin:0;
+  font-size:34px;
+  line-height:1.05;
+  letter-spacing:-.045em;
+}
+.v5-first-run-copy p{
+  margin:0;
+  max-width:430px;
+  color:var(--muted);
+  font-size:15px;
+  line-height:1.5;
+}
+.v5-first-run-actions{display:grid;gap:12px}
+.v5-first-run-card{
+  width:100%;
+  min-height:94px;
+  display:grid;
+  grid-template-columns:48px minmax(0,1fr) auto;
+  align-items:center;
+  gap:14px;
+  padding:16px;
+  text-align:left;
+  color:inherit;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:18px;
+  box-shadow:0 10px 34px rgba(0,0,0,.055);
+}
+.v5-first-run-card:active{transform:scale(.985)}
+.v5-first-run-card:disabled{opacity:.5}
+.v5-first-run-card-icon{
+  width:48px;
+  height:48px;
+  display:grid;
+  place-items:center;
+  border-radius:15px;
+  background:var(--surface-2);
+  font-size:24px;
+  font-weight:700;
+}
+.v5-first-run-card-icon .icon{width:24px;height:24px}
+.v5-first-run-card.receive .v5-first-run-card-icon{
+  background:var(--accent);
+  color:white;
+}
+.v5-first-run-card-text{display:grid;gap:4px}
+.v5-first-run-card-text strong{font-size:16px}
+.v5-first-run-card-text small{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.4;
+}
+.v5-first-run-card>b{
+  color:var(--muted);
+  font-size:26px;
+  font-weight:400;
+}
+.v5-first-run-note{
+  text-align:center;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.45;
+  padding:0 18px;
+}
+@media(max-width:430px){
+  .v5-first-run{place-items:stretch;padding-top:max(28px,env(safe-area-inset-top))}
+  .v5-first-run-shell{align-self:center}
+  .v5-first-run-copy h1{font-size:31px}
+}
