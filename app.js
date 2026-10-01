@@ -287,12 +287,27 @@ function clearPendingPdf(){
   pendingPdfUrl='';
   pendingPdfFile=null;
 }
+function triggerPdfDownload(blob,filename){
+  if(!blob||!filename)return false;
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=filename;
+  a.rel='noopener';
+  a.style.display='none';
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+  return true;
+}
 function downloadPendingPdf(){
   if(!pendingPdfFile||!pendingPdfUrl){toast('PDF ещё не готов');return;}
   const a=document.createElement('a');
   a.href=pendingPdfUrl;
   a.download=pendingPdfFile.name;
   a.rel='noopener';
+  a.style.display='none';
   document.body.append(a);a.click();a.remove();
 }
 
@@ -846,9 +861,10 @@ function saveVehicleReportPdf(){
     const filename=vehicleReportPdfFilename();
     const pdf=window.pdfMake.createPdf(definition);
     toast('Формируем PDF…');
-    if(isIOSStandalone()){
-      pdf.getBlob(blob=>{
-        try{
+    pdf.getBlob(blob=>{
+      try{
+        if(!(blob instanceof Blob)||blob.size<5)throw new Error('empty PDF blob');
+        if(isIOSStandalone()){
           clearPendingPdf();
           pendingPdfFile=new File([blob],filename,{type:'application/pdf'});
           pendingPdfUrl=URL.createObjectURL(blob);
@@ -856,14 +872,15 @@ function saveVehicleReportPdf(){
           ui.sheetId=null;
           render();
           toast('PDF готов');
-        }catch(err){
-          console.error('PDF preparation failed',err);
-          toast('Не удалось подготовить PDF');
+          return;
         }
-      });
-      return;
-    }
-    pdf.download(filename,()=>toast('PDF создан'));
+        if(!triggerPdfDownload(blob,filename))throw new Error('download trigger failed');
+        toast('PDF создан');
+      }catch(err){
+        console.error('PDF preparation failed',err);
+        toast('Не удалось подготовить PDF');
+      }
+    });
   }catch(err){
     console.error('PDF generation failed',err);
     toast('Не удалось сформировать PDF');
