@@ -814,6 +814,17 @@ test('persistent vault auto-sync pushes local changes and pulls remote changes',
     return Object.keys(v?.records||{}).some(k=>k.startsWith('odometerLogs:'));
   }),{timeout:10000}).toBe(true);
 
+  await gotoSecondary(page,'documents');
+  await page.locator('[data-action="add-document"]').last().click();
+  await page.locator('#title').fill('Документ для автосинхронизации');
+  await page.locator('#type').fill('Прочее');
+  await page.locator('#number').fill('SYNC-DOC-1');
+  await page.locator('button[form="document-form"]').click();
+  await expect.poll(()=>page.evaluate(()=>{
+    const v=Object.values(window.__syncMock.vaults)[0];
+    return Object.keys(v?.records||{}).some(k=>k.startsWith('documents:'));
+  }),{timeout:10000}).toBe(true);
+
   const carId=(await state(page)).cars[0].id;
   await page.evaluate(async carId=>{
     const sync=await import(new URL('./sync.js',location.href).href);
