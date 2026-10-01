@@ -1538,7 +1538,7 @@ function entrySheet(id=null){
 }
 
 function componentSheet(id=null){
-  const x=id?state.components.find(c=>c.id===id):null,selected=x?.systemKey||inferSystemKey(x?.name,x?.category)||'';
+  const x=id?state.components.find(c=>c.id===id):null,selected=x?.systemKey||ui.healthSystemKey||inferSystemKey(x?.name,x?.category)||'';
   const body=`<form id="component-form"><input type="hidden" name="id" value="${x?.id||''}">
     <div class="form-section"><div class="field-grid">${groupedVehicleSystemField('Узел автомобиля','systemKey',selected,true)}
       <div class="field-grid two">${inputField('Бренд','brand',x?.brand||'')}${inputField('Артикул','partNumber',x?.partNumber||'')}</div>
@@ -1789,7 +1789,7 @@ async function handleSubmit(e){
     const d=formObject(f),id=d.id||uid();let x=state.components.find(v=>v.id===id);const info=vehicleSystemInfo(d.systemKey);if(!info){toast('Выберите узел автомобиля');return;}
     const installKm=nonneg(d.installedOdometer);if(installKm>currentKm()){toast('Пробег установки не может быть больше текущего пробега');return;}if(d.installedDate>today()){toast('Дата установки не может быть в будущем');return;}
     const obj={id,carId:car().id,name:info.label,category:info.group,systemKey:info.key,brand:d.brand,partNumber:d.partNumber,baseInstalledDate:d.installedDate,baseInstalledOdometer:installKm,installedDate:d.installedDate,installedOdometer:installKm,lifeKm:nonneg(d.lifeKm),lifeMonths:nonneg(d.lifeMonths),inspectKm:nonneg(d.inspectKm),inspectMonths:nonneg(d.inspectMonths),warnKm:nonneg(d.warnKm),warnDays:nonneg(d.warnDays),cost:nonneg(d.cost),notes:d.notes,sourceEntryId:x?.sourceEntryId||'',lastInspectionDate:x?.lastInspectionDate||d.installedDate,lastInspectionOdometer:x?.lastInspectionOdometer||installKm};
-    if(x)Object.assign(x,obj);else state.components.push(obj);recordMileageObservation(installKm,d.installedDate,'Установка узла','component',id);await persist();ui.sheet=null;toast('Узел сохранён');render();return;
+    if(x)Object.assign(x,obj);else state.components.push(obj);recordMileageObservation(installKm,d.installedDate,'Установка узла','component',id);await persist();ui.healthSystemKey='';ui.sheet=null;toast('Узел сохранён');render();return;
   }
   if(formId==='expense-form'){
     const d=formObject(f), id=d.id||uid(); let x=state.expenses.find(v=>v.id===id); if(x?.linkedServiceId){toast('Связанный расход изменяется через сервисную запись');return;} const obj={id,carId:car().id,date:d.date,odometer:nonneg(d.odometer),category:d.category,amount:nonneg(d.amount),description:d.description.trim(),note:d.note,linkedServiceId:''}; if(!dateOK(obj.date)){toast('Укажи корректную дату');return;} const err=obj.odometer?mileageConsistencyError(obj.odometer,obj.date,'expense',id):null;if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;} if(x)Object.assign(x,obj);else state.expenses.push(obj); if(obj.odometer)recordMileageObservation(obj.odometer,obj.date,'Из расхода','expense',id);else removeMileageSource('expense',id); await persist();ui.sheet=null;toast('Расход сохранён');render();return;
@@ -2029,9 +2029,10 @@ document.addEventListener('click', async e=>{
   if(a==='edit-refuel'){ui.sheet='refuel';ui.sheetId=id;render();return;}
   if(a==='entry-detail'){ui.sheet='entry-detail';ui.sheetId=id;render();return;}
   if(a==='edit-entry'){ui.sheet='entry';ui.sheetId=id;render();return;}
-  if(a==='add-component'){if(!car()){ui.sheet='car';render();return;}ui.sheet='component';ui.sheetId=null;render();return;}
+  if(a==='add-health-component'){if(!car()){ui.sheet='car';render();return;}ui.healthSystemKey=el.dataset.systemKey||'';ui.sheet='component';ui.sheetId=null;render();return;}
+  if(a==='add-component'){if(!car()){ui.sheet='car';render();return;}ui.healthSystemKey='';ui.sheet='component';ui.sheetId=null;render();return;}
   if(a==='component-detail'){ui.sheet='component-detail';ui.sheetId=id;render();return;}
-  if(a==='edit-component'){ui.sheet='component';ui.sheetId=id;render();return;}
+  if(a==='edit-component'){ui.healthSystemKey='';ui.sheet='component';ui.sheetId=id;render();return;}
   if(a==='add-expense'){if(!car()){ui.sheet='car';render();return;}ui.sheet='expense';ui.sheetId=null;render();return;}
   if(a==='expense-detail'){ui.sheet='expense-detail';ui.sheetId=id;render();return;}
   if(a==='edit-expense'){const x=state.expenses.find(v=>v.id===id);if(x?.linkedServiceId){ui.sheet='entry-detail';ui.sheetId=x.linkedServiceId;}else if(x?.linkedRefuelId){ui.sheet='refuel-detail';ui.sheetId=x.linkedRefuelId;}else{ui.sheet='expense';ui.sheetId=id;}render();return;}
