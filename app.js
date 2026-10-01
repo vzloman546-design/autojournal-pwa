@@ -702,13 +702,75 @@ function historyPage(){
   </div></main>`;
 }
 
+function healthTrackedComponentByKey(key){
+  return carItems(state.components)
+    .filter(x=>x.systemKey===key)
+    .sort((a,b)=>compareLifecycle(componentState(a),componentState(b))).at(-1)||null;
+}
+function healthStatusText(status){
+  return {ok:'В норме',soon:'Скоро',due:'Срок наступил',overdue:'Просрочено',neutral:'Нет интервала'}[status]||status;
+}
+function healthCoreCard(key){
+  const info=vehicleSystemInfo(key);if(!info)return '';
+  const comp=healthTrackedComponentByKey(key);
+  if(!comp){
+    return `<button class="v5-health-item is-empty" data-action="add-health-component" data-system-key="${key}">
+      <span class="v5-health-item-icon">${icons.wrench}</span>
+      <span class="v5-health-item-main"><strong>${esc(info.label)}</strong><small>${esc(info.group)} · нет данных об обслуживании</small></span>
+      <span class="v5-health-state neutral">Нет данных</span><b>›</b>
+    </button>`;
+  }
+  const status=componentOverall(comp),cs=componentState(comp),rank={overdue:0,due:1,soon:2,ok:3};
+  const next=componentEvents(comp).sort((a,b)=>(rank[a.status]??9)-(rank[b.status]??9)||String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999'))||(a.dueKm??1e15)-(b.dueKm??1e15))[0];
+  return `<button class="v5-health-item" data-action="component-detail" data-id="${comp.id}">
+    <span class="v5-health-item-icon">${status==='ok'?icons.check:status==='overdue'||status==='due'?icons.alert:icons.wrench}</span>
+    <span class="v5-health-item-main"><strong>${esc(comp.name)}</strong><small>Последнее: ${fmtDate(cs.installedDate)} · ${fmtNum(cs.installedOdometer)} км${next?` · ${esc(describeDue(next))}`:''}</small></span>
+    <span class="v5-health-state ${status}">${esc(healthStatusText(status))}</span><b>›</b>
+  </button>`;
+}
+function healthExtraComponentCard(comp){
+  const status=componentOverall(comp),rank={overdue:0,due:1,soon:2,ok:3};
+  const next=componentEvents(comp).sort((a,b)=>(rank[a.status]??9)-(rank[b.status]??9)||String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999'))||(a.dueKm??1e15)-(b.dueKm??1e15))[0];
+  return `<button class="v5-health-item compact" data-action="component-detail" data-id="${comp.id}">
+    <span class="v5-health-item-icon">${icons.wrench}</span>
+    <span class="v5-health-item-main"><strong>${esc(comp.name)}</strong><small>${next?esc(describeDue(next)):esc(comp.category||'Интервал не задан')}</small></span>
+    <span class="v5-health-state ${status}">${esc(healthStatusText(status))}</span><b>›</b>
+  </button>`;
+}
 function partsPage(){
-  if(!car()) return `<main class="main-scroll"><div class="page">${emptyState('Сначала добавь автомобиль','Узлы и расходники привязываются к конкретной машине.','add-car','Добавить автомобиль')}</div></main>`;
-  const comps=carItems(state.components).sort((a,b)=>({overdue:0,due:1,soon:2,ok:3,neutral:4}[componentOverall(a)]-({overdue:0,due:1,soon:2,ok:3,neutral:4}[componentOverall(b)])));
-  return `<main class="main-scroll"><div class="page"><h1 class="page-title">Узлы и расходники</h1><p class="page-lead">Срок службы и график проверки работают независимо. Проверка сбрасывает только следующий осмотр, замена — весь цикл.</p>${comps.length?comps.map(componentCard).join(''):emptyState('Добавь первый узел','Например: масло, тормозные колодки, свечи, ремень ГРМ, аккумулятор или направляющие суппорта.','add-component','Добавить узел',icons.wrench)}</div><button class="fab" data-action="add-component">${icons.plus}</button></main>`;
+  const c=car();
+  if(!c)return `<main class="v5-main"><div class="v5-page">${emptyState('Сначала добавьте автомобиль','План обслуживания привязывается к конкретной машине.','add-car','Добавить автомобиль')}</div></main>`;
+  const comps=carItems(state.components),coreKeys=healthCoreSystemKeys(c),coreSet=new Set(coreKeys);
+  const coreTracked=coreKeys.filter(key=>healthTrackedComponentByKey(key)).length;
+  const coverage=coreKeys.length?Math.round(coreTracked/coreKeys.length*100):0;
+  const statuses=comps.map(componentOverall),attention=statuses.filter(x=>['overdue','due','soon'].includes(x)).length,ok=statuses.filter(x=>x==='ok').length;
+  const extra=comps.filter(x=>!coreSet.has(x.systemKey)).sort((a,b)=>({overdue:0,due:1,soon:2,ok:3,neutral:4}[componentOverall(a)]-({overdue:0,due:1,soon:2,ok:3,neutral:4}[componentOverall(b)])||a.name.localeCompare(b.name,'ru'));
+  const headline=attention?`${attention} ${plural(attention,'пункт требует','пункта требуют','пунктов требуют')} внимания`:comps.length?`${ok} ${plural(ok,'пункт в норме','пункта в норме','пунктов в норме')}`:'Заполните план обслуживания';
+  return `<main class="v5-main"><div class="v5-page v5-health-page">
+    <section class="v5-health-hero">
+      <div class="v5-health-hero-icon">${icons.health}</div>
+      <div class="v5-health-hero-copy"><span>Здоровье автомобиля</span><strong>${esc(headline)}</strong><small>Базовый план заполнен: ${coreTracked} из ${coreKeys.length}</small></div>
+      <div class="v5-health-score"><strong>${coverage}%</strong><span>данных</span></div>
+      <div class="v5-health-progress"><span style="width:${coverage}%"></span></div>
+    </section>
+
+    <div class="v5-health-summary">
+      <div><span>В норме</span><strong>${okM</strong></div>
+      <div><span>Требуют внимания</span><strong>${attention}</strong></div>
+      <div><span>Отслеживается</span><strong>${comps.length}</strong></div>
+    </div>
+
+    <section class="v5-section v5-health-section">
+      <div class="v5-health-section-head"><div><h2>План обслуживания</h2><p>Основные жидкости, фильтры и расходники.</p></div><button class="btn small" data-action="add-component">${icons.plus} Добавить</button></div>
+      <div class="v5-health-list">${coreKeys.map(healthCoreCard).join('')}</div>
+      <div class="v5-health-note">AutoJournal не подставляет универсальные сроки как заводской регламент. Интервалы задаются по данным именно вашего автомобиля.</div>
+    </section>
+
+    ${extra.length?`<section class="v5-section v5-health-section"><div class="v5-health-section-head"><div><h2>Другие узлы и системы</h2><p>Всё, что вы добавили в контроль отдельно.</p></div></div><div class="v5-health-list">${extra.map(healthExtraComponentCard).join('')}</div></section>`:''}
+  </div></main>`;
 }
 
-function componentCard(c){ const st=componentOverall(c), p=componentProgress(c), rank={overdue:0,due:1,soon:2,ok:3}; const cs=componentState(c); const next=componentEvents(c).sort((a,b)=>rank[a.status]-rank[b.status]||String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999'))||(a.dueKm??1e15)-(b.dueKm??1e15))[0]; return `<button class="component-card" style="width:100%;text-align:left" data-action="component-detail" data-id="${c.id}"><div class="component-top"><div><div class="component-name">${esc(c.name)}</div><div class="component-meta">${[c.brand,c.partNumber,c.category].filter(Boolean).map(esc).join(' · ')||'Без дополнительной информации'}</div></div>${statusPill(st)}</div>${Number(c.lifeKm)||Number(c.lifeMonths)?`<div class="progress ${st}"><span style="width:${Math.min(100,p*100)}%"></span></div>`:''}<div class="component-detail"><span>${cs.installedOdometer!==''?`Установлено: ${fmtNum(cs.installedOdometer)} км`:'Пробег установки не указан'}</span><span>${next?esc(describeDue(next)):'Без интервалов'}</span></div></button>`; }
+function componentCard(c){ return healthExtraComponentCard(c); }
 
 function expensesPage(){
   if(!car()) return `<main class="main-scroll"><div class="page">${emptyState('Сначала добавь автомобиль','Расходы будут храниться отдельно для каждой машины.','add-car','Добавить автомобиль')}</div></main>`;
