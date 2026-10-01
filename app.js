@@ -714,7 +714,7 @@ function healthCoreCard(key){
   const info=vehicleSystemInfo(key);if(!info)return '';
   const comp=healthTrackedComponentByKey(key);
   if(!comp){
-    return `<button class="v5-health-item is-empty" data-action="add-health-component" data-system-key="${key}">
+    return `<button class="v5-health-item is-empty" data-action="add-health-component" data-health-system-key="${key}">
       <span class="v5-health-item-icon">${icons.wrench}</span>
       <span class="v5-health-item-main"><strong>${esc(info.label)}</strong><small>${esc(info.group)} · нет данных об обслуживании</small></span>
       <span class="v5-health-state neutral">Нет данных</span><b>›</b>
@@ -2030,7 +2030,7 @@ document.addEventListener('click', async e=>{
   if(a==='edit-refuel'){ui.sheet='refuel';ui.sheetId=id;render();return;}
   if(a==='entry-detail'){ui.sheet='entry-detail';ui.sheetId=id;render();return;}
   if(a==='edit-entry'){ui.sheet='entry';ui.sheetId=id;render();return;}
-  if(a==='add-health-component'){if(!car()){ui.sheet='car';render();return;}ui.healthSystemKey=el.dataset.systemKey||'';ui.sheet='component';ui.sheetId=null;render();return;}
+  if(a==='add-health-component'){if(!car()){ui.sheet='car';render();return;}ui.healthSystemKey=el.dataset.healthSystemKey||'';ui.sheet='component';ui.sheetId=null;render();return;}
   if(a==='add-component'){if(!car()){ui.sheet='car';render();return;}ui.healthSystemKey='';ui.sheet='component';ui.sheetId=null;render();return;}
   if(a==='component-detail'){ui.sheet='component-detail';ui.sheetId=id;render();return;}
   if(a==='edit-component'){ui.healthSystemKey='';ui.sheet='component';ui.sheetId=id;render();return;}
