@@ -4,8 +4,11 @@ import { SYNC_API_URL } from './sync-config.js';
 const enc=new TextEncoder();
 const dec=new TextDecoder();
 const SESSION_TTL_SECONDS=10*60;
-const CHUNK_CHARS=300000;
-const MAX_ENCRYPTED_CHARS=40*1024*1024;
+const CHUNK_CHARS=250000;
+const MAX_ENCRYPTED_CHARS=45*1024*1024;
+const MAX_PUSH_BODY_CHARS=1800000;
+const VAULT_KEY='autojournal-sync-vault-v2';
+const STATE_COLLECTIONS=['cars','odometerLogs','serviceEntries','components','expenses','documents','refuels'];
 
 function bytesToBase64Url(bytes){
   let s='';
@@ -39,8 +42,8 @@ async function deriveSyncBytes(secret,id,purpose){
   material.set(master);material.set(label,master.length);
   return new Uint8Array(await crypto.subtle.digest('SHA-256',material));
 }
-async function syncKey(secret,id){
-  return crypto.subtle.importKey('raw',await deriveSyncBytes(secret,id,'encryption'),{name:'AES-GCM'},false,['encrypt','decrypt']);
+async function derivedKey(secret,id,purpose='encryption'){
+  return crypto.subtle.importKey('raw',await deriveSyncBytes(secret,id,purpose),{name:'AES-GCM'},false,['encrypt','decrypt']);
 }
 async function syncAuthToken(secret,id){
   return bytesToBase64Url(await deriveSyncBytes(secret,id,'authorization'));
@@ -57,6 +60,7 @@ async function apiRequest(pair,path,options={}){
   }
   return res;
 }
+
 export function encodePairingCode(pair){
   const payload={v:1,s:pair.id,k:pair.secret,u:normalizeApi(pair.api)};
   return 'AJ1:'+bytesToBase64Url(enc.encode(JSON.stringify(payload)));
@@ -101,7 +105,7 @@ export async function requestSyncMode(pair,mode){
   return res.json();
 }
 export async function uploadSyncState(pair,state,sender='scanner'){
-  const key=await syncKey(pair.secret,pair.id),iv=new Uint8Array(12);crypto.getRandomValues(iv);
+  const key=await derivedKey(pair.secret,pair.id),iv=new Uint8Array(12);crypto.getRandomValues(iv);
   const envelope={format:'autojournal-sync-v1',createdAt:new Date().toISOString(),state};
   const plain=enc.encode(JSON.stringify(envelope));
   const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:enc.encode(`AutoJournal:${pair.id}:v1`)},key,plain);
@@ -128,7 +132,7 @@ export async function downloadSyncState(pair,status=null){
     body+=await res.text();
     if(body.length>MAX_ENCRYPTED_CHARS)throw new Error('SYNC_TOO_LARGE');
   }
-  const key=await syncKey(pair.secret,pair.id);
+  const key=await derivedKey(pair.secret,pair.id);
   const plain=await crypto.subtle.decrypt({
     name:'AES-GCM',iv:base64UrlToBytes(meta.iv),additionalData:enc.encode(`AutoJournal:${pair.id}:v1`)
   },key,base64UrlToBytes(body));
@@ -152,4 +156,175 @@ export function summarizeSyncState(s={}){
 }
 export function pairingCodeShort(pair){
   return pair?.id?pair.id.slice(0,6).toUpperCase():'';
+}
+
+/* Persistent encrypted vault sync */
+export function loadSyncVault(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(VAULT_KEY)||'null');
+    if(!raw?.id||!raw?.secret)return null;
+    return {
+      id:String(raw.id),secret:String(raw.secret),api:normalizeApi(raw.api||getSyncApiUrl()),
+      deviceId:String(raw.deviceId||randomToken(9)),lastRevision:Number(raw.lastRevision)||0,
+      lastSyncAt:String(raw.lastSyncAt||''),shadow:raw.shadow&&typeof raw.shadow==='object'?raw.shadow:{}
+    };
+  }catch{return null;}
+}
+export function saveSyncVault(vault){
+  if(!vault?.id||!vault?.secret)return;
+  const out={
+    id:String(vault.id),secret:String(vault.secret),api:normalizeApi(vault.api||getSyncApiUrl()),
+    deviceId:String(vault.deviceId||randomToken(9)),lastRevision:Number(vault.lastRevision)||0,
+    lastSyncAt:String(vault.lastSyncAt||''),shadow:vault.shadow&&typeof vault.shadow==='object'?vault.shadow:{}
+  };
+  localStorage.setItem(VAULT_KEY,JSON.stringify(out));
+  Object.assign(vault,out);
+}
+export function clearSyncVault(){try{localStorage.removeItem(VAULT_KEY);}catch{}}
+export function createSyncVaultLink(){
+  return {id:randomToken(18),secret:randomToken(32),api:getSyncApiUrl(),deviceId:randomToken(9),lastRevision:0,lastSyncAt:'',shadow:{}};
+}
+export async function registerSyncVault(vault){
+  if(!vault?.id||!vault?.secret)throw new Error('INVALID_VAULT');
+  const authToken=await syncAuthToken(vault.secret,vault.id);
+  const verifier=await sha256Base64Url(`${vault.id}.${authToken}`);
+  const res=await apiRequest({api:vault.api},'/v1/vaults',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:vault.id,verifier})
+  });
+  return res.json();
+}
+export async function adoptSyncVault(link){
+  if(!link?.id||!link?.secret)throw new Error('INVALID_VAULT');
+  const existing=loadSyncVault();
+  const vault=existing?.id===link.id
+    ?{...existing,api:normalizeApi(link.api||existing.api||getSyncApiUrl())}
+    :{id:String(link.id),secret:String(link.secret),api:normalizeApi(link.api||getSyncApiUrl()),deviceId:randomToken(9),lastRevision:0,lastSyncAt:'',shadow:{}};
+  await registerSyncVault(vault);
+  saveSyncVault(vault);
+  return vault;
+}
+async function pairingVaultKey(pair){
+  return derivedKey(pair.secret,pair.id,'pairing-vault');
+}
+export async function publishSessionVault(pair,vault){
+  const key=await pairingVaultKey(pair),iv=new Uint8Array(12);crypto.getRandomValues(iv);
+  const plain=enc.encode(JSON.stringify({format:'autojournal-vault-link-v1',vault:{id:vault.id,secret:vault.secret,api:normalizeApi(vault.api||getSyncApiUrl())}}));
+  const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:enc.encode(`AutoJournal:${pair.id}:pairing:v1`)},key,plain);
+  const payload=bytesToBase64Url(cipher);
+  const res=await apiRequest(pair,`/v1/sessions/${encodeURIComponent(pair.id)}/pairing`,{
+    method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({iv:bytesToBase64Url(iv),payload})
+  });
+  return res.json();
+}
+export async function readSessionVault(pair){
+  const res=await apiRequest(pair,`/v1/sessions/${encodeURIComponent(pair.id)}/pairing`);
+  const meta=await res.json();
+  const key=await pairingVaultKey(pair);
+  const plain=await crypto.subtle.decrypt({
+    name:'AES-GCM',iv:base64UrlToBytes(meta.iv),additionalData:enc.encode(`AutoJournal:${pair.id}:pairing:v1`)
+  },key,base64UrlToBytes(meta.payload));
+  const envelope=JSON.parse(dec.decode(plain));
+  if(envelope?.format!=='autojournal-vault-link-v1'||!envelope.vault?.id||!envelope.vault?.secret)throw new Error('INVALID_VAULT');
+  return {...envelope.vault,api:normalizeApi(envelope.vault.api||pair.api)};
+}
+function metaRecordData(state){
+  return {
+    settings:state?.settings&&typeof state.settings==='object'?state.settings:{},
+    activeCarId:state?.activeCarId||null,
+    nextSeq:Number(state?.nextSeq)||1,
+    version:Number(state?.version)||0
+  };
+}
+export function stateSyncRecords(state){
+  const out=[];
+  for(const collection of STATE_COLLECTIONS){
+    for(const item of Array.isArray(state?.[collection])?state[collection]:[]){
+      if(item?.id!=null)out.push({collection,id:String(item.id),data:item});
+    }
+  }
+  out.push({collection:'meta',id:'state',data:metaRecordData(state)});
+  return out;
+}
+export async function hashSyncData(data){
+  return sha256Base64Url(JSON.stringify(data??null));
+}
+export async function diffSyncState(state,vault){
+  const current=new Map();
+  const changes=[];
+  const shadow=vault?.shadow&&typeof vault.shadow==='object'?vault.shadow:{};
+  for(const rec of stateSyncRecords(state)){
+    const hash=await hashSyncData(rec.data),key=`${rec.collection}:${rec.id}`;
+    current.set(key,{...rec,hash});
+    if(shadow[key]!==hash)changes.push({...rec,hash,deleted:false});
+  }
+  for(const [key,hash] of Object.entries(shadow)){
+    if(current.has(key))continue;
+    const cut=key.indexOf(':');if(cut<1)continue;
+    changes.push({collection:key.slice(0,cut),id:key.slice(cut+1),data:null,hash,deleted:true});
+  }
+  return changes;
+}
+async function encryptVaultRecord(vault,change){
+  const key=await derivedKey(vault.secret,vault.id,`record:${change.collection}:${change.id}`);
+  const iv=new Uint8Array(12);crypto.getRandomValues(iv);
+  const plain=enc.encode(JSON.stringify({format:'autojournal-record-v1',collection:change.collection,id:change.id,data:change.deleted?null:change.data}));
+  const aad=enc.encode(`AutoJournalVault:${vault.id}:${change.collection}:${change.id}:v1`);
+  const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad},key,plain);
+  const body=bytesToBase64Url(cipher);
+  if(body.length>MAX_ENCRYPTED_CHARS)throw new Error('AUTO_SYNC_TOO_LARGE');
+  const chunks=[];for(let i=0;i<body.length;i+=CHUNK_CHARS)chunks.push(body.slice(i,i+CHUNK_CHARS));
+  return {collection:change.collection,id:change.id,deleted:Boolean(change.deleted),iv:bytesToBase64Url(iv),chunks,hash:change.hash};
+}
+export async function pushVaultChanges(vault,changes=[]){
+  if(!changes.length)return {revision:null,uploaded:[]};
+  await registerSyncVault(vault);
+  const encrypted=[];
+  for(const change of changes)encrypted.push(await encryptVaultRecord(vault,change));
+  const groups=[];let group=[],size=0;
+  for(const rec of encrypted){
+    const recSize=rec.chunks.reduce((n,x)=>n+x.length,0)+1000;
+    if(group.length&&(group.length>=20||size+recSize>MAX_PUSH_BODY_CHARS)){groups.push(group);group=[];size=0;}
+    group.push(rec);size+=recSize;
+  }
+  if(group.length)groups.push(group);
+  let revision=null;
+  for(const records of groups){
+    const body={deviceId:vault.deviceId,records:records.map(({hash,...x})=>x)};
+    const res=await apiRequest(vault,`/v1/vaults/${encodeURIComponent(vault.id)}/records`,{
+      method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+    });
+    const data=await res.json();revision=Math.max(Number(revision)||0,Number(data.revision)||0);
+  }
+  return {revision,uploaded:encrypted.map(x=>({collection:x.collection,id:x.id,deleted:x.deleted,hash:x.hash}))};
+}
+export async function pullVaultChanges(vault,since=0){
+  await registerSyncVault(vault);
+  const res=await apiRequest(vault,`/v1/vaults/${encodeURIComponent(vault.id)}/changes?since=${Math.max(0,Number(since)||0)}`);
+  const data=await res.json(),changes=[];
+  for(const rec of Array.isArray(data.records)?data.records:[]){
+    if(rec.deleted){
+      changes.push({collection:String(rec.collection),id:String(rec.id),deleted:true,version:Number(rec.version)||0});
+      continue;
+    }
+    let body='';for(const chunk of Array.isArray(rec.chunks)?rec.chunks:[])body+=String(chunk||'');
+    if(body.length>MAX_ENCRYPTED_CHARS)throw new Error('AUTO_SYNC_TOO_LARGE');
+    const key=await derivedKey(vault.secret,vault.id,`record:${rec.collection}:${rec.id}`);
+    const plain=await crypto.subtle.decrypt({
+      name:'AES-GCM',iv:base64UrlToBytes(rec.iv),
+      additionalData:enc.encode(`AutoJournalVault:${vault.id}:${rec.collection}:${rec.id}:v1`)
+    },key,base64UrlToBytes(body));
+    const envelope=JSON.parse(dec.decode(plain));
+    if(envelope?.format!=='autojournal-record-v1'||String(envelope.collection)!==String(rec.collection)||String(envelope.id)!==String(rec.id))throw new Error('INVALID_VAULT_RECORD');
+    changes.push({collection:String(rec.collection),id:String(rec.id),deleted:false,data:envelope.data,version:Number(rec.version)||0});
+  }
+  return {revision:Number(data.revision)||0,changes};
+}
+export function updateVaultShadow(vault,items=[]){
+  vault.shadow=vault.shadow&&typeof vault.shadow==='object'?vault.shadow:{};
+  for(const item of items){
+    const key=`${item.collection}:${item.id}`;
+    if(item.deleted)delete vault.shadow[key];
+    else if(item.hash)vault.shadow[key]=item.hash;
+  }
+  saveSyncVault(vault);
 }
