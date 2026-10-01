@@ -5,6 +5,9 @@ on:
     branches: [ main ]
     paths:
       - 'app.js'
+      - 'sync.js'
+      - 'sync-config.js'
+      - 'tests/server.cjs'
       - 'index.html'
       - 'sw.js'
       - 'vendor/**'
