@@ -853,34 +853,205 @@ function vehicleReportPdfFilename(){
   const base=['AutoJournal',c?.make,c?.model,today()].filter(Boolean).join('-').replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,'-');
   return base+'.pdf';
 }
-function saveVehicleReportPdf(){
+
+function concatPdfBytes(parts){
+  const total=parts.reduce((sum,p)=>sum+p.length,0);
+  const out=new Uint8Array(total);let off=0;
+  for(const p of parts){out.set(p,off);off+=p.length;}
+  return out;
+}
+function asciiPdfBytes(text){return new TextEncoder().encode(String(text));}
+function buildRasterPdfBlob(jpegs){
+  if(!jpegs.length)throw new Error('No PDF pages');
+  const objects=[];
+  const pageRefs=[];
+  for(let i=0;i<jpegs.length;i++)pageRefs.push(3+i*3);
+  objects[1]=asciiPdfBytes('<< /Type /Catalog /Pages 2 0 R >>');
+  objects[2]=asciiPdfBytes('<< /Type /Pages /Count '+jpegs.length+' /Kids [ '+pageRefs.map(n=>n+' 0 R').join(' ')+' ] >>');
+  for(let i=0;i<jpegs.length;i++){
+    const pageNo=3+i*3,imageNo=pageNo+1,contentNo=pageNo+2,img=jpegs[i],imageName='Im'+(i+1);
+    objects[pageNo]=asciiPdfBytes('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /XObject << /'+imageName+' '+imageNo+' 0 R >> >> /Contents '+contentNo+' 0 R >>');
+    const imageHead=asciiPdfBytes('<< /Type /XObject /Subtype /Image /Width '+img.width+' /Height '+img.height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+img.bytes.length+' >>\nstream\n');
+    objects[imageNo]=concatPdfBytes([imageHead,img.bytes,asciiPdfBytes('\nendstream')]);
+    const stream='q\n595.28 0 0 841.89 0 0 cm\n/'+imageName+' Do\nQ\n';
+    objects[contentNo]=asciiPdfBytes('<< /Length '+asciiPdfBytes(stream).length+' >>\nstream\n'+stream+'endstream');
+  }
+  const header=new Uint8Array([37,80,68,70,45,49,46,52,10,37,226,227,207,211,10]);
+  const parts=[header],offsets=[0];let offset=header.length;
+  for(let i=1;i<objects.length;i++){
+    offsets[i]=offset;
+    const prefix=asciiPdfBytes(i+' 0 obj\n'),suffix=asciiPdfBytes('\nendobj\n');
+    parts.push(prefix,objects[i],suffix);
+    offset+=prefix.length+objects[i].length+suffix.length;
+  }
+  const xrefOffset=offset;
+  let xref='xref\n0 '+objects.length+'\n0000000000 65535 f \n';
+  for(let i=1;i<objects.length;i++)xref+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
+  const trailer='trailer\n<< /Size '+objects.length+' /Root 1 0 R >>\nstartxref\n'+xrefOffset+'\n%%EOF';
+  parts.push(asciiPdfBytes(xref+trailer));
+  return new Blob([concatPdfBytes(parts)],{type:'application/pdf'});
+}
+function reportCanvasWrap(ctx,text,maxWidth,fontSize=18,bold=false){
+  ctx.font=(bold?'700 ':'400 ')+fontSize+'px -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif';
+  const paras=String(text??'').split(/\r?\n/),lines=[];
+  for(const para of paras){
+    const words=para.split(/\s+/).filter(Boolean);
+    if(!words.length){lines.push('');continue;}
+    let line='';
+    for(const word of words){
+      const probe=line?line+' '+word:word;
+      if(ctx.measureText(probe).width<=maxWidth){line=probe;continue;}
+      if(line)lines.push(line);
+      if(ctx.measureText(word).width<=maxWidth){line=word;continue;}
+      let chunk='';
+      for(const ch of word){
+        if(ctx.measureText(chunk+ch).width>maxWidth&&chunk){lines.push(chunk);chunk=ch;}else chunk+=ch;
+      }
+      line=chunk;
+    }
+    if(line)lines.push(line);
+  }
+  return lines.length?lines:[''];
+}
+function reportCanvasCellText(cell){
+  if(cell&&typeof cell==='object'&&!Array.isArray(cell)&&'text' in cell)return String(cell.text??'');
+  return String(cell??'');
+}
+async function loadReportImage(data){
+  if(!/^data:image\/(?:png|jpe?g|webp);base64,/i.test(String(data||'')))return null;
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>resolve(img);
+    img.onerror=()=>resolve(null);
+    img.src=data;
+  });
+}
+async function renderReportDefinitionToJpegs(definition){
+  const W=1240,H=1754,M=76,BOTTOM=78,CONTENT=W-M*2;
+  const pages=[];
+  let canvas=null,ctx=null,y=M;
+  const newPage=()=>{
+    canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
+    ctx=canvas.getContext('2d',{alpha:false});
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+    ctx.textBaseline='top';ctx.lineJoin='round';
+    pages.push({canvas,ctx});y=M;
+  };
+  const ensure=h=>{if(y+h>H-BOTTOM)newPage();};
+  const styleFor=node=>{
+    const style=node?.style;
+    if(style==='brand')return {size:18,bold:true,color:'#0a84ff',before:0,after:4};
+    if(style==='reportTitle')return {size:38,bold:true,color:'#111',before:2,after:4};
+    if(style==='sectionTitle')return {size:27,bold:true,color:'#111',before:22,after:10};
+    if(style==='muted')return {size:17,bold:false,color:'#666',before:2,after:5};
+    if(style==='empty')return {size:17,bold:false,color:'#777',before:2,after:8};
+    return {size:18,bold:!!node?.bold,color:node?.color||'#151515',before:0,after:5};
+  };
+  const drawText=(text,node={},x=M,maxWidth=CONTENT)=>{
+    const st=styleFor(node),lh=Math.ceil(st.size*1.35);
+    const lines=reportCanvasWrap(ctx,text,maxWidth,st.size,st.bold);
+    ensure(st.before+lines.length*lh+st.after);
+    y+=st.before;
+    ctx.fillStyle=st.color;
+    ctx.font=(st.bold?'700 ':'400 ')+st.size+'px -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif';
+    for(const line of lines){ctx.fillText(line,x,y);y+=lh;}
+    y+=st.after;
+  };
+  const resolveWidths=widths=>{
+    const arr=Array.isArray(widths)?widths:[];
+    if(!arr.length)return [];
+    let remaining=CONTENT,stars=0;const out=arr.map(w=>{
+      if(typeof w==='string'&&w.endsWith('%')){const px=CONTENT*Number(w.slice(0,-1))/100;remaining-=px;return px;}
+      if(typeof w==='number'){const px=w*2.05;remaining-=px;return px;}
+      stars++;return null;
+    });
+    const star=Math.max(80,remaining/Math.max(1,stars));
+    return out.map(v=>v==null?star:v);
+  };
+  const drawTable=tableNode=>{
+    const body=tableNode.table?.body||[];if(!body.length)return;
+    const cols=body[0].length,widths=resolveWidths(tableNode.table?.widths);
+    const colW=widths.length===cols?widths:Array(cols).fill(CONTENT/cols);
+    const headerRows=Number(tableNode.table?.headerRows||0);
+    const drawRow=(row,rowIndex)=>{
+      const fontSize=17,lh=23,padX=8,padY=7;
+      const wrapped=row.map((cell,i)=>reportCanvasWrap(ctx,reportCanvasCellText(cell),Math.max(30,colW[i]-padX*2),fontSize,rowIndex<headerRows||!!cell?.bold));
+      const rowH=Math.max(38,...wrapped.map(lines=>lines.length*lh+padY*2));
+      if(y+rowH>H-BOTTOM){newPage();if(headerRows&&rowIndex>=headerRows)drawRow(body[0],0);}
+      let x=M;
+      for(let i=0;i<cols;i++){
+        const cell=row[i],isHead=rowIndex<headerRows||!!cell?.bold;
+        ctx.fillStyle=isHead?'#eef1f4':'#fff';ctx.fillRect(x,y,colW[i],rowH);
+        ctx.strokeStyle='#d6d8dc';ctx.lineWidth=1;ctx.strokeRect(x,y,colW[i],rowH);
+        ctx.fillStyle='#171717';
+        ctx.font=(isHead?'700 ':'400 ')+fontSize+'px -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif';
+        let ty=y+padY;
+        for(const line of wrapped[i]){ctx.fillText(line,x+padX,ty);ty+=lh;}
+        x+=colW[i];
+      }
+      y+=rowH;
+    };
+    for(let r=0;r<body.length;r++)drawRow(body[r],r);
+    y+=10;
+  };
+  const renderNode=async node=>{
+    if(node==null)return;
+    if(Array.isArray(node)){for(const child of node)await renderNode(child);return;}
+    if(typeof node==='string'||typeof node==='number'){drawText(node);return;}
+    if(node.image){
+      const img=await loadReportImage(node.image);
+      if(img){
+        const maxW=Math.min(CONTENT,520),maxH=300,ratio=Math.min(maxW/img.width,maxH/img.height,1);
+        const w=img.width*ratio,h=img.height*ratio;
+        ensure(h+12);ctx.drawImage(img,M,y,w,h);y+=h+12;
+      }
+      return;
+    }
+    if(node.columns){for(const col of node.columns)await renderNode(col);y+=4;return;}
+    if(node.stack){for(const child of node.stack)await renderNode(child);return;}
+    if(node.table){drawTable(node);return;}
+    if('text' in node){drawText(node.text,node);return;}
+  };
+  newPage();
+  for(const node of definition.content||[])await renderNode(node);
+  pages.forEach((p,i)=>{
+    const c=p.ctx;c.fillStyle='#777';c.font='400 15px -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif';
+    c.fillText('Сформировано в AutoJournal · '+fmtDate(today()),M,H-46);
+    const num=(i+1)+' / '+pages.length,tw=c.measureText(num).width;c.fillText(num,W-M-tw,H-46);
+  });
+  const out=[];
+  for(const p of pages){
+    const blob=await new Promise((resolve,reject)=>p.canvas.toBlob(b=>b?resolve(b):reject(new Error('JPEG page failed')),'image/jpeg',0.9));
+    out.push({bytes:new Uint8Array(await blob.arrayBuffer()),width:W,height:H});
+  }
+  return out;
+}
+async function buildVehicleReportPdfBlob(definition){
+  const pages=await renderReportDefinitionToJpegs(definition);
+  const blob=buildRasterPdfBlob(pages);
+  if(blob.size<1000)throw new Error('Generated PDF is empty');
+  return blob;
+}
+
+async function saveVehicleReportPdf(){
   if(!car()){toast('Сначала добавьте автомобиль');return;}
-  if(!window.pdfMake?.createPdf){toast('Модуль PDF не загрузился. Перезапустите приложение.');return;}
   try{
     const definition=vehicleReportPdfDefinition();
     const filename=vehicleReportPdfFilename();
-    const pdf=window.pdfMake.createPdf(definition);
     toast('Формируем PDF…');
-    pdf.getBlob(blob=>{
-      try{
-        if(!(blob instanceof Blob)||blob.size<5)throw new Error('empty PDF blob');
-        if(isIOSStandalone()){
-          clearPendingPdf();
-          pendingPdfFile=new File([blob],filename,{type:'application/pdf'});
-          pendingPdfUrl=URL.createObjectURL(blob);
-          ui.sheet='pdf-ready';
-          ui.sheetId=null;
-          render();
-          toast('PDF готов');
-          return;
-        }
-        if(!triggerPdfDownload(blob,filename))throw new Error('download trigger failed');
-        toast('PDF создан');
-      }catch(err){
-        console.error('PDF preparation failed',err);
-        toast('Не удалось подготовить PDF');
-      }
-    });
+    const blob=await buildVehicleReportPdfBlob(definition);
+    if(isIOSStandalone()){
+      clearPendingPdf();
+      pendingPdfFile=new File([blob],filename,{type:'application/pdf'});
+      pendingPdfUrl=URL.createObjectURL(blob);
+      ui.sheet='pdf-ready';
+      ui.sheetId=null;
+      render();
+      toast('PDF готов');
+      return;
+    }
+    if(!triggerPdfDownload(blob,filename))throw new Error('download trigger failed');
+    toast('PDF создан');
   }catch(err){
     console.error('PDF generation failed',err);
     toast('Не удалось сформировать PDF');
