@@ -43,7 +43,7 @@ function isoOffset(days){
 }
 async function installSyncRelayMock(page){
   await page.evaluate(()=>{
-    localStorage.setItem('autojournal-sync-api',location.origin+'/__sync_test__');
+    localStorage.setItem('autojournal-sync-api','https://sync.test');
     const realFetch=window.fetch.bind(window);
     window.__syncMock={sessions:{},vaults:{}};
     window.fetch=async(input,init={})=>{
@@ -1050,7 +1050,7 @@ test('two linked devices sync a document with attachment from PC to phone', asyn
   const phone=await context.newPage();
   await phone.goto('/');
   await phone.evaluate(async link=>{
-    localStorage.setItem('autojournal-sync-api','https://sync.test');
+    localStorage.setItem('autojournal-sync-api',location.origin+'/__sync_test__');
     let sync,lastError;
     for(let i=0;i<3;i++){
       try{sync=await import(new URL('./sync.js?qa-two-device=1',location.href).href);break;}
