@@ -1,6 +1,6 @@
-const CACHE='autojournal-v5.5.2';
+const CACHE='autojournal-v5.6.0';
 const APP_SHELL=[
-  './','./index.html','./styles.css','./app.js','./db.js','./manifest.webmanifest',
+  './','./index.html','./styles.css','./app.js','./db.js','./manifest.webmanifest','./vendor/pdfmake.min.js','./vendor/vfs_fonts.js',
   './icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png'
 ];
 self.addEventListener('install',event=>{
