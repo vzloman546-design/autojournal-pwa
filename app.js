@@ -155,6 +155,16 @@ const VEHICLE_SYSTEM_GROUPS = [
   ]]
 ];
 const VEHICLE_SYSTEM_MAP=new Map(VEHICLE_SYSTEM_GROUPS.flatMap(([group,items])=>items.map(([key,label])=>[key,{key,label,group}])));
+const HEALTH_CORE_SYSTEMS_BASE=['engine_oil','oil_filter','air_filter','cabin_filter','coolant','brake_fluid','transmission_fluid','fuel_filter'];
+function healthCoreSystemKeys(c=car()){
+  const keys=[...HEALTH_CORE_SYSTEMS_BASE];
+  const fuel=normalizeLabel(c?.fuelType||c?.specs?.fuelType||'');
+  keys.push(fuel.includes('дизел')?'glow_plugs':'spark_plugs');
+  const tracked=new Set(carItems(state.components).map(x=>x.systemKey));
+  if(tracked.has('timing_belt'))keys.push('timing_belt');
+  else if(tracked.has('timing_chain'))keys.push('timing_chain');
+  return [...new Set(keys)].filter(key=>VEHICLE_SYSTEM_MAP.has(key));
+}
 const SYSTEM_ALIASES={
   spark_plugs:['свечи','свечи зажигания'],ignition_coils:['катушка','катушки','катушка зажигания','катушки зажигания'],
   engine_oil:['моторное масло','масло двигателя'],oil_filter:['масляный фильтр'],air_filter:['воздушный фильтр'],
