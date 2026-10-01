@@ -122,6 +122,48 @@ async function installSyncRelayMock(page){
   });
 }
 
+async function installSharedVaultRelay(context){
+  const vaults={};
+  await context.route('https://sync.test/**',async route=>{
+    const req=route.request(),url=new URL(req.url()),method=req.method().toUpperCase(),path=url.pathname;
+    const cors={
+      'Access-Control-Allow-Origin':'*',
+      'Access-Control-Allow-Methods':'GET,POST,PUT,OPTIONS',
+      'Access-Control-Allow-Headers':'Authorization,Content-Type'
+    };
+    const json=(status,value)=>route.fulfill({status,headers:{...cors,'Content-Type':'application/json'},body:JSON.stringify(value)});
+    if(method==='OPTIONS')return route.fulfill({status:204,headers:cors,body:''});
+    if(path==='/v1/vaults'&&method==='POST'){
+      const body=JSON.parse(req.postData()||'{}'),id=body.id,existing=vaults[id];
+      if(existing&&existing.verifier!==body.verifier)return json(409,{error:'vault_conflict'});
+      vaults[id]=existing||{id,verifier:body.verifier,revision:0,records:{}};
+      return json(existing?200:201,{ok:true,id,revision:vaults[id].revision,created:!existing});
+    }
+    const match=path.match(/^\/v1\/vaults\/([^/]+)(?:\/(.*))?$/);
+    if(!match)return json(404,{error:'not_found'});
+    const id=match[1],tail=match[2]||'',vault=vaults[id];
+    if(!vault)return json(404,{error:'vault_not_found'});
+    if(tail==='records'&&method==='PUT'){
+      const body=JSON.parse(req.postData()||'{}');vault.revision++;
+      for(const rec of body.records||[]){
+        vault.records[rec.collection+':'+rec.id]={
+          collection:rec.collection,id:rec.id,deleted:Boolean(rec.deleted),iv:rec.iv||null,
+          chunks:Array.isArray(rec.chunks)?rec.chunks:[],version:vault.revision,deviceId:body.deviceId||''
+        };
+      }
+      return json(200,{ok:true,revision:vault.revision,records:(body.records||[]).length});
+    }
+    if(tail==='changes'&&method==='GET'){
+      const since=Number(url.searchParams.get('since')||0);
+      const records=Object.values(vault.records).filter(x=>x.version>since).map(x=>({...x}));
+      return json(200,{ok:true,revision:vault.revision,records});
+    }
+    return json(404,{error:'not_found'});
+  });
+  await context.addInitScript(()=>localStorage.setItem('autojournal-sync-api','https://sync.test'));
+  return vaults;
+}
+
 async function addRefuel(page,{date,odometer,amount,liters,station='АЗС',fullTank=false}){
   await page.locator('.v5-tabbar [data-view="refuels"]').click();
   await page.locator('[data-action="add-refuel"]').first().click();
@@ -851,4 +893,51 @@ test('persistent vault auto-sync pushes local changes and pulls remote changes',
   await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
   await expect(page.locator('.sheet')).toContainText('Автосинхронизация включена');
+});
+
+
+test('two linked devices sync a document with attachment from PC to phone', async({page,context})=>{
+  const relay=await installSharedVaultRelay(context);
+  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api','https://sync.test'));
+  await page.reload();
+  await addCar(page);
+
+  const link=await page.evaluate(async()=>{
+    const sync=await import(new URL('./sync.js',location.href).href);
+    const vault=sync.createSyncVaultLink();
+    await sync.registerSyncVault(vault);
+    await sync.adoptSyncVault(vault);
+    window.dispatchEvent(new Event('focus'));
+    return {id:vault.id,secret:vault.secret,api:vault.api};
+  });
+  await expect.poll(()=>Object.values(relay)[0]?.revision||0,{timeout:10000}).toBeGreaterThan(0);
+
+  const phone=await context.newPage();
+  await phone.goto('/');
+  await phone.evaluate(async link=>{
+    localStorage.setItem('autojournal-sync-api','https://sync.test');
+    const sync=await import(new URL('./sync.js',location.href).href);
+    await sync.adoptSyncVault(link);
+    window.dispatchEvent(new Event('focus'));
+  },link);
+  await expect.poll(async()=>((await state(phone)).cars||[]).length,{timeout:10000}).toBe(1);
+
+  await gotoSecondary(page,'documents');
+  await page.locator('[data-action="add-document"]').last().click();
+  await page.locator('#title').fill('Документ с ПК на телефон');
+  await page.locator('#type').fill('Прочее');
+  await page.locator('#number').fill('PC-PHONE-1');
+  await page.locator('#files').setInputFiles({
+    name:'pc-phone.txt',mimeType:'text/plain',buffer:Buffer.from('encrypted attachment from pc to phone')
+  });
+  await page.locator('button[form="document-form"]').click();
+
+  await expect.poll(()=>Object.values(Object.values(relay)[0]?.records||{}).some(x=>x.collection==='documents'),{timeout:10000}).toBe(true);
+  await phone.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await expect.poll(async()=>{
+    const s=await state(phone);
+    const doc=s.documents.find(x=>x.title==='Документ с ПК на телефон');
+    return doc?{number:doc.number,files:doc.files?.map(f=>f.name)||[]}:null;
+  },{timeout:10000}).toEqual({number:'PC-PHONE-1',files:['pc-phone.txt']});
+  await phone.close();
 });
