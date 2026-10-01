@@ -425,6 +425,8 @@ test('service record links to standard node and early replacement resets existin
   await page.locator('#componentActionChoice').selectOption('replace');
   await expect(page.locator('#system-link-hint')).toContainText('уже отслеживается');
   await expect(page.locator('#lifeKm')).toHaveValue('10000');
+  // Simulate a user not re-entering/reconfirming the existing interval in the replacement record.
+  await page.locator('#lifeKm').fill('');
   await page.locator('button[form="entry-form"]').click();
   await expect(page.locator('#entry-form')).toHaveCount(0);
 
@@ -592,7 +594,7 @@ test.describe('offline PWA',()=>{
     await addCar(page);
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.5.0');
+    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.5.1');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');

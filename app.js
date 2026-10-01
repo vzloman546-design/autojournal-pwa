@@ -1050,16 +1050,29 @@ async function handleSubmit(e){
     if(!obj.title){toast('Укажите название записи');return;}if(!dateOK(obj.date)){toast('Укажите корректную дату');return;}
     const err=hasMileage?mileageConsistencyError(obj.odometer,obj.date,'service',id):null;if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;}
 
-    const lifeKm=nonneg(d.lifeKm),lifeMonths=nonneg(d.lifeMonths),inspectKm=nonneg(d.inspectKm),inspectMonths=nonneg(d.inspectMonths),warnKm=nonneg(d.warnKm),warnDays=nonneg(d.warnDays);
-    const intervalSpecified=Boolean(lifeKm||lifeMonths||inspectKm||inspectMonths);
+    const rawIntervals={
+      lifeKm:String(d.lifeKm??'').trim(),lifeMonths:String(d.lifeMonths??'').trim(),
+      inspectKm:String(d.inspectKm??'').trim(),inspectMonths:String(d.inspectMonths??'').trim(),
+      warnKm:String(d.warnKm??'').trim(),warnDays:String(d.warnDays??'').trim()
+    };
     let comp=oldComponentId?state.components.find(c=>c.id===oldComponentId):null;
     if(systemKey&&(!comp||comp.systemKey!==systemKey)){
       comp=state.components.filter(c=>c.carId===obj.carId&&c.systemKey===systemKey).sort((p,q)=>String(componentState(q).installedDate).localeCompare(String(componentState(p).installedDate)))[0]||null;
     }
+    const existing=comp||{};
+    const lifeKm=rawIntervals.lifeKm!==''?nonneg(rawIntervals.lifeKm):nonneg(existing.lifeKm);
+    const lifeMonths=rawIntervals.lifeMonths!==''?nonneg(rawIntervals.lifeMonths):nonneg(existing.lifeMonths);
+    const inspectKm=rawIntervals.inspectKm!==''?nonneg(rawIntervals.inspectKm):nonneg(existing.inspectKm);
+    const inspectMonths=rawIntervals.inspectMonths!==''?nonneg(rawIntervals.inspectMonths):nonneg(existing.inspectMonths);
+    const warnKm=rawIntervals.warnKm!==''?nonneg(rawIntervals.warnKm):nonneg(existing.warnKm??state.settings.defaultWarnKm);
+    const warnDays=rawIntervals.warnDays!==''?nonneg(rawIntervals.warnDays):nonneg(existing.warnDays??state.settings.defaultWarnDays);
+    const userEnteredInterval=Boolean(rawIntervals.lifeKm||rawIntervals.lifeMonths||rawIntervals.inspectKm||rawIntervals.inspectMonths);
+    const hasExistingInterval=Boolean(nonneg(existing.lifeKm)||nonneg(existing.lifeMonths)||nonneg(existing.inspectKm)||nonneg(existing.inspectMonths));
+    const intervalSpecified=userEnteredInterval||hasExistingInterval;
     const needsLink=Boolean(systemKey&&(actionChoice!=='none'||intervalSpecified));
     if(needsLink&&!comp){
       comp={id:uid(),carId:obj.carId,name:system?.label||obj.title,category:system?.group||'',systemKey,brand:'',partNumber:'',baseInstalledDate:obj.date,baseInstalledOdometer:eventKm,installedDate:obj.date,installedOdometer:eventKm,
-        lifeKm,lifeMonths,inspectKm,inspectMonths,warnKm,warnDays,cost:obj.partsCost,notes:'Создано из сервисной записи',sourceEntryId:intervalSpecified?obj.id:'',lastInspectionDate:obj.date,lastInspectionOdometer:eventKm};
+        lifeKm,lifeMonths,inspectKm,inspectMonths,warnKm,warnDays,cost:obj.partsCost,notes:'Создано из сервисной записи',sourceEntryId:userEnteredInterval?obj.id:'',lastInspectionDate:obj.date,lastInspectionOdometer:eventKm};
       state.components.push(comp);
     }
     if(comp&&needsLink){
@@ -1068,8 +1081,9 @@ async function handleSubmit(e){
       if(sourceOwned){
         Object.assign(comp,{lifeKm,lifeMonths,inspectKm,inspectMonths,warnKm,warnDays,cost:obj.partsCost||comp.cost,sourceEntryId:obj.id,baseInstalledDate:obj.date,baseInstalledOdometer:eventKm,installedDate:obj.date,installedOdometer:eventKm});
         if(!state.serviceEntries.some(e=>e.id!==obj.id&&e.componentId===comp.id&&e.componentAction==='inspect')){comp.lastInspectionDate=obj.date;comp.lastInspectionOdometer=eventKm;}
-      }else if(intervalSpecified){
-        if(lifeKm)comp.lifeKm=lifeKm;if(lifeMonths)comp.lifeMonths=lifeMonths;if(inspectKm)comp.inspectKm=inspectKm;if(inspectMonths)comp.inspectMonths=inspectMonths;
+      }else{
+        // Existing node keeps its configured intervals when the service record leaves them untouched.
+        comp.lifeKm=lifeKm;comp.lifeMonths=lifeMonths;comp.inspectKm=inspectKm;comp.inspectMonths=inspectMonths;
         comp.warnKm=warnKm;comp.warnDays=warnDays;if(obj.partsCost)comp.cost=obj.partsCost;
       }
     }
