@@ -25,4 +25,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
-      - run: npx playwright test -g "download a real PDF file"
+      - run: npx playwright test -g "PDF"
