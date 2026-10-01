@@ -726,6 +726,112 @@ function reportTable(title,headers,rows){
   if(!rows.length)return `<section class="v5-report-section"><h2>${esc(title)}</h2><div class="v5-report-empty">Нет записей</div></section>`;
   return `<section class="v5-report-section"><h2>${esc(title)}</h2><div class="v5-report-table-wrap"><table><thead><tr>${headers.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(cell=>`<td>${esc(cell??'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`;
 }
+
+function pdfReportText(v){return String(v??'—');}
+function pdfReportTable(title,headers,rows,widths=null){
+  const blocks=[{text:title,style:'sectionTitle',margin:[0,14,0,6]}];
+  if(!rows.length){blocks.push({text:'Нет записей',style:'empty'});return blocks;}
+  const body=[
+    headers.map(h=>({text:pdfReportText(h),bold:true,fillColor:'#eef1f4',margin:[3,3,3,3]})),
+    ...rows.map(row=>row.map(cell=>({text:pdfReportText(cell),margin:[3,2,3,2]})))
+  ];
+  blocks.push({table:{headerRows:1,widths:widths||headers.map(()=>'*'),body},layout:'lightHorizontalLines'});
+  return blocks;
+}
+function vehicleReportPdfDefinition(){
+  const c=car();if(!c)return null;
+  const full=ui.reportMode==='full';
+  const entries=carItems(state.serviceEntries).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const replacements=entries.filter(x=>x.componentAction==='replace'||x.type==='replacement');
+  const components=carItems(state.components);
+  const docs=carItems(state.documents);
+  const expenses=carItems(state.expenses);
+  const refs=carItems(state.refuels||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const fuel=fuelJournalStats(refs);
+  const totalExpenses=expenses.reduce((sum,x)=>sum+nonneg(x.amount),0);
+  const reminders=allReminders();
+  const specSections=carSpecDisplaySections(c);
+  const shortKeys=new Set(['engine','engineVolume','powerHp','fuelType','transmission','fuelTankCapacityL','engineOil','engineOilVolume','sparkPlugModel','sparkPlugThread','sparkPlugHexMm','tireSize']);
+  const shortSpecs=[];
+  for(const [,fields] of CAR_SPEC_SECTIONS)for(const [key,label,kind] of fields)if(shortKeys.has(key)){
+    const v=carSpecValueRaw(c,key,kind);if(v)shortSpecs.push([label,v]);
+  }
+  const content=[];
+  const headerStack=[
+    {text:'AutoJournal',style:'brand'},
+    {text:[c.make,c.model].filter(Boolean).join(' ')||'Автомобиль',style:'reportTitle'},
+    {text:[c.year,c.trim,c.plate].filter(Boolean).join(' · '),style:'muted',margin:[0,2,0,4]},
+    {text:fmtNum(c.currentOdometer)+' км',bold:true,fontSize:12}
+  ];
+  const printablePhoto=/^data:image\/(?:png|jpe?g);base64,/i.test(String(c.photo||''))?c.photo:'';
+  content.push(printablePhoto
+    ?{columns:[{image:printablePhoto,width:125,fit:[125,86],margin:[0,0,14,0]},{width:'*',stack:headerStack}],columnGap:8,margin:[0,0,0,10]}
+    :{stack:headerStack,margin:[0,0,0,10]});
+  content.push(...pdfReportTable('Паспорт автомобиля',['Характеристика','Значение'],[['VIN',c.vin||'—'],...shortSpecs],['42%','58%']));
+  content.push(...pdfReportTable('Сводка эксплуатации',['Показатель','Значение'],[
+    ['Расходы',money(totalExpenses)],
+    ['Сервисных записей',entries.length],
+    ['Средний расход',fuelConsumptionText(fuel.all.consumption)],
+    ['Стоимость 100 км',fuelCost100Text(fuel.all.cost100)],
+    ['Заправок',refs.length],
+    ['Требует внимания',reminders.filter(x=>x.status!=='ok').length]
+  ],['58%','42%']));
+  content.push(...pdfReportTable('Ближайшее обслуживание',['Событие','Срок'],reminders.slice(0,8).map(x=>[x.title,describeDue(x)]),['58%','42%']));
+  if(full){
+    for(const sec of specSections)content.push(...pdfReportTable(sec.title,['Характеристика','Значение'],sec.rows,['46%','54%']));
+    content.push(...pdfReportTable('История обслуживания',['Дата','Пробег','Запись','Стоимость'],entries.map(x=>[fmtDate(x.date),x.odometer?fmtNum(x.odometer)+' км':'—',x.title,money(totalServiceCost(x))]),[58,70,'*',70]));
+    content.push(...pdfReportTable('Замены деталей',['Дата','Пробег','Деталь / работа','Стоимость'],replacements.map(x=>[fmtDate(x.date),x.odometer?fmtNum(x.odometer)+' км':'—',x.title,money(totalServiceCost(x))]),[58,70,'*',70]));
+    content.push(...pdfReportTable('Узлы и детали',['Узел','Установлено','Пробег установки','Ресурс / проверка'],components.map(x=>[
+      x.name,
+      fmtDate(componentState(x).installedDate),
+      fmtNum(componentState(x).installedOdometer)+' км',
+      [x.lifeKm?fmtNum(x.lifeKm)+' км':'',x.lifeMonths?fmtNum(x.lifeMonths)+' мес.':'',x.inspectKm?'проверка '+fmtNum(x.inspectKm)+' км':'',x.inspectMonths?'проверка '+fmtNum(x.inspectMonths)+' мес.':''].filter(Boolean).join(' · ')||'—'
+    ]),['25%','18%','20%','37%']));
+    content.push(...pdfReportTable('Документы',['Документ','Номер','Выдан','Действует до'],docs.map(x=>[x.title,x.number||'—',fmtDate(x.issueDate),fmtDate(x.expiryDate)]),['32%','24%','22%','22%']));
+    content.push(...pdfReportTable('Расходы',['Дата','Категория','Описание','Сумма'],expenses.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(x=>[fmtDate(x.date),x.category,x.description||'',money(x.amount)]),[58,90,'*',70]));
+    content.push(...pdfReportTable('Заправки',['Дата','Пробег','АЗС','Топливо','Объём','Сумма'],refs.map(x=>[fmtDate(x.date),fmtNum(x.odometer)+' км',x.station||'—',x.fuelType||'—',fmtNum(x.liters,2)+' л',money(x.amount)]),[54,68,'*',60,54,64]));
+  }
+  return {
+    pageSize:'A4',
+    pageMargins:[34,38,34,40],
+    info:{title:'AutoJournal — '+[c.make,c.model].filter(Boolean).join(' '),author:'AutoJournal',subject:full?'Полный отчёт автомобиля':'Короткий отчёт автомобиля'},
+    content,
+    defaultStyle:{font:'Roboto',fontSize:8.5,color:'#151515',lineHeight:1.18},
+    styles:{
+      brand:{fontSize:9,bold:true,color:'#0a84ff'},
+      reportTitle:{fontSize:19,bold:true,margin:[0,2,0,0]},
+      sectionTitle:{fontSize:12,bold:true,color:'#111'},
+      muted:{fontSize:8.5,color:'#666'},
+      empty:{fontSize:8.5,color:'#777',italics:true,margin:[0,2,0,4]}
+    },
+    footer:(currentPage,pageCount)=>({
+      columns:[
+        {text:'Сформировано в AutoJournal · '+fmtDate(today()),alignment:'left'},
+        {text:currentPage+' / '+pageCount,alignment:'right'}
+      ],
+      margin:[34,10,34,0],fontSize:7.5,color:'#777'
+    })
+  };
+}
+function vehicleReportPdfFilename(){
+  const c=car();
+  const base=['AutoJournal',c?.make,c?.model,today()].filter(Boolean).join('-').replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,'-');
+  return base+'.pdf';
+}
+function saveVehicleReportPdf(){
+  if(!car()){toast('Сначала добавьте автомобиль');return;}
+  if(!window.pdfMake?.createPdf){toast('Модуль PDF не загрузился. Перезапустите приложение.');return;}
+  try{
+    const definition=vehicleReportPdfDefinition();
+    const filename=vehicleReportPdfFilename();
+    toast('Формируем PDF…');
+    window.pdfMake.createPdf(definition).download(filename,()=>toast('PDF создан'));
+  }catch(err){
+    console.error('PDF generation failed',err);
+    toast('Не удалось сформировать PDF');
+  }
+}
+
 function reportPage(){
   const c=car();if(!c)return `<main class="v5-main"><div class="v5-page">${emptyState('Нет автомобиля','Для отчёта нужен автомобиль.','add-car','Добавить автомобиль')}</div></main>`;
   const full=ui.reportMode==='full',entries=carItems(state.serviceEntries).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))),replacements=entries.filter(x=>x.componentAction==='replace'||x.type==='replacement'),components=carItems(state.components),docs=carItems(state.documents),expenses=carItems(state.expenses),refs=carItems(state.refuels||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))),fuel=fuelJournalStats(refs),totalExpenses=expenses.reduce((sum,x)=>sum+nonneg(x.amount),0),reminders=allReminders(),specSections=carSpecDisplaySections(c);
@@ -733,7 +839,7 @@ function reportPage(){
   const shortSpecs=[];for(const [,fields] of CAR_SPEC_SECTIONS)for(const [key,label,kind] of fields)if(shortKeys.has(key)){const v=carSpecValueRaw(c,key,kind);if(v)shortSpecs.push([label,v]);}
   const fullSpecs=specSections.map(sec=>reportTable(sec.title,['Характеристика','Значение'],sec.rows)).join('');
   return `<main class="v5-main v5-report-main"><div class="v5-page v5-secondary-page v5-report-page">
-    <div class="v5-report-controls"><div class="v5-segment v5-report-mode"><button class="${!full?'active':''}" data-action="report-mode" data-value="short">Короткий</button><button class="${full?'active':''}" data-action="report-mode" data-value="full">Полный</button></div><button class="v5-primary v5-wide" data-action="print-report">${icons.export} Сохранить PDF</button><p>Откроется системное окно печати. На iPhone из предпросмотра можно сохранить или отправить PDF.</p></div>
+    <div class="v5-report-controls"><div class="v5-segment v5-report-mode"><button class="${!full?'active':''}" data-action="report-mode" data-value="short">Короткий</button><button class="${full?'active':''}" data-action="report-mode" data-value="full">Полный</button></div><button class="v5-primary v5-wide" data-action="print-report">${icons.export} Сохранить PDF</button><p>PDF формируется прямо в приложении и сохраняется отдельным файлом — системная печать не используется.</p></div>
     <article class="v5-report-paper">
       <header class="v5-report-header">${c.photo?`<img src="${c.photo}" alt="">`:''}<div><div class="v5-report-brand">AutoJournal</div><h1>${esc(c.make)} ${esc(c.model)}</h1><p>${[c.year,c.trim,c.plate].filter(Boolean).map(esc).join(' · ')}</p><strong>${fmtNum(c.currentOdometer)} км</strong></div></header>
       <section class="v5-report-section"><h2>Паспорт автомобиля</h2><div class="v5-report-specs"><div><span>VIN</span><strong>${esc(c.vin||'—')}</strong></div>${shortSpecs.map(([label,value])=>`<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}</div></section>
@@ -1274,31 +1380,7 @@ document.addEventListener('click', async e=>{
   if(a==='go-back'){goBack();return;}
   if(a==='analytics-tab'){ui.analyticsTab=el.dataset.value||'expenses';nextTransition='fade';render();return;}
   if(a==='report-mode'){ui.reportMode=el.dataset.value==='full'?'full':'short';nextTransition='fade';render();return;}
-  if(a==='print-report'){
-    const old=document.title,c=car();
-    document.title=`AutoJournal-${c?.make||'auto'}-${c?.model||'report'}-${today()}`;
-    document.body.classList.add('v5-print-report');
-    let cleaned=false;
-    const cleanupPrint=()=>{
-      if(cleaned)return;
-      cleaned=true;
-      document.body.classList.remove('v5-print-report');
-      document.title=old;
-    };
-    window.addEventListener('afterprint',cleanupPrint,{once:true});
-    try{
-      // Safari/iOS requires print() to run in the original user activation.
-      // A setTimeout here makes the installed PWA silently ignore the request.
-      void document.body.offsetHeight;
-      window.print();
-      setTimeout(cleanupPrint,2000);
-    }catch(err){
-      console.error('Unable to open print dialog',err);
-      cleanupPrint();
-      toast('Не удалось открыть системное окно печати');
-    }
-    return;
-  }
+  if(a==='print-report'){saveVehicleReportPdf();return;}
   if(a==='notif-tab'){ui.notificationTab=el.dataset.value||'auto';render();return;}
   if(a==='add-car'){ui.sheet='car';ui.sheetId=null;render();return;}
   if(a==='edit-current-car'){ui.sheet='car';ui.sheetId=state.activeCarId;render();return;}
