@@ -659,15 +659,15 @@ test.describe('offline PWA',()=>{
 
 
 test('QR transfer exposes directional modes and generates one-time QR session', async({page})=>{
-  await page.addInitScript(()=>localStorage.setItem('autojournal-sync-api','https://sync.test'));
+  await page.addInitScript(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync'));
   let sessionId='';
-  await page.route('https://sync.test/v1/sessions',async route=>{
+  await page.route('**/__sync/v1/sessions',async route=>{
     const req=route.request();
     const body=JSON.parse(req.postData()||'{}');
     sessionId=body.id;
     await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ok:true,expiresAt:Date.now()+600000})});
   });
-  await page.route('https://sync.test/v1/sessions/**',async route=>{
+  await page.route('**/__sync/v1/sessions/**',async route=>{
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:sessionId,status:'waiting',mode:null,expiresAt:Date.now()+600000})});
   });
   await page.goto('/');
@@ -690,11 +690,11 @@ test('QR transfer exposes directional modes and generates one-time QR session', 
 
 
 test('QR relay payload is encrypted and relay auth is not the QR encryption secret', async({page})=>{
-  await page.addInitScript(()=>localStorage.setItem('autojournal-sync-api','https://sync.test'));
+  await page.addInitScript(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync'));
   let sessionId='',status='waiting',mode=null,totalChunks=null,iv=null,sender=null;
   const chunks=new Map(),authHeaders=[];
-  await page.route('https://sync.test/**',async route=>{
-    const req=route.request(),url=new URL(req.url()),path=url.pathname;
+  await page.route('**/__sync/**',async route=>{
+    const req=route.request(),url=new URL(req.url()),path=url.pathname.replace('/__sync','');
     const auth=req.headers()['authorization']||'';
     if(auth)authHeaders.push(auth);
     if(path==='/v1/sessions'&&req.method()==='POST'){
@@ -724,7 +724,7 @@ test('QR relay payload is encrypted and relay auth is not the QR encryption secr
   });
   await page.goto('/');
   const result=await page.evaluate(async()=>{
-    const sync=await import('./sync.js');
+    const sync=await import(new URL('./sync.js',location.href).href);
     const pair=await sync.createSyncSession();
     await sync.requestSyncMode(pair,'push');
     const sample={version:7,cars:[{id:'car-secret',make:'SecretMake',model:'SecretModel'}],serviceEntries:[],components:[],expenses:[],documents:[],refuels:[],odometerLogs:[],settings:{theme:'system'},nextSeq:1,activeCarId:'car-secret'};
