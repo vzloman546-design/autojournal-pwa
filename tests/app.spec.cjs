@@ -31,6 +31,12 @@ async function closeSheet(page){
   const close=page.locator('.sheet-close');
   if(await close.count()) await close.click();
 }
+async function chooseVehicleSystem(page,query,key){
+  await page.locator('#systemKeySearch').fill(query);
+  await expect(page.locator('[data-system-key="'+key+'"]')).toBeVisible();
+  await page.locator('[data-system-key="'+key+'"]').click();
+  await expect(page.locator('#systemKey')).toHaveValue(key);
+}
 function isoOffset(days){
   const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+days);
   return d.toISOString().slice(0,10);
@@ -59,6 +65,7 @@ test('service entry without mileage syncs one expense through edit and delete', 
   await expect(page.locator('#odometer')).toHaveAttribute('placeholder','210000');
   await page.locator('#partsCost').fill('4000');
   await page.locator('#laborCost').fill('1000');
+  await chooseVehicleSystem(page,'масло двигателя','engine_oil');
   await page.locator('#lifeKm').fill('40000');
   await page.locator('#inspectKm').fill('10000');
   await page.locator('button[form="entry-form"]').click();
@@ -177,7 +184,7 @@ test('maintenance inspect and replace reset independent cycles', async({page})=>
   await addCar(page);
   await gotoSecondary(page,'parts');
   await page.locator('[data-action="add-component"]').last().click();
-  await page.locator('#name').fill('Колодки QA');
+  await chooseVehicleSystem(page,'передние колодки','front_brake_pads');
   await page.locator('#installedDate').fill(isoOffset(-30));
   await page.locator('#installedOdometer').fill('200000');
   await page.locator('#lifeKm').fill('40000');
@@ -188,7 +195,7 @@ test('maintenance inspect and replace reset independent cycles', async({page})=>
   await page.locator('#warnDays').fill('14');
   await page.locator('button[form="component-form"]').click();
 
-  await page.locator('[data-action="component-detail"]',{hasText:'Колодки QA'}).click();
+  await page.locator('[data-action="component-detail"]',{hasText:'Передние тормозные колодки'}).click();
   await page.locator('[data-action="mark-inspection"]').click();
   let s=await state(page);
   let actions=s.serviceEntries.filter(x=>x.componentAction);
@@ -264,6 +271,7 @@ test('backup roundtrip and calendar export', async({page})=>{
   await addCar(page);
   await page.locator('[data-action="add-entry"]').first().click();
   await page.locator('#title').fill('Backup marker');
+  await chooseVehicleSystem(page,'масло двигателя','engine_oil');
   await page.locator('#lifeMonths').fill('12');
   await page.locator('#warnDays').fill('30');
   await page.locator('button[form="entry-form"]').click();
