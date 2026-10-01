@@ -1,0 +1,29 @@
+name: AutoJournal Sync Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - 'sync.js'
+      - 'tests/app.spec.cjs'
+      - '.github/workflows/sync-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run persistent sync scenarios
+        run: npx playwright test --project=chromium-mobile -g "persistent vault auto-sync|two linked devices"
