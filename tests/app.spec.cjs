@@ -643,7 +643,7 @@ test.describe('offline PWA',()=>{
     await addCar(page);
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.8.0');
+    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.9.0');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
@@ -655,4 +655,35 @@ test.describe('offline PWA',()=>{
     await expect(page.locator('.v5-mileage-card')).toContainText('211 000');
     await context.setOffline(false);
   });
+});
+
+
+test('QR transfer exposes directional modes and generates one-time QR session', async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('autojournal-sync-api','https://sync.test'));
+  let sessionId='';
+  await page.route('https://sync.test/v1/sessions',async route=>{
+    const req=route.request();
+    const body=JSON.parse(req.postData()||'{}');
+    sessionId=body.id;
+    await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ok:true,expiresAt:Date.now()+600000})});
+  });
+  await page.route('https://sync.test/v1/sessions/**',async route=>{
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:sessionId,status:'waiting',mode:null,expiresAt:Date.now()+600000})});
+  });
+  await page.goto('/');
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="more"]').click();
+  await page.locator('[data-action="sync-open"]').click();
+  await expect(page.locator('.sheet')).toContainText('Передача данных');
+  await expect(page.locator('.sheet')).toContainText('Получение данных');
+  await page.locator('[data-action="sync-scan-push"]').click();
+  await expect(page.locator('.sheet')).toContainText('Передача данных');
+  await expect(page.locator('[data-action="sync-camera-start"]')).toBeVisible();
+  await page.locator('[data-action="close-sheet"]').last().click();
+
+  await page.locator('[data-action="sync-open"]').click();
+  await page.locator('[data-action="sync-show-qr"]').click();
+  await expect(page.locator('[data-sync-qr] svg')).toBeVisible();
+  await expect(page.locator('[data-sync-status]')).toContainText('Ждём сканирования');
+  expect(sessionId.length).toBeGreaterThan(20);
 });
