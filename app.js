@@ -1808,7 +1808,7 @@ document.addEventListener('click', async e=>{
     return;
   }
   if(a==='system-combobox-select'){chooseSystemComboboxValue(el.closest('[data-system-combobox]'),el.dataset.systemKey);return;}
-  if(a==='close-sheet'){if(String(ui.sheet||'').startsWith('sync')){stopSyncPolling();stopSyncScanner();}const sheet=document.querySelector('.sheet'),backdrop=document.querySelector('.sheet-backdrop');if(sheet)closeSheetAfterGesture(sheet,backdrop);else{ui.sheet=null;ui.sheetId=null;render();}return;}
+  if(a==='close-sheet'){if(String(ui.sheet||'').startsWith('sync')){resetSyncTransient();if(loadSyncVault())scheduleAutoSync(150);}const sheet=document.querySelector('.sheet'),backdrop=document.querySelector('.sheet-backdrop');if(sheet)closeSheetAfterGesture(sheet,backdrop);else{ui.sheet=null;ui.sheetId=null;render();}return;}
   if(a==='open-reminders'){ui.sheet='reminders';render();return;}
   if(a==='open-profile'){navigateTo('profile');return;}
   if(a==='go-back'){goBack();return;}
@@ -1865,7 +1865,7 @@ document.addEventListener('click', async e=>{
   if(a==='open-image'){window.open(el.getAttribute('src'),'_blank');return;}
   if(a==='sync-open'){resetSyncTransient();ui.sheet='sync';render();return;}
   if(a==='sync-now'){await autoSyncNow(true);return;}
-  if(a==='sync-unlink'){if(confirm('Отключить автоматическую синхронизацию только на этом устройстве? Данные на устройстве не удалятся.')){clearSyncVault();autoSyncStatus='idle';autoSyncLastError='';autoSyncPending=0;toast('Автосинхронизация отключена на этом устройстве');render();}return;}
+  if(a==='sync-unlink'){if(confirm('Отключить автоматическую синхронизацию только на этом устройстве? Данные на устройстве не удалятся.')){if(autoSyncTimer){clearTimeout(autoSyncTimer);autoSyncTimer=0;}clearSyncVault();autoSyncStatus='idle';autoSyncLastError='';autoSyncPending=0;toast('Автосинхронизация отключена на этом устройстве');render();}return;}
   if(a==='sync-show-qr'){await startSyncDisplaySession();return;}
   if(a==='sync-scan-push'){syncMode='push';ui.sheet='sync-scan';render();return;}
   if(a==='sync-scan-pull'){syncMode='pull';ui.sheet='sync-scan';render();return;}
@@ -1925,7 +1925,7 @@ function resetSheetSwipeVisuals(sheet,backdrop){
 }
 function closeSheetAfterGesture(sheet,backdrop){
   if(!sheet||!ui.sheet)return;
-  if(String(ui.sheet||'').startsWith('sync')){stopSyncPolling();stopSyncScanner();}
+  if(String(ui.sheet||'').startsWith('sync')){resetSyncTransient();if(loadSyncVault())scheduleAutoSync(150);}
   document.body.classList.add('v5-sheet-settling');
   sheet.style.transition='transform .2s cubic-bezier(.22,.61,.36,1)';
   sheet.style.transform='translate3d(0,105%,0)';
@@ -2111,9 +2111,9 @@ async function autoSyncNow(showToast=false){
   }finally{autoSyncRunning=false;}
 }
 async function finalizePendingVaultLink(){
-  if(!syncPendingVault)return loadSyncVault();
+  if(!syncPendingVault){syncPair=null;return loadSyncVault();}
   const vault=await adoptSyncVault(syncPendingVault);
-  syncPendingVault=null;
+  syncPendingVault=null;syncPair=null;
   scheduleAutoSync(250);
   return vault;
 }
