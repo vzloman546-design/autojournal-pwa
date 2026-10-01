@@ -32,16 +32,24 @@ export function getSyncApiUrl(){
 async function sha256Base64Url(text){
   return bytesToBase64Url(await crypto.subtle.digest('SHA-256',enc.encode(text)));
 }
+async function deriveSyncBytes(secret,id,purpose){
+  const master=base64UrlToBytes(secret);
+  const label=enc.encode(`AutoJournal:${purpose}:${id}:v1`);
+  const material=new Uint8Array(master.length+label.length);
+  material.set(master);material.set(label,master.length);
+  return new Uint8Array(await crypto.subtle.digest('SHA-256',material));
+}
 async function syncKey(secret,id){
-  const material=new Uint8Array([...base64UrlToBytes(secret),...enc.encode(id)]);
-  const digest=await crypto.subtle.digest('SHA-256',material);
-  return crypto.subtle.importKey('raw',digest,{name:'AES-GCM'},false,['encrypt','decrypt']);
+  return crypto.subtle.importKey('raw',await deriveSyncBytes(secret,id,'encryption'),{name:'AES-GCM'},false,['encrypt','decrypt']);
+}
+async function syncAuthToken(secret,id){
+  return bytesToBase64Url(await deriveSyncBytes(secret,id,'authorization'));
 }
 async function apiRequest(pair,path,options={}){
   const base=normalizeApi(pair?.api||getSyncApiUrl());
   if(!base)throw new Error('SYNC_NOT_CONFIGURED');
   const headers=new Headers(options.headers||{});
-  if(pair?.secret)headers.set('Authorization',`Bearer ${pair.secret}`);
+  if(pair?.secret)headers.set('Authorization',`Bearer ${await syncAuthToken(pair.secret,pair.id)}`);
   const res=await fetch(base+path,{...options,headers});
   if(!res.ok){
     let detail='';try{detail=(await res.json())?.error||'';}catch{}
@@ -71,7 +79,7 @@ export function pairingQrSvg(pair){
 export async function createSyncSession(){
   const api=getSyncApiUrl();
   if(!api)throw new Error('SYNC_NOT_CONFIGURED');
-  const id=randomToken(18),secret=randomToken(32),verifier=await sha256Base64Url(`${id}.${secret}`);
+  const id=randomToken(18),secret=randomToken(32),authToken=await syncAuthToken(secret,id),verifier=await sha256Base64Url(`${id}.${authToken}`);
   const res=await apiRequest({api},'/v1/sessions',{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({id,verifier,ttl:SESSION_TTL_SECONDS})
