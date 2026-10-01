@@ -709,7 +709,11 @@ function expensesPage(){
 }
 function expenseRow(x){ return `<button class="list-row" data-action="expense-detail" data-id="${x.id}"><div class="row-icon">${x.category==='Топливо'?icons.fuel:icons.wallet}</div><div class="row-main"><div class="row-title">${esc(x.description||x.category)}</div><div class="row-sub">${fmtDate(x.date)} · ${esc(x.category||'Другое')}${x.odometer?` · ${fmtNum(x.odometer)} км`:''}</div></div><div class="row-side"><div class="row-value">${money(x.amount)}</div><div class="row-sub">›</div></div></button>`; }
 
-function dateISO(d){return new Date(d).toISOString().slice(0,10);}
+function dateISO(d){
+  const x=d instanceof Date?d:new Date(d);
+  const y=x.getFullYear(),m=String(x.getMonth()+1).padStart(2,'0'),day=String(x.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
 function analyticsPeriodBounds(key=ui.analyticsPeriod||'month'){
   const now=new Date(`${today()}T12:00:00`);
   if(key==='all')return {key,start:null,end:null,label:'Всё время'};
@@ -720,16 +724,42 @@ function analyticsPeriodBounds(key=ui.analyticsPeriod||'month'){
   return {key:'all',start:null,end:null,label:'Всё время'};
 }
 function dateInAnalyticsPeriod(date,bounds){if(!dateOK(date))return !bounds.start;return (!bounds.start||date>=bounds.start)&&(!bounds.end||date<=bounds.end);}
+function odometerObservations(c=car()){
+  if(!c)return[];
+  const startDate=dateOK(c.trackingStartDate)?c.trackingStartDate:today(),initial=nonneg(c.initialOdometer);
+  const rows=[{date:startDate,value:initial,kind:'baseline'}];
+  for(const x of state.odometerLogs){
+    if(x.carId!==c.id||!dateOK(x.date)||x.date<startDate)continue;
+    const value=nonneg(x.value);
+    if(value<initial)continue;
+    rows.push({date:x.date,value,kind:x.sourceType||'log'});
+  }
+  const current=nonneg(c.currentOdometer),maxSeen=rows.length?Math.max(...rows.map(x=>x.value)):initial;
+  if(current>maxSeen)rows.push({date:today(),value:current,kind:'current'});
+  return rows.sort((a,b)=>a.date.localeCompare(b.date)||a.value-b.value||String(a.kind).localeCompare(String(b.kind)));
+}
 function analyticsMileage(c,bounds){
-  if(!c)return {distance:0,avg:0,startValue:0,endValue:0,logs:[]};
-  const logs=odometerTimeline(c);
-  if(!bounds.start)return {distance:Math.max(0,currentKm()-nonneg(c.initialOdometer)),avg:averageKmPerDay(c),startValue:nonneg(c.initialOdometer),endValue:currentKm(),logs:logs.slice().reverse()};
-  const end=logs.filter(x=>x.date<=bounds.end).at(-1);let start=logs.filter(x=>x.date<=bounds.start).at(-1);
-  if(!start)start=logs.find(x=>x.date>=bounds.start&&x.date<=bounds.end)||null;
-  const periodLogs=logs.filter(x=>dateInAnalyticsPeriod(x.date,bounds)).reverse();
-  if(!end||!start||end.date<start.date)return {distance:0,avg:0,startValue:start?.value||0,endValue:end?.value||0,logs:periodLogs};
-  const distance=Math.max(0,nonneg(end.value)-nonneg(start.value)),days=Math.max(1,daysBetween(bounds.start,bounds.end)+1);
-  return {distance,avg:distance/days,startValue:start.value,endValue:end.value,logs:periodLogs};
+  if(!c)return {distance:0,avg:0,startValue:0,endValue:0,logs:[],startDate:null,endDate:null};
+  const timeline=odometerTimeline(c),observations=odometerObservations(c),initial=nonneg(c.initialOdometer),trackingDate=dateOK(c.trackingStartDate)?c.trackingStartDate:(observations[0]?.date||today());
+  if(!bounds.start){
+    const endValue=Math.max(initial,currentKm(),...observations.map(x=>nonneg(x.value)));
+    const startDate=trackingDate,endDate=observations.at(-1)?.date||trackingDate;
+    const days=Math.max(1,daysBetween(startDate,endDate)+1);
+    const distance=Math.max(0,endValue-initial);
+    return {distance,avg:distance/days,startValue:initial,endValue,logs:timeline.slice().reverse(),startDate,endDate};
+  }
+  const periodLogs=timeline.filter(x=>dateInAnalyticsPeriod(x.date,bounds)).reverse();
+  if(trackingDate>bounds.end)return {distance:0,avg:0,startValue:initial,endValue:initial,logs:periodLogs,startDate:null,endDate:null};
+
+  const before=observations.filter(x=>x.date<bounds.start);
+  const baselineValue=before.length?nonneg(before.at(-1).value):initial;
+  const throughEnd=observations.filter(x=>x.date<=bounds.end);
+  const endValue=throughEnd.length?nonneg(throughEnd.at(-1).value):baselineValue;
+  const activeStart=trackingDate>bounds.start?trackingDate:bounds.start;
+  const activeEnd=bounds.end<today()?bounds.end:today();
+  const distance=activeEnd<activeStart?0:Math.max(0,endValue-baselineValue);
+  const days=activeEnd<activeStart?0:Math.max(1,daysBetween(activeStart,activeEnd)+1);
+  return {distance,avg:days?distance/days:0,startValue:baselineValue,endValue,logs:periodLogs,startDate:activeStart,endDate:activeEnd};
 }
 
 function analyticsPage(){
@@ -740,9 +770,9 @@ function analyticsPage(){
   const liters=refs.reduce((sum,x)=>sum+Number(x.liters||0),0),fuelSpend=refs.reduce((sum,x)=>sum+Number(x.amount||0),0),avgPrice=liters>0?fuelSpend/liters:0;
   const catMap={};ex.forEach(x=>catMap[x.category||'Другое']=(catMap[x.category||'Другое']||0)+Number(x.amount||0));
   const cats=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,8),tab=ui.analyticsTab||'expenses';let content='';
-  if(tab==='mileage')content=`<div class="v5-analytics-grid"><div class="stat-card"><div class="stat-value">${fmtNum(mileage.distance)} км</div><div class="stat-label">пробег за период</div></div><div class="stat-card"><div class="stat-value">${mileage.avg?`${fmtNum(mileage.avg,1)} км`:'—'}</div><div class="stat-label">в среднем за день</div></div><div class="stat-card"><div class="stat-value">${fmtNum(c.currentOdometer)} км</div><div class="stat-label">текущий одометр</div></div></div><section class="section"><div class="section-title">История пробега</div>${mileage.logs.length?`<div class="v5-list">${mileage.logs.slice(0,16).map(x=>`<div class="list-row"><div class="row-icon">${icons.speed}</div><div class="row-main"><div class="row-title">${fmtNum(x.value)} км</div><div class="row-sub">${fmtDate(x.date)}</div></div></div>`).join('')}</div>`:emptyState('Нет показаний за период','Измените период или обновите пробег.',null,null,icons.speed)}</section>`;
-  else if(tab==='refuels'){const fuelAll=fuelJournalStats(allRefs),periodCycles=fuelAll.cycles.filter(x=>dateInAnalyticsPeriod(x.endDate,bounds)),periodFuel=fuelCycleSummary(periodCycles),stationMap=new Map();refs.forEach(x=>{const name=String(x.station||'').trim();if(name)stationMap.set(name,(stationMap.get(name)||0)+1);});const favorite=[...stationMap.entries()].sort((a,b)=>b[1]-a[1])[0];content=`<div class="v5-analytics-grid"><div class="stat-card"><div class="stat-value">${refs.length}</div><div class="stat-label">заправок</div></div><div class="stat-card"><div class="stat-value">${fuelConsumptionText(periodFuel.consumption)}</div><div class="stat-label">средний расход</div></div><div class="stat-card"><div class="stat-value">${fuelCost100Text(periodFuel.cost100)}</div><div class="stat-label">стоимость 100 км</div></div><div class="stat-card"><div class="stat-value">${avgPrice?`${fmtNum(avgPrice,2)} ₽/л`:'—'}</div><div class="stat-label">средняя цена</div></div><div class="stat-card"><div class="stat-value">${favorite?esc(favorite[0]):'—'}</div><div class="stat-label">любимая АЗС</div></div><div class="stat-card"><div class="stat-value">${money(fuelSpend)}</div><div class="stat-label">потрачено</div></div></div><section class="section"><div class="section-title">Заправки за период</div>${refs.length?`<div class="v5-list">${refs.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,16).map(refuelRow).join('')}</div>`:emptyState('Заправок за период нет','Измените период или добавьте заправку.',null,null,icons.fuel)}</section>`;}
-  else content=`<div class="v5-analytics-grid"><div class="stat-card"><div class="stat-value">${money(total)}</div><div class="stat-label">расходы за период</div></div><div class="stat-card"><div class="stat-value">${cpk?`${fmtNum(cpk,2)} ₽`:'—'}</div><div class="stat-label">стоимость 1 км</div></div><div class="stat-card"><div class="stat-value">${ex.length}</div><div class="stat-label">операций</div></div></div><section class="section"><div class="section-title">По категориям</div>${cats.length?`<div class="v5-list">${cats.map(([name,value])=>`<div class="list-row"><div class="row-icon">${icons.wallet}</div><div class="row-main"><div class="row-title">${esc(name)}</div></div><div class="row-value">${money(value)}</div></div>`).join('')}</div>`:emptyState('Расходов за период нет','Измените период или добавьте запись.',null,null,icons.chart)}</section>`;
+  if(tab==='mileage')content=`<div class="v5-analytics-grid"><div class="stat-card" data-stat="mileage-distance"><div class="stat-value">${fmtNum(mileage.distance)} км</div><div class="stat-label">пробег за период</div><div class="stat-sub">${fmtNum(mileage.startValue)} → ${fmtNum(mileage.endValue)} км</div></div><div class="stat-card" data-stat="mileage-average"><div class="stat-value">${mileage.avg?`${fmtNum(mileage.avg,1)} км`:'—'}</div><div class="stat-label">в среднем за день</div></div><div class="stat-card" data-stat="mileage-current"><div class="stat-value">${fmtNum(c.currentOdometer)} км</div><div class="stat-label">текущий одометр</div></div></div><section class="section"><div class="section-title">История пробега</div>${mileage.logs.length?`<div class="v5-list">${mileage.logs.slice(0,16).map(x=>`<div class="list-row"><div class="row-icon">${icons.speed}</div><div class="row-main"><div class="row-title">${fmtNum(x.value)} км</div><div class="row-sub">${fmtDate(x.date)}</div></div></div>`).join('')}</div>`:emptyState('Нет показаний за период','Измените период или обновите пробег.',null,null,icons.speed)}</section>`;
+  else if(tab==='refuels'){const fuelAll=fuelJournalStats(allRefs),periodCycles=fuelAll.cycles.filter(x=>dateInAnalyticsPeriod(x.endDate,bounds)),periodFuel=fuelCycleSummary(periodCycles),stationMap=new Map();refs.forEach(x=>{const name=String(x.station||'').trim();if(name)stationMap.set(name,(stationMap.get(name)||0)+1);});const favorite=[...stationMap.entries()].sort((a,b)=>b[1]-a[1])[0];content=`<div class="v5-analytics-grid"><div class="stat-card" data-stat="refuel-count"><div class="stat-value">${refs.length}</div><div class="stat-label">заправок</div></div><div class="stat-card"><div class="stat-value">${fuelConsumptionText(periodFuel.consumption)}</div><div class="stat-label">средний расход</div></div><div class="stat-card"><div class="stat-value">${fuelCost100Text(periodFuel.cost100)}</div><div class="stat-label">стоимость 100 км</div></div><div class="stat-card"><div class="stat-value">${avgPrice?`${fmtNum(avgPrice,2)} ₽/л`:'—'}</div><div class="stat-label">средняя цена</div></div><div class="stat-card"><div class="stat-value">${favorite?esc(favorite[0]):'—'}</div><div class="stat-label">любимая АЗС</div></div><div class="stat-card" data-stat="refuel-spend"><div class="stat-value">${money(fuelSpend)}</div><div class="stat-label">потрачено</div></div></div><section class="section"><div class="section-title">Заправки за период</div>${refs.length?`<div class="v5-list">${refs.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,16).map(refuelRow).join('')}</div>`:emptyState('Заправок за период нет','Измените период или добавьте заправку.',null,null,icons.fuel)}</section>`;}
+  else content=`<div class="v5-analytics-grid"><div class="stat-card" data-stat="expense-total"><div class="stat-value">${money(total)}</div><div class="stat-label">расходы за период</div></div><div class="stat-card" data-stat="expense-per-km"><div class="stat-value">${cpk?`${fmtNum(cpk,2)} ₽`:'—'}</div><div class="stat-label">стоимость 1 км</div></div><div class="stat-card" data-stat="expense-count"><div class="stat-value">${ex.length}</div><div class="stat-label">операций</div></div></div><section class="section"><div class="section-title">По категориям</div>${cats.length?`<div class="v5-list">${cats.map(([name,value])=>`<div class="list-row"><div class="row-icon">${icons.wallet}</div><div class="row-main"><div class="row-title">${esc(name)}</div></div><div class="row-value">${money(value)}</div></div>`).join('')}</div>`:emptyState('Расходов за период нет','Измените период или добавьте запись.',null,null,icons.chart)}</section>`;
   return `<main class="v5-main"><div class="v5-page v5-secondary-page"><div class="v5-analytics-toolbar"><label><span>Период</span><select data-input="analytics-period"><option value="month" ${ui.analyticsPeriod==='month'?'selected':''}>Этот месяц</option><option value="lastMonth" ${ui.analyticsPeriod==='lastMonth'?'selected':''}>Прошлый месяц</option><option value="90" ${ui.analyticsPeriod==='90'?'selected':''}>Последние 90 дней</option><option value="year" ${ui.analyticsPeriod==='year'?'selected':''}>Этот год</option><option value="all" ${ui.analyticsPeriod==='all'?'selected':''}>Всё время</option></select></label></div><div class="v5-segment v5-stat-segment"><button class="${tab==='mileage'?'active':''}" data-action="analytics-tab" data-value="mileage">Пробег</button><button class="${tab==='expenses'?'active':''}" data-action="analytics-tab" data-value="expenses">Расходы</button><button class="${tab==='refuels'?'active':''}" data-action="analytics-tab" data-value="refuels">Заправки</button></div>${content}</div></main>`;
 }
 
