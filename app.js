@@ -2114,16 +2114,16 @@ document.addEventListener('touchcancel',()=>{
 async function markComponent(id,action){ const c=state.components.find(x=>x.id===id); if(!c)return; const km=currentKm(), date=nowISO(); const entry={id:uid(),carId:c.carId,date,odometer:km,type:action==='inspect'?'inspection':'replacement',title:`${action==='inspect'?'Проверка':'Замена'}: ${c.name}`,category:c.category||'',faultKey:'',workText:'',partsText:action==='replace'?[c.brand,c.partNumber].filter(Boolean).join(' · '):'',partsCost:action==='replace'?nonneg(c.cost):0,laborCost:0,otherCost:0,systemKey:c.systemKey||inferSystemKey(c.name,c.category),componentId:c.id,componentAction:action,componentEventOdometer:km,notes:'Отмечено из карточки узла',photos:[],createdAt:new Date().toISOString(),seq:nextSeq()}; state.serviceEntries.push(entry); syncEntryExpense(entry); recordMileageObservation(km,date,'Из сервисной записи','service',entry.id); await persist();toast(action==='inspect'?'Проверка отмечена':'Замена отмечена, циклы сброшены');ui.sheet='component-detail';render(); }
 
 const storedFilePreviewUrls=[];
-function dataUrlBlob(data,type='application/octet-stream'){
+function dataUrlBlob(data,type=''){
   const value=String(data||''),comma=value.indexOf(',');
   if(!value.startsWith('data:')||comma<0)throw new Error('INVALID_STORED_FILE');
-  const head=value.slice(5,comma),payload=value.slice(comma+1),parts=head.split(';'),mime=parts[0]||type||'application/octet-stream',isBase64=parts.includes('base64');
+  const head=value.slice(5,comma),payload=value.slice(comma+1),parts=head.split(';'),mime=type||parts[0]||'application/octet-stream',isBase64=parts.includes('base64');
   if(isBase64){
     const raw=atob(payload),bytes=new Uint8Array(raw.length);
     for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
-    return new Blob([bytes],{type:type||mime});
+    return new Blob([bytes],{type:mime});
   }
-  return new Blob([decodeURIComponent(payload)],{type:type||mime});
+  return new Blob([decodeURIComponent(payload)],{type:mime});
 }
 function storedFileBlob(file){
   return dataUrlBlob(file?.data,file?.type||'application/octet-stream');
