@@ -405,7 +405,14 @@ test('service record links to standard node and early replacement resets existin
   await page.locator('[data-action="add-component"]').last().click();
   await expect(page.locator('#systemKey optgroup')).toHaveCount(25);
   expect(await page.locator('#systemKey option').count()).toBeGreaterThan(180);
-  await page.locator('#systemKey').selectOption('spark_plugs');
+  await page.locator('#systemKeySearch').fill('свеч');
+  await expect(page.locator('[data-system-combobox-list]')).toBeVisible();
+  await expect(page.locator('[data-system-key="spark_plugs"]')).toContainText('Свечи зажигания');
+  expect(await page.locator('.v5-combobox-option').count()).toBeLessThan(12);
+  await page.locator('[data-system-key="spark_plugs"]').click();
+  await expect(page.locator('#systemKey')).toHaveValue('spark_plugs');
+  await expect(page.locator('#systemKeySearch')).toHaveValue('Свечи зажигания');
+  await expect(page.locator('[data-system-combobox-list]')).toBeHidden();
   await page.locator('#installedOdometer').fill('100000');
   await page.locator('#lifeKm').fill('10000');
   await page.locator('button[form="component-form"]').click();
@@ -420,7 +427,10 @@ test('service record links to standard node and early replacement resets existin
   await page.locator('[data-action="go-back"]').click();
   await page.locator('[data-action="add-entry"]').first().click();
   await page.locator('#title').fill('Ранняя замена свечей');
-  await page.locator('#systemKey').selectOption('spark_plugs');
+  await page.locator('#systemKeySearch').fill('свечи');
+  await expect(page.locator('[data-system-key="spark_plugs"]')).toBeVisible();
+  await page.locator('[data-system-key="spark_plugs"]').click();
+  await expect(page.locator('#systemKey')).toHaveValue('spark_plugs');
   await page.locator('#componentActionChoice').selectOption('replace');
   await expect(page.locator('#system-link-hint')).toContainText('уже отслеживается');
   await expect(page.locator('#lifeKm')).toHaveValue('10000');
