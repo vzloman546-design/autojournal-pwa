@@ -641,7 +641,15 @@ test.describe('offline PWA',()=>{
   test('cached shell and IndexedDB remain usable offline',async({page,context,browserName})=>{
     test.skip(browserName==='webkit','Offline browser-context emulation is unreliable in Playwright WebKit.');
     await addCar(page);
-    await page.evaluate(()=>navigator.serviceWorker.ready);
+    await page.evaluate(async()=>{
+      await navigator.serviceWorker.ready;
+      if(navigator.serviceWorker.controller)return;
+      await new Promise(resolve=>{
+        const timer=setTimeout(resolve,3000);
+        navigator.serviceWorker.addEventListener('controllerchange',()=>{clearTimeout(timer);resolve();},{once:true});
+      });
+    });
+    if(!await page.evaluate(()=>!!navigator.serviceWorker.controller))await page.reload();
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
     await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.9.0');
     await context.setOffline(true);
@@ -659,18 +667,20 @@ test.describe('offline PWA',()=>{
 
 
 test('QR transfer exposes directional modes and generates one-time QR session', async({page})=>{
-  await page.addInitScript(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync'));
   let sessionId='';
-  await page.route('**/__sync/v1/sessions',async route=>{
-    const req=route.request();
-    const body=JSON.parse(req.postData()||'{}');
-    sessionId=body.id;
-    await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ok:true,expiresAt:Date.now()+600000})});
-  });
-  await page.route('**/__sync/v1/sessions/**',async route=>{
-    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:sessionId,status:'waiting',mode:null,expiresAt:Date.now()+600000})});
+  await page.route('**/__sync/**',async route=>{
+    const req=route.request(),url=new URL(req.url()),path=url.pathname.replace('/__sync','');
+    if(path==='/v1/sessions'&&req.method()==='POST'){
+      const body=JSON.parse(req.postData()||'{}');sessionId=body.id;
+      await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ok:true,expiresAt:Date.now()+600000})});return;
+    }
+    if(path===`/v1/sessions/${sessionId}`&&req.method()==='GET'){
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:sessionId,status:'waiting',mode:null,expiresAt:Date.now()+600000})});return;
+    }
+    await route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:'not_found'})});
   });
   await page.goto('/');
+  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync'));
   await openProfile(page);
   await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
@@ -690,7 +700,6 @@ test('QR transfer exposes directional modes and generates one-time QR session', 
 
 
 test('QR relay payload is encrypted and relay auth is not the QR encryption secret', async({page})=>{
-  await page.addInitScript(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync'));
   let sessionId='',status='waiting',mode=null,totalChunks=null,iv=null,sender=null;
   const chunks=new Map(),authHeaders=[];
   await page.route('**/__sync/**',async route=>{
@@ -723,6 +732,7 @@ test('QR relay payload is encrypted and relay auth is not the QR encryption secr
     await route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:'not_found'})});
   });
   await page.goto('/');
+  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync'));
   const result=await page.evaluate(async()=>{
     const sync=await import(new URL('./sync.js',location.href).href);
     const pair=await sync.createSyncSession();
