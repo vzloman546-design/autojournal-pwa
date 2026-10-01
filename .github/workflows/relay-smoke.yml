@@ -1,0 +1,27 @@
+name: AutoJournal Real Relay Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sync.js'
+      - 'sync-config.js'
+      - 'cloudflare/src/worker.js'
+      - 'scripts/relay-smoke.mjs'
+      - '.github/workflows/relay-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  relay-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Test encrypted record against real relay
+        run: node scripts/relay-smoke.mjs
