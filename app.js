@@ -705,7 +705,7 @@ function historyPage(){
 function healthTrackedComponentByKey(key){
   return carItems(state.components)
     .filter(x=>x.systemKey===key)
-    .sort((a,b)=>compareLifecycle(componentState(a),componentState(b))).at(-1)||null;
+    .sort((a,b)=>String(componentState(a).installedDate||'').localeCompare(String(componentState(b).installedDate||''))||nonneg(componentState(a).installedOdometer)-nonneg(componentState(b).installedOdometer)||String(a.id).localeCompare(String(b.id))).at(-1)||null;
 }
 function healthStatusText(status){
   return {ok:'В норме',soon:'Скоро',due:'Срок наступил',overdue:'Просрочено',neutral:'Нет интервала'}[status]||status;
@@ -745,7 +745,7 @@ function partsPage(){
   const coverage=coreKeys.length?Math.round(coreTracked/coreKeys.length*100):0;
   const statuses=comps.map(componentOverall),attention=statuses.filter(x=>['overdue','due','soon'].includes(x)).length,ok=statuses.filter(x=>x==='ok').length;
   const extra=comps.filter(x=>!coreSet.has(x.systemKey)).sort((a,b)=>({overdue:0,due:1,soon:2,ok:3,neutral:4}[componentOverall(a)]-({overdue:0,due:1,soon:2,ok:3,neutral:4}[componentOverall(b)])||a.name.localeCompare(b.name,'ru'));
-  const headline=attention?`${attention} ${plural(attention,'пункт требует','пункта требуют','пунктов требуют')} внимания`:comps.length?`${ok} ${plural(ok,'пункт в норме','пункта в норме','пунктов в норме')}`:'Заполните план обслуживания';
+  const headline=attention?`${attention} ${plural(attention,'пункт требует','пункта требуют','пунктов требуют')} внимания`:ok?`${ok} ${plural(ok,'пункт в норме','пункта в норме','пунктов в норме')}`:comps.length?'Настройте интервалы обслуживания':'Заполните план обслуживания';
   return `<main class="v5-main"><div class="v5-page v5-health-page">
     <section class="v5-health-hero">
       <div class="v5-health-hero-icon">${icons.health}</div>
