@@ -1685,7 +1685,7 @@ async function fileToDataURL(file, compressImage=false){
 }
 
 function formObject(form){ return Object.fromEntries(new FormData(form).entries()); }
-function updateCarMileage(value,date=nowISO(),note=''){ const c=car(); if(!c)return false; const n=Number(value); if(!Number.isFinite(n)||n<nonneg(c.currentOdometer)){toast('Текущий пробег не может быть меньше предыдущего');return false;} const err=mileageConsistencyError(n,date,'manual',''); if(err){toast(err);return false;} c.currentOdometer=n; state.odometerLogs.push({id:uid(),carId:c.id,date,value:n,note,sourceType:'manual',sourceId:uid()}); return true; }
+function updateCarMileage(value,date=nowISO(),note=''){ const c=car(); if(!c)return false; const n=Number(value); if(!Number.isFinite(n)||n<nonneg(c.currentOdometer)){toast('Текущий пробег не может быть меньше предыдущего');return false;} c.currentOdometer=n; state.odometerLogs.push({id:uid(),carId:c.id,date,value:n,note,sourceType:'manual',sourceId:uid()}); return true; }
 
 function syncEntryExpense(entry){
   const amount=totalServiceCost(entry);
