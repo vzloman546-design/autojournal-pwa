@@ -25,9 +25,9 @@ async function openProfile(page){
 }
 async function gotoSecondary(page,view){
   await openProfile(page);
-  if(view==='documents'){
-    await page.locator('.v5-menu [data-view="more"]').click();
-    await page.locator('.v5-menu-page [data-view="documents"]').click();
+  if(view==='parts'){
+    await page.locator('[data-action="go-back"]').click();
+    await page.locator('.v5-quick-card[data-view="parts"]').click();
     return;
   }
   await page.locator('.v5-menu [data-view="'+view+'"]').click();
@@ -622,18 +622,17 @@ test('secondary screens hide bottom nav and no horizontal overflow at mobile wid
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.locator('[data-action="open-profile"]').click();
     await expect(page.locator('.v5-tabbar')).toHaveCount(0);
-    for(const view of ['analytics','parts','more']){
+    for(const view of ['analytics','documents','more']){
       await page.locator('[data-view="'+view+'"]').click();
       await expect(page.locator('.v5-tabbar')).toHaveCount(0);
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
       await page.locator('[data-action="go-back"]').click();
     }
-    await page.locator('[data-view="more"]').click();
-    await page.locator('.v5-menu-page [data-view="documents"]').click();
+    await page.locator('[data-action="go-back"]').click();
+    await expect(page.locator('.v5-tabbar')).toBeVisible();
+    await page.locator('.v5-quick-card[data-view="parts"]').click();
     await expect(page.locator('.v5-tabbar')).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await page.locator('[data-action="go-back"]').click();
-    await page.locator('[data-action="go-back"]').click();
     await page.locator('[data-action="go-back"]').click();
     await expect(page.locator('.v5-tabbar')).toBeVisible();
   }
@@ -724,15 +723,22 @@ test('fuel journal calculates full-tank consumption with partial fills', async({
   await expect(page.locator('.v5-main')).toContainText('557 ₽/100 км');
 });
 
-test('profile exposes Vehicle Health instead of Documents and basic plan opens preselected node', async({page})=>{
+test('profile exposes Documents while Vehicle Health stays in home quick access', async({page})=>{
   await addCar(page,{initial:'200000',current:'200000'});
   await openProfile(page);
   const menu=page.locator('.v5-menu');
-  await expect(menu.getByText('Здоровье автомобиля',{exact:true})).toBeVisible();
-  await expect(menu.getByText('Документы',{exact:true})).toHaveCount(0);
-  await expect(menu.getByText('Контроль обслуживания',{exact:true})).toHaveCount(0);
+  await expect(menu.getByText('Документы',{exact:true})).toBeVisible();
+  await expect(menu.getByText('Здоровье автомобиля',{exact:true})).toHaveCount(0);
+  await expect(page.locator('.v5-menu-page [data-view="documents"]')).toHaveCount(0);
 
-  await menu.locator('[data-view="parts"]').click();
+  await menu.locator('[data-view="documents"]').click();
+  await expect(page.locator('.v5-subbar-title')).toHaveText('Документы');
+  await page.locator('[data-action="go-back"]').click();
+  await page.locator('[data-action="go-back"]').click();
+
+  const healthShortcut=page.locator('.v5-quick-card[data-view="parts"]');
+  await expect(healthShortcut).toContainText('Здоровье автомобиля');
+  await healthShortcut.click();
   await expect(page.locator('.v5-subbar-title')).toHaveText('Здоровье автомобиля');
   await expect(page.locator('.v5-health-hero')).toContainText('Базовый план заполнен: 0 из');
   await expect(page.locator('.v5-health-list').first()).toContainText('Моторное масло');
@@ -750,16 +756,11 @@ test('profile exposes Vehicle Health instead of Documents and basic plan opens p
   const oil=page.locator('[data-action="component-detail"]',{hasText:'Моторное масло'});
   await expect(oil).toBeVisible();
   await expect(oil).toContainText('В норме');
-
-  await page.locator('[data-action="go-back"]').click();
-  await page.locator('.v5-menu [data-view="more"]').click();
-  await expect(page.locator('.v5-menu-page [data-view="documents"]')).toContainText('Документы');
 });
 
 test('service record links to standard node and early replacement resets existing resource', async({page})=>{
   await addCar(page,{initial:'100000',current:'109000'});
-  await openProfile(page);
-  await page.locator('.v5-menu [data-view="parts"]').click();
+  await page.locator('.v5-quick-card[data-view="parts"]').click();
   await page.locator('[data-action="add-component"]').last().click();
   await expect(page.locator('#systemKey optgroup')).toHaveCount(25);
   expect(await page.locator('#systemKey option').count()).toBeGreaterThan(180);
@@ -781,7 +782,6 @@ test('service record links to standard node and early replacement resets existin
   expect(s.components[0].systemKey).toBe('spark_plugs');
   expect(s.components[0].lifeKm).toBe(10000);
 
-  await page.locator('[data-action="go-back"]').click();
   await page.locator('[data-action="go-back"]').click();
   await page.locator('[data-action="add-entry"]').first().click();
   await page.locator('#title').fill('Ранняя замена свечей');
@@ -807,8 +807,7 @@ test('service record links to standard node and early replacement resets existin
   expect(entry.componentEventOdometer).toBe(109000);
   expect(s.components[0].lifeKm).toBe(10000);
 
-  await openProfile(page);
-  await page.locator('.v5-menu [data-view="parts"]').click();
+  await page.locator('.v5-quick-card[data-view="parts"]').click();
   await page.locator('[data-action="component-detail"]',{hasText:'Свечи зажигания'}).click();
   await expect(page.locator('.sheet')).toContainText('109 000 км');
   await expect(page.locator('.sheet')).toContainText('через 10 000 км');
