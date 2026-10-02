@@ -647,7 +647,7 @@ function homePage(){
       <h2>Быстрый доступ</h2>
       <div class="v5-quick-two">
         <button class="v5-quick-card" data-action="add-entry"><div class="v5-round-icon">${icons.plus}</div><div><strong>Добавить запись</strong><span>Сервис, ТО, расходы и заметки</span></div><b>›</b></button>
-        <button class="v5-quick-card" data-view="documents"><div class="v5-round-icon">${icons.doc}</div><div><strong>Документы</strong><span>${docs.length?`${docs.length} ${plural(docs.length,'документ','документа','документов')}`:'Нет документов'}</span></div><b>›</b></button>
+        <button class="v5-quick-card" data-view="parts"><div class="v5-round-icon">${icons.health}</div><div><strong>Здоровье автомобиля</strong><span>План обслуживания, состояние узлов и сроки</span></div><b>›</b></button>
       </div>
     </section>
 
