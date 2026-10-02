@@ -485,6 +485,26 @@ test('statistics categories and periods render without cross-period leakage', as
 
 
 
+test('current mileage accepts a higher real reading despite a lower future-dated log', async({page})=>{
+  await addCar(page,{initial:'210000',current:'210097'});
+  const seeded=await state(page),carId=seeded.cars[0].id;
+  seeded.odometerLogs.push({
+    id:'future-lower-odo',carId,date:isoOffset(1),value:210097,
+    note:'Поздняя запись с меньшим пробегом',sourceType:'service',sourceId:'future-service'
+  });
+  await page.evaluate(async data=>{const db=await import('./db.js');await db.saveState(data);},seeded);
+  await page.reload();
+
+  await page.locator('[data-action="add-odometer"]').click();
+  await page.locator('#value').fill('210156');
+  await page.locator('button[form="odometer-form"]').click();
+
+  await expect(page.locator('.v5-mileage-card')).toContainText('210 156');
+  const saved=await state(page);
+  expect(saved.cars[0].currentOdometer).toBe(210156);
+  expect(saved.odometerLogs.some(x=>x.sourceType==='manual'&&x.value===210156)).toBe(true);
+});
+
 test('analytics keeps same-day mileage delta stable across period switches', async({page})=>{
   await addCar(page,{initial:'200000',current:'200000'});
   await page.locator('[data-action="add-odometer"]').click();
