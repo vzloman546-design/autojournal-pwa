@@ -330,7 +330,6 @@ test('document file, expiry reminder, edit and delete full cycle', async({page})
 
   await page.locator('[data-action="go-back"]').click();
   await page.locator('[data-action="go-back"]').click();
-  await page.locator('[data-action="go-back"]').click();
   await page.locator('.v5-tabbar [data-view="notifications"]').click();
   await expect(page.getByText(/Документ: ОСАГО QA изменено/)).toBeVisible();
 
@@ -1116,7 +1115,6 @@ test('persistent vault auto-sync pushes local changes and pulls remote changes',
     return s.serviceEntries.some(x=>x.id==='remote-service-entry'&&x.title==='Запись с другого устройства');
   },{timeout:10000}).toBe(true);
 
-  await page.locator('[data-action="go-back"]').click();
   await page.locator('[data-action="go-back"]').click();
   await expect(page.locator('.v5-subbar-title')).toHaveText('Профиль');
   await page.locator('.v5-menu [data-view="more"]').click();
