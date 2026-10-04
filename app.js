@@ -12,7 +12,7 @@ const APP_VERSION = 7;
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const nowISO = () => { const d=new Date(),y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; };
+const nowISO = () => new Date().toISOString().slice(0,10);
 const fmtNum = (n, digits=0) => new Intl.NumberFormat('ru-RU', {maximumFractionDigits:digits}).format(Number(n||0));
 const money = n => `${fmtNum(n)} ₽`;
 const fmtDate = v => v ? new Intl.DateTimeFormat('ru-RU').format(new Date(`${v}T12:00:00`)) : '—';
@@ -495,30 +495,11 @@ function odometerTimeline(c=car()){
   return [...byDate.entries()].map(([date,value])=>({date,value})).sort((a,b)=>a.date.localeCompare(b.date));
 }
 function linkedMileageFloor(carId=car()?.id){ if(!carId)return 0; const vals=[0]; for(const x of state.serviceEntries)if(x.carId===carId&&nonneg(x.odometer)>0)vals.push(nonneg(x.odometer)); for(const x of state.expenses)if(x.carId===carId&&nonneg(x.odometer)>0)vals.push(nonneg(x.odometer)); for(const x of state.components)if(x.carId===carId&&nonneg(x.baseInstalledOdometer)>0)vals.push(nonneg(x.baseInstalledOdometer)); return Math.max(...vals); }
-function mileageLogIsChronologyAnchor(x){
-  if(!x)return false;
-  if(x.sourceType==='manual'&&(x.note==='Из карточки автомобиля'||x.note==='Восстановлено из текущего пробега'))return false;
-  return true;
-}
-function mileageLogSourceLabel(x){
-  if(!x)return 'история пробега';
-  if(x.sourceType==='service')return 'сервисная запись';
-  if(x.sourceType==='refuel')return 'заправка';
-  if(x.sourceType==='expense')return 'расход';
-  if(x.sourceType==='component')return 'узел автомобиля';
-  if(x.sourceType==='manual')return 'обновление пробега';
-  if(x.sourceType==='car-start')return 'начало учёта';
-  return 'история пробега';
-}
 function mileageConsistencyError(value,date,ignoreType='',ignoreId=''){
-  const c=car(); if(!c||!dateOK(date))return null;
-  const n=nonneg(value), logs=state.odometerLogs.filter(x=>x.carId===c.id&&!(x.sourceType===ignoreType&&x.sourceId===ignoreId)&&dateOK(x.date)&&mileageLogIsChronologyAnchor(x));
-  const prevDate=logs.filter(x=>x.date<date).map(x=>x.date).sort().at(-1);
-  const nextDate=logs.filter(x=>x.date>date).map(x=>x.date).sort()[0];
-  const prev=prevDate?logs.filter(x=>x.date===prevDate).sort((a,b)=>nonneg(b.value)-nonneg(a.value))[0]:null;
-  const next=nextDate?logs.filter(x=>x.date===nextDate).sort((a,b)=>nonneg(b.value)-nonneg(a.value))[0]:null;
-  if(prev&&n<nonneg(prev.value))return `На ${fmtDate(prev.date)} уже зафиксирован пробег ${fmtNum(prev.value)} км (${mileageLogSourceLabel(prev)}). Проверь дату или показание.`;
-  if(next&&n>nonneg(next.value))return `На ${fmtDate(next.date)} уже зафиксирован пробег ${fmtNum(next.value)} км (${mileageLogSourceLabel(next)}). Проверь дату или показание.`;
+  const c=car(); if(!c||!dateOK(date))return null; const n=nonneg(value), logs=state.odometerLogs.filter(x=>x.carId===c.id&&!(x.sourceType===ignoreType&&x.sourceId===ignoreId)&&dateOK(x.date));
+  const prev=logs.filter(x=>x.date<date).sort((a,b)=>b.date.localeCompare(a.date))[0]; const next=logs.filter(x=>x.date>date).sort((a,b)=>a.date.localeCompare(b.date))[0];
+  if(prev&&n<nonneg(prev.value))return `На более раннюю дату уже записан пробег ${fmtNum(prev.value)} км. Проверь дату или показание.`;
+  if(next&&n>nonneg(next.value))return `На более позднюю дату уже записан пробег ${fmtNum(next.value)} км. Проверь дату или показание.`;
   return null;
 }
 function trackedExpenses(c=car()){ if(!c)return[]; const start=c.trackingStartDate||''; return state.expenses.filter(x=>x.carId===c.id).filter(x=>(!start||!dateOK(x.date)||x.date>=start)&&(!x.odometer||nonneg(x.odometer)>=nonneg(c.initialOdometer))); }
@@ -1735,10 +1716,8 @@ async function handleSubmit(e){
     };
     if(x){
       const floor=linkedMileageFloor(id);if(requested<floor){toast(`В истории есть запись на ${fmtNum(floor)} км. Сначала исправь её.`);return;}
-      const previousCurrent=nonneg(x.currentOdometer);
       Object.assign(x,details);state.odometerLogs=state.odometerLogs.filter(v=>!(v.carId===id&&v.sourceType==='manual'&&nonneg(v.value)>requested));
-      if(requested!==previousCurrent)state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Из карточки автомобиля',sourceType:'manual',sourceId:uid()});
-      recalculateCurrentOdometer(id);
+      state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Из карточки автомобиля',sourceType:'manual',sourceId:uid()});recalculateCurrentOdometer(id);
     }else{
       const obj={...details,currentOdometer:requested,trackingStartDate:nowISO()};state.cars.push(obj);state.activeCarId=id;
       state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Начало учёта',sourceType:'car-start',sourceId:id});
