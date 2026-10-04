@@ -12,7 +12,7 @@ const APP_VERSION = 7;
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const nowISO = () => new Date().toISOString().slice(0,10);
+const nowISO = () => { const d=new Date(),y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; };
 const fmtNum = (n, digits=0) => new Intl.NumberFormat('ru-RU', {maximumFractionDigits:digits}).format(Number(n||0));
 const money = n => `${fmtNum(n)} ₽`;
 const fmtDate = v => v ? new Intl.DateTimeFormat('ru-RU').format(new Date(`${v}T12:00:00`)) : '—';
@@ -445,7 +445,9 @@ function migrate(raw) {
     photo:safeImageData(c.photo),trim:String(c.trim||''),fuelType:String(c.fuelType||''),engineVolume:String(c.engineVolume||''),transmission:String(c.transmission||''),powerHp:nonneg(c.powerHp),tireSize:String(c.tireSize||''),engineOil:String(c.engineOil||''),engineOilVolume:String(c.engineOilVolume||''),coolantVolume:String(c.coolantVolume||''),transmissionOilVolume:String(c.transmissionOilVolume||''),brakeFluidVolume:String(c.brakeFluidVolume||''),steeringFluidVolume:String(c.steeringFluidVolume||''),specs:normalizeCarSpecs(c),customSpecs:String(c.customSpecs||''),
     initialOdometer:nonneg(c.initialOdometer),currentOdometer:nonneg(c.currentOdometer),purchasePrice:nonneg(c.purchasePrice),purchaseDate:String(c.purchaseDate||''),trackingStartDate:String(c.trackingStartDate||c.purchaseDate||'')
   }));
-  let odometerLogs=(Array.isArray(raw.odometerLogs)?raw.odometerLogs:[]).filter(x=>!['Из сервисной записи','Из расхода'].includes(x?.note)).map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),value:nonneg(x.value),note:String(x.note||''),sourceType:String(x.sourceType||'manual'),sourceId:String(x.sourceId||x.id||uid())}));
+  let odometerLogs=(Array.isArray(raw.odometerLogs)?raw.odometerLogs:[])
+    .map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),value:nonneg(x.value),note:String(x.note||''),sourceType:String(x.sourceType||'manual'),sourceId:String(x.sourceId||x.id||uid())}))
+    .filter(mileageLogIsIndependent);
   let seq=1;
   const serviceEntries=(Array.isArray(raw.serviceEntries)?raw.serviceEntries:[]).map((x,index)=>({
     ...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),odometer:nonneg(x.odometer),type:String(x.type||'other'),title:String(x.title||''),category:String(x.category||''),faultKey:String(x.faultKey||''),
@@ -461,15 +463,16 @@ function migrate(raw) {
   }));
   const expenses=(Array.isArray(raw.expenses)?raw.expenses:[]).map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),odometer:nonneg(x.odometer),category:String(x.category||'Другое'),amount:nonneg(x.amount),description:String(x.description||''),note:String(x.note||''),linkedServiceId:String(x.linkedServiceId||''),linkedRefuelId:String(x.linkedRefuelId||'')}));
   const documents=(Array.isArray(raw.documents)?raw.documents:[]).map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),title:String(x.title||''),type:String(x.type||''),number:String(x.number||''),issueDate:String(x.issueDate||''),expiryDate:String(x.expiryDate||''),remindDays:x.remindDays==null?30:nonneg(x.remindDays),files:Array.isArray(x.files)?x.files.filter(f=>f&&safeStoredFileData(f.data)).map(f=>({id:String(f.id||uid()),name:String(f.name||'Файл'),type:String(f.type||''),size:nonneg(f.size),data:safeStoredFileData(f.data)})):[]}));
-  const hasSource=(carId,type,id)=>odometerLogs.some(x=>x.carId===carId&&x.sourceType===type&&x.sourceId===id);
-  for(const e of serviceEntries) if(e.carId&&e.odometer>0&&!hasSource(e.carId,'service',e.id)) odometerLogs.push({id:uid(),carId:e.carId,date:e.date,value:e.odometer,note:'Восстановлено из сервисной истории',sourceType:'service',sourceId:e.id});
-  for(const c of components) if(c.carId&&c.baseInstalledOdometer>0&&!hasSource(c.carId,'component',c.id)) odometerLogs.push({id:uid(),carId:c.carId,date:c.baseInstalledDate,value:c.baseInstalledOdometer,note:'Восстановлено из установки узла',sourceType:'component',sourceId:c.id});
-  for(const e of expenses) if(e.carId&&e.odometer>0&&!e.linkedServiceId&&!hasSource(e.carId,'expense',e.id)) odometerLogs.push({id:uid(),carId:e.carId,date:e.date,value:e.odometer,note:'Восстановлено из расхода',sourceType:'expense',sourceId:e.id});
+  const refuels=(Array.isArray(raw.refuels)?raw.refuels:[]).map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),odometer:nonneg(x.odometer),fuelType:String(x.fuelType||'Бензин'),amount:nonneg(x.amount),liters:nonneg(x.liters),pricePerLiter:nonneg(x.pricePerLiter),fullTank:Boolean(x.fullTank),station:String(x.station||''),address:String(x.address||''),notes:String(x.notes||''),createdAt:String(x.createdAt||new Date().toISOString())}));
+  for(const e of serviceEntries) if(e.carId&&dateOK(e.date)&&e.odometer>0) odometerLogs.push({id:uid(),carId:e.carId,date:e.date,value:e.odometer,note:'Восстановлено из сервисной истории',sourceType:'service',sourceId:e.id});
+  for(const c of components) if(c.carId&&dateOK(c.baseInstalledDate)&&c.baseInstalledOdometer>0) odometerLogs.push({id:uid(),carId:c.carId,date:c.baseInstalledDate,value:c.baseInstalledOdometer,note:'Восстановлено из установки узла',sourceType:'component',sourceId:c.id});
+  for(const e of expenses) if(e.carId&&dateOK(e.date)&&e.odometer>0&&!e.linkedServiceId&&!e.linkedRefuelId) odometerLogs.push({id:uid(),carId:e.carId,date:e.date,value:e.odometer,note:'Восстановлено из расхода',sourceType:'expense',sourceId:e.id});
+  for(const r of refuels) if(r.carId&&dateOK(r.date)&&r.odometer>0) odometerLogs.push({id:uid(),carId:r.carId,date:r.date,value:r.odometer,note:'Восстановлено из заправки',sourceType:'refuel',sourceId:r.id});
   for(const c of cars){ const vals=odometerLogs.filter(x=>x.carId===c.id).map(x=>Number(x.value)).filter(Number.isFinite); const loggedMax=vals.length?Math.max(...vals):0; if(c.currentOdometer>Math.max(c.initialOdometer,loggedMax)) odometerLogs.push({id:uid(),carId:c.id,date:c.trackingStartDate||today(),value:c.currentOdometer,note:'Восстановлено из текущего пробега',sourceType:'manual',sourceId:`legacy-current-${c.id}`}); const allVals=odometerLogs.filter(x=>x.carId===c.id).map(x=>nonneg(x.value)); c.currentOdometer=Math.max(c.initialOdometer,...(allVals.length?allVals:[0])); if(!c.trackingStartDate){const dates=odometerLogs.filter(x=>x.carId===c.id&&dateOK(x.date)).map(x=>x.date).sort();c.trackingStartDate=dates[0]||today();} }
   const theme=['system','light','dark'].includes(rs.theme)?rs.theme:base.settings.theme;
   const settings={...base.settings,theme,defaultWarnKm:nonneg(rs.defaultWarnKm??base.settings.defaultWarnKm,base.settings.defaultWarnKm),defaultWarnDays:nonneg(rs.defaultWarnDays??base.settings.defaultWarnDays,base.settings.defaultWarnDays),currency:'RUB',lastBackupAt:String(rs.lastBackupAt||'')};
   const next=Math.max(nonneg(raw.nextSeq,1),...serviceEntries.map(x=>nonneg(x.seq)+1),1);
-  const refuels=(Array.isArray(raw.refuels)?raw.refuels:[]).map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),odometer:nonneg(x.odometer),fuelType:String(x.fuelType||'Бензин'),amount:nonneg(x.amount),liters:nonneg(x.liters),pricePerLiter:nonneg(x.pricePerLiter),fullTank:Boolean(x.fullTank),station:String(x.station||''),address:String(x.address||''),notes:String(x.notes||''),createdAt:String(x.createdAt||new Date().toISOString())}));
+
   const activeCarId=cars.some(c=>c.id===raw.activeCarId)?raw.activeCarId:(cars[0]?.id||null);
   return {...base,...raw,version:APP_VERSION,nextSeq:next,activeCarId,settings,cars,odometerLogs,serviceEntries,components,expenses,documents,refuels};
 }
@@ -495,11 +498,30 @@ function odometerTimeline(c=car()){
   return [...byDate.entries()].map(([date,value])=>({date,value})).sort((a,b)=>a.date.localeCompare(b.date));
 }
 function linkedMileageFloor(carId=car()?.id){ if(!carId)return 0; const vals=[0]; for(const x of state.serviceEntries)if(x.carId===carId&&nonneg(x.odometer)>0)vals.push(nonneg(x.odometer)); for(const x of state.expenses)if(x.carId===carId&&nonneg(x.odometer)>0)vals.push(nonneg(x.odometer)); for(const x of state.components)if(x.carId===carId&&nonneg(x.baseInstalledOdometer)>0)vals.push(nonneg(x.baseInstalledOdometer)); return Math.max(...vals); }
+function mileageLogIsIndependent(x){
+  if(!x)return false;
+  if(['service','component','expense','refuel'].includes(String(x.sourceType||'')))return false;
+  return !['Из сервисной записи','Из расхода','Из заправки','Установка узла','Восстановлено из сервисной истории','Восстановлено из установки узла','Восстановлено из расхода','Восстановлено из заправки'].includes(String(x.note||''));
+}
+function mileageSourceRows(carId,ignoreType='',ignoreId=''){
+  const rows=[];
+  for(const x of state.odometerLogs)if(x.carId===carId&&dateOK(x.date)&&mileageLogIsIndependent(x)&&!(x.sourceType===ignoreType&&x.sourceId===ignoreId))rows.push({date:x.date,value:nonneg(x.value),sourceType:x.sourceType||'manual'});
+  for(const x of state.serviceEntries)if(x.carId===carId&&dateOK(x.date)&&nonneg(x.odometer)>0&&!(ignoreType==='service'&&x.id===ignoreId))rows.push({date:x.date,value:nonneg(x.odometer),sourceType:'service'});
+  for(const x of state.components)if(x.carId===carId&&dateOK(x.baseInstalledDate)&&nonneg(x.baseInstalledOdometer)>0&&!(ignoreType==='component'&&x.id===ignoreId))rows.push({date:x.baseInstalledDate,value:nonneg(x.baseInstalledOdometer),sourceType:'component'});
+  for(const x of state.expenses)if(x.carId===carId&&dateOK(x.date)&&nonneg(x.odometer)>0&&!x.linkedServiceId&&!x.linkedRefuelId&&!(ignoreType==='expense'&&x.id===ignoreId))rows.push({date:x.date,value:nonneg(x.odometer),sourceType:'expense'});
+  for(const x of (state.refuels||[]))if(x.carId===carId&&dateOK(x.date)&&nonneg(x.odometer)>0&&!(ignoreType==='refuel'&&x.id===ignoreId))rows.push({date:x.date,value:nonneg(x.odometer),sourceType:'refuel'});
+  return rows;
+}
+function mileageSourceLabel(type){return {service:'сервисная запись',component:'узел автомобиля',expense:'расход',refuel:'заправка',manual:'обновление пробега','car-start':'начало учёта'}[type]||'история пробега';}
 function mileageConsistencyError(value,date,ignoreType='',ignoreId=''){
-  const c=car(); if(!c||!dateOK(date))return null; const n=nonneg(value), logs=state.odometerLogs.filter(x=>x.carId===c.id&&!(x.sourceType===ignoreType&&x.sourceId===ignoreId)&&dateOK(x.date));
-  const prev=logs.filter(x=>x.date<date).sort((a,b)=>b.date.localeCompare(a.date))[0]; const next=logs.filter(x=>x.date>date).sort((a,b)=>a.date.localeCompare(b.date))[0];
-  if(prev&&n<nonneg(prev.value))return `На более раннюю дату уже записан пробег ${fmtNum(prev.value)} км. Проверь дату или показание.`;
-  if(next&&n>nonneg(next.value))return `На более позднюю дату уже записан пробег ${fmtNum(next.value)} км. Проверь дату или показание.`;
+  const c=car(); if(!c||!dateOK(date))return null;
+  const n=nonneg(value),rows=mileageSourceRows(c.id,ignoreType,ignoreId);
+  const prevDate=rows.filter(x=>x.date<date).map(x=>x.date).sort().at(-1);
+  const nextDate=rows.filter(x=>x.date>date).map(x=>x.date).sort()[0];
+  const prev=prevDate?rows.filter(x=>x.date===prevDate).sort((a,b)=>b.value-a.value)[0]:null;
+  const next=nextDate?rows.filter(x=>x.date===nextDate).sort((a,b)=>b.value-a.value)[0]:null;
+  if(prev&&n<prev.value)return `На ${fmtDate(prev.date)} уже зафиксирован пробег ${fmtNum(prev.value)} км (${mileageSourceLabel(prev.sourceType)}). Проверь дату или показание.`;
+  if(next&&n>next.value)return `На ${fmtDate(next.date)} уже зафиксирован пробег ${fmtNum(next.value)} км (${mileageSourceLabel(next.sourceType)}). Проверь дату или показание.`;
   return null;
 }
 function trackedExpenses(c=car()){ if(!c)return[]; const start=c.trackingStartDate||''; return state.expenses.filter(x=>x.carId===c.id).filter(x=>(!start||!dateOK(x.date)||x.date>=start)&&(!x.odometer||nonneg(x.odometer)>=nonneg(c.initialOdometer))); }
@@ -1353,7 +1375,7 @@ function refuelSheet(id=null){
   const initialAuto=x?.amount&&x?.liters&&x?.pricePerLiter?'pricePerLiter':'';
   const body=`<form id="refuel-form" data-refuel-auto="${initialAuto}" data-refuel-manual="">
     <input type="hidden" name="id" value="${x?.id||''}">
-    <div class="form-section"><div class="field-grid two">${inputField('Дата','date',x?.date||nowISO(),'date','required')}${inputField('Пробег, км','odometer',x?.odometer??currentKm(),'number','min="0" inputmode="numeric" required')}</div></div>
+    <div class="form-section"><div class="field-grid two">${inputField('Дата','date',x?.date||nowISO(),'date',`required max="${today()}"`)}${inputField('Пробег, км','odometer',x?.odometer??currentKm(),'number','min="0" inputmode="numeric" required')}</div></div>
     <div class="form-section"><div class="field-grid">
       ${selectField('Топливо','fuelType',['АИ-92','АИ-95','АИ-98','АИ-100','Дизель','Газ','Электричество','Другое'],x?.fuelType||'АИ-95')}
       <div class="field-grid two v5-refuel-calc">
@@ -1508,7 +1530,7 @@ function entrySheet(id=null){
       ${selectField('Тип записи','type',[['maintenance','Техническое обслуживание'],['repair','Ремонт'],['replacement','Замена'],['inspection','Проверка'],['other','Другое']],x?.type||'maintenance')}
     </div></div>
     <div class="form-section"><div class="form-title">Когда</div><div class="field-grid two">
-      ${inputField('Дата','date',x?.date||nowISO(),'date','required')}
+      ${inputField('Дата','date',x?.date||nowISO(),'date',`required max="${today()}"`)}
       ${inputField('Пробег, км · необязательно','odometer',odoValue,'number',`min="0" inputmode="numeric" placeholder="${lastKm}"`)}
     </div><div class="helper">Последний сохранённый пробег: ${fmtNum(lastKm)} км. Если пробег не указан, для сброса ресурса зафиксируется текущий пробег ${fmtNum(lastKm)} км.</div></div>
     <div class="form-section"><div class="form-title">Связь с узлом автомобиля <span class="v5-optional">необязательно</span></div>
@@ -1544,7 +1566,7 @@ function componentSheet(id=null){
     <div class="form-section"><div class="field-grid">${groupedVehicleSystemField('Узел автомобиля','systemKey',selected,true)}
       <div class="field-grid two">${inputField('Бренд','brand',x?.brand||'')}${inputField('Артикул','partNumber',x?.partNumber||'')}</div>
     </div></div>
-    <div class="form-section"><div class="form-title">Установка</div><div class="field-grid two">${inputField('Дата','installedDate',x?.installedDate||nowISO(),'date','required')}${inputField('Пробег, км','installedOdometer',x?.installedOdometer??currentKm(),'number','min="0" inputmode="numeric" required')}</div></div>
+    <div class="form-section"><div class="form-title">Установка</div><div class="field-grid two">${inputField('Дата','installedDate',x?.installedDate||nowISO(),'date',`required max="${today()}"`)}${inputField('Пробег, км','installedOdometer',x?.installedOdometer??currentKm(),'number','min="0" inputmode="numeric" required')}</div></div>
     <div class="form-section"><div class="form-title">Срок службы</div><div class="field-grid two">${inputField('Ресурс, км','lifeKm',x?.lifeKm||'','number','min="0" inputmode="numeric" placeholder="например 40000"')}${inputField('Ресурс, месяцев','lifeMonths',x?.lifeMonths||'','number','min="0" inputmode="numeric" placeholder="например 24"')}</div><div class="helper">Если заданы оба значения, предупреждение сработает по тому лимиту, который наступит раньше.</div></div>
     <div class="form-section"><div class="form-title">График проверки</div><div class="field-grid two">${inputField('Проверять каждые, км','inspectKm',x?.inspectKm||'','number','min="0" inputmode="numeric" placeholder="например 10000"')}${inputField('Проверять каждые, месяцев','inspectMonths',x?.inspectMonths||'','number','min="0" inputmode="numeric" placeholder="например 6"')}</div></div>
     <div class="form-section"><div class="form-title">Предупреждать заранее</div><div class="field-grid two">${inputField('За сколько км','warnKm',x?.warnKm??state.settings.defaultWarnKm,'number','min="0" inputmode="numeric"')}${inputField('За сколько дней','warnDays',x?.warnDays??state.settings.defaultWarnDays,'number','min="0" inputmode="numeric"')}</div></div>
@@ -1558,7 +1580,7 @@ function expenseSheet(id=null){
   if(x?.linkedServiceId)return sheetWrap('Связанный расход',`<div class="install-note"><strong>Этот расход синхронизирован с сервисной записью.</strong><br>Измените стоимость в сервисной записи — сумма обновится автоматически.</div>`,`<button class="btn primary block" data-action="open-linked-entry" data-id="${x.linkedServiceId}">Открыть сервисную запись</button>`);
   if(x?.linkedRefuelId)return sheetWrap('Связанный расход',`<div class="install-note"><strong>Этот расход синхронизирован с заправкой.</strong><br>Измените сумму в записи заправки — расход обновится автоматически.</div>`,`<button class="btn primary block" data-action="open-linked-refuel" data-id="${x.linkedRefuelId}">Открыть заправку</button>`);
   const categories=['Топливо','Обслуживание','Ремонт','Страховка','Налог','Парковка','Мойка','Платная дорога','Тюнинг','Другое'];
-  const body=`<form id="expense-form"><input type="hidden" name="id" value="${x?.id||''}"><div class="field-grid two">${inputField('Дата','date',x?.date||nowISO(),'date','required')}${inputField('Пробег, км','odometer',x?.odometer??currentKm(),'number','min="0" inputmode="numeric"')}</div><div class="field-grid" style="margin-top:8px">${selectField('Категория','category',categories,x?.category||'Обслуживание')}${inputField('Сумма, ₽','amount',x?.amount||'','number','min="0" step="0.01" inputmode="decimal" required')}${inputField('Описание','description',x?.description||'','text','placeholder="Что оплачено"')}<div class="field"><label for="note">Заметки</label><textarea class="input" id="note" name="note">${esc(x?.note||'')}</textarea></div></div></form>`;
+  const body=`<form id="expense-form"><input type="hidden" name="id" value="${x?.id||''}"><div class="field-grid two">${inputField('Дата','date',x?.date||nowISO(),'date',`required max="${today()}"`)}${inputField('Пробег, км','odometer',x?.odometer??currentKm(),'number','min="0" inputmode="numeric"')}</div><div class="field-grid" style="margin-top:8px">${selectField('Категория','category',categories,x?.category||'Обслуживание')}${inputField('Сумма, ₽','amount',x?.amount||'','number','min="0" step="0.01" inputmode="decimal" required')}${inputField('Описание','description',x?.description||'','text','placeholder="Что оплачено"')}<div class="field"><label for="note">Заметки</label><textarea class="input" id="note" name="note">${esc(x?.note||'')}</textarea></div></div></form>`;
   return sheetWrap(x?'Редактировать расход':'Новый расход',body,`<button class="btn primary block" form="expense-form">Сохранить</button>`);
 }
 
@@ -1738,7 +1760,7 @@ async function handleSubmit(e){
     const obj={id,carId:car().id,date:d.date,odometer:hasMileage?nonneg(d.odometer):0,type:d.type,title:String(d.title||'').trim(),category:system?.group||x?.category||'',systemKey,
       faultKey:x?.faultKey||'',workText:d.workText||'',partsText:d.partsText||'',partsCost:nonneg(d.partsCost),laborCost:nonneg(d.laborCost),otherCost:x?.otherCost||0,
       componentId:'',componentAction:lifecycleAction,componentEventOdometer:eventKm,notes:d.notes||'',photos,createdAt:x?.createdAt||new Date().toISOString(),seq:x?.seq!=null?nonneg(x.seq):nextSeq()};
-    if(!obj.title){toast('Укажите название записи');return;}if(!dateOK(obj.date)){toast('Укажите корректную дату');return;}
+    if(!obj.title){toast('Укажите название записи');return;}if(!dateOK(obj.date)){toast('Укажите корректную дату');return;}if(obj.date>today()){toast('Дата записи не может быть в будущем');return;}
     const err=hasMileage?mileageConsistencyError(obj.odometer,obj.date,'service',id):null;if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;}
 
     const rawIntervals={
@@ -1793,7 +1815,7 @@ async function handleSubmit(e){
     if(x)Object.assign(x,obj);else state.components.push(obj);recordMileageObservation(installKm,d.installedDate,'Установка узла','component',id);await persist();ui.healthSystemKey='';ui.sheet=null;toast('Узел сохранён');render();return;
   }
   if(formId==='expense-form'){
-    const d=formObject(f), id=d.id||uid(); let x=state.expenses.find(v=>v.id===id); if(x?.linkedServiceId){toast('Связанный расход изменяется через сервисную запись');return;} const obj={id,carId:car().id,date:d.date,odometer:nonneg(d.odometer),category:d.category,amount:nonneg(d.amount),description:d.description.trim(),note:d.note,linkedServiceId:''}; if(!dateOK(obj.date)){toast('Укажи корректную дату');return;} const err=obj.odometer?mileageConsistencyError(obj.odometer,obj.date,'expense',id):null;if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;} if(x)Object.assign(x,obj);else state.expenses.push(obj); if(obj.odometer)recordMileageObservation(obj.odometer,obj.date,'Из расхода','expense',id);else removeMileageSource('expense',id); await persist();ui.sheet=null;toast('Расход сохранён');render();return;
+    const d=formObject(f), id=d.id||uid(); let x=state.expenses.find(v=>v.id===id); if(x?.linkedServiceId){toast('Связанный расход изменяется через сервисную запись');return;} const obj={id,carId:car().id,date:d.date,odometer:nonneg(d.odometer),category:d.category,amount:nonneg(d.amount),description:d.description.trim(),note:d.note,linkedServiceId:''}; if(!dateOK(obj.date)){toast('Укажи корректную дату');return;} if(obj.date>today()){toast('Дата расхода не может быть в будущем');return;} const err=obj.odometer?mileageConsistencyError(obj.odometer,obj.date,'expense',id):null;if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;} if(x)Object.assign(x,obj);else state.expenses.push(obj); if(obj.odometer)recordMileageObservation(obj.odometer,obj.date,'Из расхода','expense',id);else removeMileageSource('expense',id); await persist();ui.sheet=null;toast('Расход сохранён');render();return;
   }
   if(formId==='refuel-form'){
     const d=formObject(f), id=d.id||uid();
@@ -1810,6 +1832,7 @@ async function handleSubmit(e){
       createdAt:x?.createdAt||new Date().toISOString()
     };
     if(!dateOK(obj.date)){toast('Укажите корректную дату');return;}
+    if(obj.date>today()){toast('Дата заправки не может быть в будущем');return;}
     const err=mileageConsistencyError(obj.odometer,obj.date,'refuel',id);
     if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;}
     if(!obj.amount&&!obj.liters){toast('Укажите сумму или объём топлива');return;}
