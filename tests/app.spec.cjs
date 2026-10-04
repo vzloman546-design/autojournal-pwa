@@ -485,6 +485,70 @@ test('statistics categories and periods render without cross-period leakage', as
 
 
 
+test('corrected service date ignores stale derived mileage cache', async({page})=>{
+  await addCar(page,{initial:'210000',current:'210141'});
+  const seeded=await state(page),carId=seeded.cars[0].id;
+  seeded.cars[0].trackingStartDate=isoOffset(-40);
+  seeded.serviceEntries=[{
+    id:'svc-corrected',carId,date:isoOffset(-6),odometer:210097,type:'maintenance',
+    title:'Предыдущая сервисная запись',category:'',faultKey:'',workText:'',partsText:'',
+    partsCost:0,laborCost:0,otherCost:0,systemKey:'',componentId:'',componentAction:'',
+    componentEventOdometer:210097,notes:'',photos:[],createdAt:new Date().toISOString(),seq:1
+  }];
+  seeded.odometerLogs=[
+    {id:'start',carId,date:isoOffset(-40),value:210000,note:'Начало учёта',sourceType:'car-start',sourceId:carId},
+    {id:'manual',carId,date:isoOffset(-3),value:210141,note:'Обновление пробега',sourceType:'manual',sourceId:'manual'},
+    {id:'stale-service',carId,date:isoOffset(24),value:210097,note:'Из сервисной записи',sourceType:'service',sourceId:'svc-corrected'}
+  ];
+  await page.evaluate(async data=>{const db=await import('./db.js');await db.saveState(data);},seeded);
+  await page.reload();
+
+  const migrated=await state(page);
+  expect(migrated.odometerLogs.some(x=>x.sourceType==='service'&&x.date===isoOffset(24))).toBe(false);
+
+  await page.locator('[data-action="add-entry"]').first().click();
+  await page.locator('#title').fill('Замена жидкости ГУР');
+  await page.locator('#date').fill(isoOffset(-1));
+  await page.locator('#odometer').fill('210197');
+  await page.locator('button[form="entry-form"]').click();
+
+  await expect(page.locator('#entry-form')).toHaveCount(0);
+  const saved=await state(page);
+  const entry=saved.serviceEntries.find(x=>x.title==='Замена жидкости ГУР');
+  expect(entry?.odometer).toBe(210197);
+  expect(saved.cars[0].currentOdometer).toBe(210197);
+});
+
+test('service records cannot be created with a future date', async({page})=>{
+  await addCar(page,{initial:'200000',current:'210000'});
+  await page.locator('[data-action="add-entry"]').first().click();
+  await expect(page.locator('#date')).toHaveAttribute('max',isoOffset(0));
+  await page.locator('#title').fill('Будущая запись');
+  await page.locator('#date').fill(isoOffset(1));
+  await page.locator('#odometer').fill('210001');
+  await page.evaluate(()=>{document.querySelector('#entry-form').noValidate=true;});
+  await page.locator('button[form="entry-form"]').click();
+  await expect(page.getByText('Дата записи не может быть в будущем',{exact:true})).toBeVisible();
+  const saved=await state(page);
+  expect(saved.serviceEntries.some(x=>x.title==='Будущая запись')).toBe(false);
+});
+
+test('refuel records cannot be created with a future date', async({page})=>{
+  await addCar(page,{initial:'200000',current:'210000'});
+  await page.locator('.v5-tabbar [data-view="refuels"]').click();
+  await page.locator('[data-action="add-refuel"]').first().click();
+  await expect(page.locator('#date')).toHaveAttribute('max',isoOffset(0));
+  await page.locator('#date').fill(isoOffset(1));
+  await page.locator('#odometer').fill('210001');
+  await page.locator('#amount').fill('1000');
+  await page.locator('#liters').fill('20');
+  await page.evaluate(()=>{document.querySelector('#refuel-form').noValidate=true;});
+  await page.locator('button[form="refuel-form"]').click();
+  await expect(page.getByText('Дата заправки не может быть в будущем',{exact:true})).toBeVisible();
+  const saved=await state(page);
+  expect(saved.refuels).toHaveLength(0);
+});
+
 test('current mileage accepts a higher real reading despite a lower future-dated log', async({page})=>{
   await addCar(page,{initial:'210000',current:'210097'});
   const seeded=await state(page),carId=seeded.cars[0].id;
