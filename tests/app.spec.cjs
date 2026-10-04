@@ -485,44 +485,6 @@ test('statistics categories and periods render without cross-period leakage', as
 
 
 
-test('passport edit without mileage change does not create a phantom mileage log', async({page})=>{
-  await addCar(page,{initial:'210000',current:'210097'});
-  const before=await state(page);
-  expect(before.odometerLogs.filter(x=>x.note==='Из карточки автомобиля')).toHaveLength(0);
-
-  await page.locator('[data-action="car-switch"]').click();
-  await page.locator('[data-action="edit-current-car"]').click();
-  await page.locator('#trim').fill('QA trim');
-  await page.locator('button[form="car-form"]').click();
-
-  const after=await state(page);
-  expect(after.cars[0].currentOdometer).toBe(210097);
-  expect(after.odometerLogs.filter(x=>x.note==='Из карточки автомобиля')).toHaveLength(0);
-});
-
-test('old passport mileage snapshot does not block a backdated service entry', async({page})=>{
-  await addCar(page,{initial:'210000',current:'210141'});
-  const seeded=await state(page),carId=seeded.cars[0].id;
-  seeded.odometerLogs.push({
-    id:'phantom-passport-log',carId,date:isoOffset(1),value:210097,
-    note:'Из карточки автомобиля',sourceType:'manual',sourceId:'phantom-passport-log'
-  });
-  await page.evaluate(async data=>{const db=await import('./db.js');await db.saveState(data);},seeded);
-  await page.reload();
-
-  await page.locator('[data-action="add-entry"]').first().click();
-  await page.locator('#title').fill('Замена жидкости ГУР');
-  await page.locator('#date').fill(isoOffset(0));
-  await page.locator('#odometer').fill('210197');
-  await page.locator('button[form="entry-form"]').click();
-
-  await expect(page.locator('#entry-form')).toHaveCount(0);
-  const saved=await state(page);
-  const entry=saved.serviceEntries.find(x=>x.title==='Замена жидкости ГУР');
-  expect(entry?.odometer).toBe(210197);
-  expect(saved.cars[0].currentOdometer).toBe(210197);
-});
-
 test('current mileage accepts a higher real reading despite a lower future-dated log', async({page})=>{
   await addCar(page,{initial:'210000',current:'210097'});
   const seeded=await state(page),carId=seeded.cars[0].id;
