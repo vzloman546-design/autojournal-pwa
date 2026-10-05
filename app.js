@@ -2622,7 +2622,8 @@ async function init(){
   state=migrate(await loadState());
   state.refuels ||= [];
   const initialVault=loadSyncVault();
-  if(initialVault&&ensureCurrentSyncDevice(initialVault,{touch:true}))await saveState(state);
+  if(initialVault)ensureCurrentSyncDevice(initialVault,{touch:true});
+  await saveState(state);
   ui.analyticsTab ||= 'expenses';
   ui.analyticsPeriod ||= 'month';
   if(state.activeCarId && !state.cars.some(c=>c.id===state.activeCarId))state.activeCarId=state.cars[0]?.id||null;
