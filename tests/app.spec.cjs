@@ -396,6 +396,39 @@ test('document detail shows thumbnail, opens by thumbnail and has one share butt
   expect(shared.size).toBeGreaterThan(0);
 });
 
+test('new health component creates journal entry and linked expense', async({page})=>{
+  await addCar(page);
+  await gotoSecondary(page,'parts');
+  await page.locator('[data-action="add-component"]').last().click();
+  await chooseVehicleSystem(page,'передние колодки','front_brake_pads');
+  await page.locator('#brand').fill('TRW');
+  await page.locator('#partNumber').fill('GDB-TEST');
+  await page.locator('#installedDate').fill(isoOffset(-1));
+  await page.locator('#installedOdometer').fill('209900');
+  await page.locator('#cost').fill('3500');
+  await page.locator('button[form="component-form"]').click();
+
+  const s=await state(page);
+  expect(s.components).toHaveLength(1);
+  const comp=s.components[0];
+  const entry=s.serviceEntries.find(x=>x.componentId===comp.id&&x.title==='Установка: Передние тормозные колодки');
+  expect(entry).toBeTruthy();
+  expect(entry.type).toBe('replacement');
+  expect(entry.componentAction).toBe('replace');
+  expect(entry.partsText).toBe('TRW · GDB-TEST');
+  expect(entry.partsCost).toBe(3500);
+  expect(entry.odometer).toBe(209900);
+
+  const expense=s.expenses.find(x=>x.linkedServiceId===entry.id);
+  expect(expense).toBeTruthy();
+  expect(expense.amount).toBe(3500);
+  expect(expense.description).toBe('Установка: Передние тормозные колодки');
+
+  await page.locator('[data-action="go-back"]').click();
+  await page.locator('.v5-tabbar [data-view="records"]').click();
+  await expect(page.getByText('Установка: Передние тормозные колодки',{exact:true})).toBeVisible();
+});
+
 test('health replacement is visible in journal even after stale filters', async({page})=>{
   await addCar(page);
   await gotoSecondary(page,'parts');
@@ -443,8 +476,9 @@ test('maintenance inspect and replace reset independent cycles', async({page})=>
   await page.locator('[data-action="mark-inspection"]').click();
   let s=await state(page);
   let actions=s.serviceEntries.filter(x=>x.componentAction);
-  expect(actions).toHaveLength(1);
-  expect(actions[0].componentAction).toBe('inspect');
+  expect(actions).toHaveLength(2);
+  expect(actions.filter(x=>x.componentAction==='replace')).toHaveLength(2);
+  expect(actions.filter(x=>x.componentAction==='inspect')).toHaveLength(1);
   const comp=s.components[0];
   expect(comp.baseInstalledOdometer).toBe(200000);
 
