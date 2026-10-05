@@ -9,3 +9,7 @@ ALLOWED_ORIGIN = "https://vzloman546-design.github.io"
 binding = "DB"
 database_name = "autojournal-sync"
 database_id = "PUT_YOUR_D1_DATABASE_ID_HERE"
+
+
+[triggers]
+crons = ["0 */6 * * *"]
