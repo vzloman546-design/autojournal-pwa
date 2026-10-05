@@ -63,3 +63,25 @@ CREATE TABLE IF NOT EXISTS sync_record_chunks (
   payload TEXT NOT NULL,
   PRIMARY KEY (vault_id, collection, record_id, chunk_index)
 );
+
+
+CREATE TABLE IF NOT EXISTS weather_push_subscriptions (
+  id TEXT PRIMARY KEY,
+  verifier TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  vapid_private_jwk TEXT NOT NULL,
+  vapid_public_key TEXT NOT NULL,
+  lat REAL NOT NULL,
+  lon REAL NOT NULL,
+  threshold REAL NOT NULL DEFAULT 5,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  alert_active INTEGER NOT NULL DEFAULT 0,
+  last_sent_at INTEGER NOT NULL DEFAULT 0,
+  last_trigger_date TEXT,
+  last_trigger_temp REAL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_weather_push_enabled
+ON weather_push_subscriptions(enabled);
