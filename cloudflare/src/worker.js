@@ -83,7 +83,11 @@ async function authorizeVault(request,env,id){
 
 
 function validWeatherEndpoint(v){
-  try{const u=new URL(String(v||''));return u.protocol==='https:'&&u.href.length<=3000;}catch{return false;}
+  try{
+    const u=new URL(String(v||'')),h=u.hostname.toLowerCase();
+    const known=h==='fcm.googleapis.com'||h==='android.googleapis.com'||h.endsWith('.push.services.mozilla.com')||h.endsWith('.push.apple.com')||h.endsWith('.notify.windows.com');
+    return u.protocol==='https:'&&u.href.length<=3000&&known;
+  }catch{return false;}
 }
 function validWeatherPublicKey(v){return /^[A-Za-z0-9_-]{80,100}$/.test(String(v||''));}
 function validWeatherLocation(lat,lon){
