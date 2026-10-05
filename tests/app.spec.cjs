@@ -517,6 +517,41 @@ test('multiple cars are isolated', async({page})=>{
   await expect(page.getByText('Только Focus',{exact:true})).toHaveCount(0);
 });
 
+test('7-day weather forecast creates tire-change notification at 5C threshold', async({page})=>{
+  await addCar(page);
+  const dates=[0,1,2,3,4,5,6].map(isoOffset);
+  await page.route('https://api.open-meteo.com/**',async route=>{
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      latitude:55.75,longitude:37.62,timezone:'Europe/Moscow',
+      daily:{time:dates,temperature_2m_mean:[9.2,7.1,4.8,3.9,6.2,7.0,8.1]},
+      daily_units:{temperature_2m_mean:'°C'}
+    })});
+  });
+  const seeded=await state(page);
+  seeded.settings.weatherTireEnabled=true;
+  seeded.settings.weatherTireThreshold=5;
+  seeded.settings.weatherTireLat=55.75;
+  seeded.settings.weatherTireLon=37.62;
+  seeded.settings.weatherLastCheckAt='';
+  await page.evaluate(async data=>{const db=await import('./db.js');await db.saveState(data);},seeded);
+  await page.reload();
+
+  await expect.poll(async()=>((await state(page)).settings.weatherTireTriggerDate||''),{timeout:10000}).toBe(dates[2]);
+  const saved=await state(page);
+  expect(saved.settings.weatherTireTriggerTemp).toBe(4.8);
+  expect(saved.settings.weatherTireForecast).toHaveLength(7);
+
+  await page.locator('.v5-tabbar [data-view="notifications"]').click();
+  await expect(page.getByText('Пора планировать смену шин',{exact:true})).toBeVisible();
+  await expect(page.getByText(/4,8 °C/)).toBeVisible();
+
+  await gotoSecondary(page,'more');
+  await page.locator('[data-action="weather-open"]').click();
+  await expect(page.locator('.sheet')).toContainText('Прогноз на 7 дней');
+  await expect(page.locator('.sheet')).toContainText('Порог достигнут');
+  await expect(page.locator('.sheet')).toContainText('Open-Meteo');
+});
+
 test('statistics categories and periods render without cross-period leakage', async({page})=>{
   await addCar(page);
   const seed=await state(page);
