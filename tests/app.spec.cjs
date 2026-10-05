@@ -396,6 +396,34 @@ test('document detail shows thumbnail, opens by thumbnail and has one share butt
   expect(shared.size).toBeGreaterThan(0);
 });
 
+test('health replacement is visible in journal even after stale filters', async({page})=>{
+  await addCar(page);
+  await gotoSecondary(page,'parts');
+  await page.locator('[data-action="add-component"]').last().click();
+  await chooseVehicleSystem(page,'передние колодки','front_brake_pads');
+  await page.locator('#installedDate').fill(isoOffset(-30));
+  await page.locator('#installedOdometer').fill('200000');
+  await page.locator('button[form="component-form"]').click();
+
+  await page.locator('.v5-tabbar [data-view="records"]').click();
+  await page.locator('[data-input="history-type"]').selectOption('repair');
+  await page.locator('[data-input="history-search"]').fill('несуществующий фильтр');
+  await page.locator('.v5-tabbar [data-view="home"]').click();
+  await page.locator('.v5-quick-card[data-view="parts"]').click();
+
+  await page.locator('[data-action="component-detail"]',{hasText:'Передние тормозные колодки'}).click();
+  await page.locator('[data-action="mark-replacement"]').click();
+  await expect(page.getByText(/запись добавлена в журнал/i)).toBeVisible();
+
+  await page.locator('.sheet-close').click();
+  await page.locator('[data-action="go-back"]').click();
+  await page.locator('.v5-tabbar [data-view="records"]').click();
+
+  await expect(page.locator('[data-input="history-type"]')).toHaveValue('all');
+  await expect(page.locator('[data-input="history-search"]')).toHaveValue('');
+  await expect(page.getByText('Замена: Передние тормозные колодки',{exact:true})).toBeVisible();
+});
+
 test('maintenance inspect and replace reset independent cycles', async({page})=>{
   await addCar(page);
   await gotoSecondary(page,'parts');
