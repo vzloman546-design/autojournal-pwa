@@ -1851,7 +1851,7 @@ async function handleSubmit(e){
     state.serviceEntries.push(entry);
     syncEntryExpense(entry);
     recordMileageObservation(installKm,d.installedDate,'Из сервисной записи','service',entry.id);
-    await persist();ui.healthSystemKey='';ui.sheet=null;toast('Узел сохранён · запись и расход добавлены в журнал');render();return;
+    await persist();ui.healthSystemKey='';ui.sheet=null;toast(obj.cost?'Узел сохранён · запись и расход добавлены в журнал':'Узел сохранён · запись добавлена в журнал');render();return;
   }
   if(formId==='expense-form'){
     const d=formObject(f), id=d.id||uid(); let x=state.expenses.find(v=>v.id===id); if(x?.linkedServiceId){toast('Связанный расход изменяется через сервисную запись');return;} const obj={id,carId:car().id,date:d.date,odometer:nonneg(d.odometer),category:d.category,amount:nonneg(d.amount),description:d.description.trim(),note:d.note,linkedServiceId:''}; if(!dateOK(obj.date)){toast('Укажи корректную дату');return;} if(obj.date>today()){toast('Дата расхода не может быть в будущем');return;} const err=obj.odometer?mileageConsistencyError(obj.odometer,obj.date,'expense',id):null;if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;} if(x)Object.assign(x,obj);else state.expenses.push(obj); if(obj.odometer)recordMileageObservation(obj.odometer,obj.date,'Из расхода','expense',id);else removeMileageSource('expense',id); await persist();ui.sheet=null;toast('Расход сохранён');render();return;
