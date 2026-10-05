@@ -623,7 +623,8 @@ function topbar() {
 
 const tabs=[['home','Главная',icons.home],['records','Записи',icons.history],['refuels','Заправки',icons.fuel],['notifications','Уведомления',icons.bell]];
 function tabbar(){
-  const attention=allReminders().length;
+  const weatherAttention=state.settings?.weatherTireEnabled&&state.settings?.weatherTireTriggerDate?1:0;
+  const attention=allReminders().length+weatherAttention;
   return `<div class="v5-tab-wrap"><nav class="v5-tabbar">
     ${tabs.map(([id,label,ic])=>`<button class="v5-tab ${ui.view===id?'active':''}" data-view="${id}" ${ui.view===id?'aria-current="page"':''}>${ic}<span>${label}</span>${id==='notifications'&&attention?'<i class="v5-unread"></i>':''}</button>`).join('')}
   </nav></div>`;
