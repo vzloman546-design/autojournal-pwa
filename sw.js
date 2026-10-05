@@ -31,7 +31,7 @@ self.addEventListener('fetch',event=>{
 
 self.addEventListener('push',event=>{
   event.waitUntil(self.registration.showNotification('Пора планировать смену шин',{
-    body:'В прогнозе на ближайшие 7 дней среднесуточная температура опускается до +5 °C или ниже. Проверьте прогноз и запланируйте сезонную смену шин.',
+    body:'В прогнозе на ближайшие 7 дней среднесуточная температура опускается до заданного вами порога. Проверьте прогноз и запланируйте сезонную смену шин.',
     icon:'./icons/icon-192.png',
     badge:'./icons/icon-192.png',
     tag:'autojournal-tire-weather',
