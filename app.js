@@ -2087,6 +2087,8 @@ document.addEventListener('change', async e=>{
   if(key==='expense-filter'){ui.expenseFilter=e.target.value;render();}
   if(key==='analytics-period'){ui.analyticsPeriod=e.target.value;nextTransition='fade';render();}
   if(key==='theme'){state.settings.theme=e.target.value;applyTheme();await persist();render();}
+  if(key==='weather-tire-enabled'){state.settings.weatherTireEnabled=Boolean(e.target.checked);await persist();await updateWeatherPushRegistration();if(state.settings.weatherTireEnabled)scheduleWeatherCheck(50);render();}
+  if(key==='weather-threshold'){const n=Number(e.target.value);state.settings.weatherTireThreshold=Number.isFinite(n)?clamp(n,-20,20):5;state.settings.weatherTireConditionActive=false;await persist();await updateWeatherPushRegistration();scheduleWeatherCheck(50);render();}
   if(e.target.id==='backup-input') await importBackupFile(e.target.files[0]);
 });
 
@@ -2170,6 +2172,11 @@ document.addEventListener('click', async e=>{
   if(a==='share-stored-file'){await shareStoredFile(el.dataset.doc,Number(el.dataset.index));return;}
   if(a==='remove-stored-file'){const d=state.documents.find(x=>x.id===el.dataset.doc),i=Number(el.dataset.index);if(d?.files?.[i]&&confirm(`Удалить файл «${d.files[i].name}»?`)){d.files.splice(i,1);await persist();render();toast('Файл удалён');}return;}
   if(a==='open-image'){window.open(el.getAttribute('src'),'_blank');return;}
+  if(a==='weather-open'){ui.sheet='weather';render();scheduleWeatherCheck(50);return;}
+  if(a==='weather-locate'){await locateForTireWeather();return;}
+  if(a==='weather-check'){await checkTireWeather({notify:false,renderAfter:true});return;}
+  if(a==='weather-enable-push'){await enableWeatherPush();return;}
+  if(a==='weather-disable-push'){await disableWeatherPush();return;}
   if(a==='sync-open'){resetSyncTransient();ui.sheet='sync';render();if(loadSyncVault())autoSyncNow(false);return;}
   if(a==='sync-conflict-back'){syncVaultConflict=null;ui.sheet='sync';render();return;}
   if(a==='sync-now'){await autoSyncNow(true);return;}
@@ -2684,6 +2691,152 @@ function icsEscape(s){return String(s).replace(/\\/g,'\\\\').replace(/,/g,'\\,')
 function icsFold(line){const enc=new TextEncoder(),parts=[];let part='';for(const ch of String(line)){const n=part+ch;if(enc.encode(n).length>73){parts.push(part);part=ch}else part=n}if(part||!parts.length)parts.push(part);return parts.join('\r\n ');}
 function exportCalendar(){ if(!car()){toast('Сначала добавь автомобиль');return;} const events=allReminders(true); if(!events.length){toast('Нет сроков для экспорта');return;} const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//AutoJournal//RU','CALSCALE:GREGORIAN','METHOD:PUBLISH']; let count=0; const avg=averageKmPerDay(); for(const ev of events){let due=ev.dueDate, pred=predictedDateForKm(ev.dueKm);if(!due||(pred&&pred<due))due=pred;if(!due)continue;const overdue=due<today(), originalDue=due;const leadDays=Math.max(0,Number(ev.warnDays??state.settings.defaultWarnDays),(ev.dueKm!=null&&avg&&Number(ev.warnKm??0)>0)?Math.ceil(Number(ev.warnKm)/avg):0);const identity=ev.kind==='document'?`document-${ev.documentId}`:`${ev.kind}-${ev.componentId}`,uidv=`autojournal-${car().id}-${identity}@local`,summary=`${overdue?'Просрочено: ':''}${ev.title}`,description=`${overdue?`Исходный срок: ${fmtDate(originalDue)}. `:''}${describeDue(ev)}. Авто: ${car().make} ${car().model}.`;lines.push('BEGIN:VEVENT',`UID:${uidv}`,`DTSTART;VALUE=DATE:${icsDate(due)}`,`DTEND;VALUE=DATE:${icsDate(addDays(due,1))}`,`SUMMARY:${icsEscape(summary)}`,`DESCRIPTION:${icsEscape(description)}`);if(leadDays>0)lines.push('BEGIN:VALARM',`TRIGGER:-P${leadDays}D`,'ACTION:DISPLAY',`DESCRIPTION:${icsEscape(ev.title)}`,'END:VALARM');lines.push('END:VEVENT');count++;}lines.push('END:VCALENDAR');if(!count){toast('Не хватает дат или истории пробега для прогноза');return;}downloadText(`autojournal-reminders-${nowISO()}.ics`,lines.map(icsFold).join('\r\n'),'text/calendar;charset=utf-8');toast(`Экспортировано событий: ${count}`);}
 
+const WEATHER_PUSH_STORAGE='autojournal-weather-push-v1';
+function weatherB64url(bytes){
+  let out='';for(const b of new Uint8Array(bytes))out+=String.fromCharCode(b);
+  return btoa(out).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function weatherRandomToken(size=24){const b=new Uint8Array(size);crypto.getRandomValues(b);return weatherB64url(b);}
+function loadWeatherPushLink(){try{const x=JSON.parse(localStorage.getItem(WEATHER_PUSH_STORAGE)||'null');return x?.id&&x?.secret?x:null;}catch{return null;}}
+function saveWeatherPushLink(x){if(x)localStorage.setItem(WEATHER_PUSH_STORAGE,JSON.stringify(x));else localStorage.removeItem(WEATHER_PUSH_STORAGE);}
+async function weatherVerifier(id,secret){
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`${id}.${secret}`));
+  return weatherB64url(digest);
+}
+function weatherHasLocation(){
+  return Number.isFinite(Number(state.settings.weatherTireLat))&&Number.isFinite(Number(state.settings.weatherTireLon));
+}
+async function fetchTireWeatherForecast(){
+  if(!weatherHasLocation())throw new Error('WEATHER_NO_LOCATION');
+  const lat=Number(state.settings.weatherTireLat),lon=Number(state.settings.weatherTireLon);
+  const url=new URL('https://api.open-meteo.com/v1/forecast');
+  url.searchParams.set('latitude',String(lat));
+  url.searchParams.set('longitude',String(lon));
+  url.searchParams.set('daily','temperature_2m_mean');
+  url.searchParams.set('timezone','auto');
+  url.searchParams.set('forecast_days','7');
+  const res=await fetch(url,{headers:{Accept:'application/json'}});
+  if(!res.ok)throw new Error(`WEATHER_HTTP_${res.status}`);
+  const data=await res.json(),times=data?.daily?.time||[],means=data?.daily?.temperature_2m_mean||[];
+  const days=times.map((date,i)=>({date:String(date),mean:Number(means[i])})).filter(x=>dateOK(x.date)&&Number.isFinite(x.mean)).slice(0,7);
+  if(!days.length)throw new Error('WEATHER_BAD_RESPONSE');
+  return days;
+}
+async function showTireWeatherNotification(day){
+  if(!day||!('Notification' in window)||Notification.permission!=='granted'||!navigator.serviceWorker)return;
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    await reg.showNotification('Пора планировать смену шин',{
+      body:`По прогнозу на ${fmtDate(day.date)} среднесуточная температура около ${fmtNum(day.mean,1)} °C — это ${fmtNum(state.settings.weatherTireThreshold,1)} °C или ниже.`,
+      icon:'./icons/icon-192.png',badge:'./icons/icon-192.png',tag:'autojournal-tire-weather',data:{url:'./'}
+    });
+    state.settings.weatherLastLocalAlertAt=new Date().toISOString();
+  }catch(err){console.warn('Weather notification failed',err);}
+}
+async function checkTireWeather({notify=true,renderAfter=true}={}){
+  if(!state.settings.weatherTireEnabled||!weatherHasLocation())return null;
+  try{
+    const days=await fetchTireWeatherForecast(),threshold=Number(state.settings.weatherTireThreshold??5);
+    const trigger=days.find(x=>x.mean<=threshold)||null,wasActive=Boolean(state.settings.weatherTireConditionActive);
+    state.settings.weatherTireForecast=days;
+    state.settings.weatherLastCheckAt=new Date().toISOString();
+    state.settings.weatherTireTriggerDate=trigger?.date||'';
+    state.settings.weatherTireTriggerTemp=trigger?.mean??null;
+    state.settings.weatherTireConditionActive=Boolean(trigger);
+    await persist();
+    if(trigger&&notify&&!wasActive)await showTireWeatherNotification(trigger);
+    if(renderAfter)render();
+    return trigger;
+  }catch(err){
+    console.warn('Weather check failed',err);
+    if(renderAfter)toast(err?.message==='WEATHER_NO_LOCATION'?'Сначала определите местоположение':'Не удалось загрузить прогноз погоды');
+    return null;
+  }
+}
+async function locateForTireWeather(){
+  if(!navigator.geolocation){toast('Геолокация недоступна в этом браузере');return;}
+  try{
+    const pos=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:false,timeout:12000,maximumAge:3600000}));
+    state.settings.weatherTireLat=Math.round(Number(pos.coords.latitude)*100)/100;
+    state.settings.weatherTireLon=Math.round(Number(pos.coords.longitude)*100)/100;
+    state.settings.weatherLocationUpdatedAt=new Date().toISOString();
+    await persist();
+    await updateWeatherPushRegistration();
+    await checkTireWeather({notify:false,renderAfter:false});
+    render();toast('Местоположение для прогноза сохранено');
+  }catch(err){console.warn('Weather location failed',err);toast('Не удалось определить местоположение');}
+}
+async function weatherPushRequest(path,{method='GET',body,secret}={}){
+  const api=getSyncApiUrl();if(!api)throw new Error('WEATHER_PUSH_NO_RELAY');
+  const headers={Accept:'application/json'};
+  if(body!==undefined)headers['Content-Type']='application/json';
+  if(secret)headers.Authorization=`Bearer ${secret}`;
+  const res=await fetch(`${api.replace(/\/+$/,'')}${path}`,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(String(data?.error||`WEATHER_PUSH_HTTP_${res.status}`));
+  return data;
+}
+async function updateWeatherPushRegistration(){
+  const link=loadWeatherPushLink();
+  if(!link||!weatherHasLocation()||!getSyncApiUrl())return false;
+  try{
+    await weatherPushRequest(`/v1/weather/subscriptions/${encodeURIComponent(link.id)}`,{
+      method:'PUT',secret:link.secret,body:{
+        enabled:Boolean(state.settings.weatherTireEnabled),
+        lat:Number(state.settings.weatherTireLat),lon:Number(state.settings.weatherTireLon),
+        threshold:Number(state.settings.weatherTireThreshold??5)
+      }
+    });
+    return true;
+  }catch(err){console.warn('Weather push update failed',err);return false;}
+}
+async function enableWeatherPush(){
+  if(!state.settings.weatherTireEnabled){state.settings.weatherTireEnabled=true;await persist();}
+  if(!weatherHasLocation()){toast('Сначала определите местоположение');render();return;}
+  if(!getSyncApiUrl()){toast('Для фоновых уведомлений нужен подключённый relay');return;}
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){toast('Web Push не поддерживается этим браузером');return;}
+  try{
+    const permission=await Notification.requestPermission();
+    if(permission!=='granted'){toast('Разрешение на уведомления не выдано');return;}
+    const reg=await navigator.serviceWorker.ready;
+    let link=loadWeatherPushLink(),sub=await reg.pushManager.getSubscription();
+    if(link&&sub){
+      const ok=await updateWeatherPushRegistration();
+      if(ok){toast('Фоновое погодное уведомление обновлено');render();return;}
+    }
+    if(sub){try{await sub.unsubscribe();}catch{}}
+    const pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);
+    const publicRaw=new Uint8Array(await crypto.subtle.exportKey('raw',pair.publicKey));
+    const privateJwk=await crypto.subtle.exportKey('jwk',pair.privateKey);
+    const publicKey=weatherB64url(publicRaw);
+    sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:publicRaw});
+    const id=weatherRandomToken(24),secret=weatherRandomToken(32),verifier=await weatherVerifier(id,secret);
+    await weatherPushRequest('/v1/weather/subscriptions',{method:'POST',body:{
+      id,verifier,endpoint:sub.endpoint,vapidPrivateJwk:privateJwk,vapidPublicKey:publicKey,
+      lat:Number(state.settings.weatherTireLat),lon:Number(state.settings.weatherTireLon),
+      threshold:Number(state.settings.weatherTireThreshold??5),enabled:true
+    }});
+    link={id,secret};saveWeatherPushLink(link);
+    toast('Фоновое погодное уведомление включено');render();
+  }catch(err){
+    console.error('Weather push enable failed',err);
+    toast(String(err?.message||'').includes('WEATHER_PUSH_NO_RELAY')?'Для фоновых уведомлений нужен подключённый relay':'Не удалось включить фоновое уведомление');
+  }
+}
+async function disableWeatherPush(){
+  const link=loadWeatherPushLink();
+  try{
+    if(link)await weatherPushRequest(`/v1/weather/subscriptions/${encodeURIComponent(link.id)}`,{method:'PUT',secret:link.secret,body:{enabled:false}});
+    const reg=await navigator.serviceWorker?.ready,sub=await reg?.pushManager?.getSubscription?.();if(sub)await sub.unsubscribe();
+  }catch(err){console.warn('Weather push disable failed',err);}
+  saveWeatherPushLink(null);render();toast('Фоновое погодное уведомление отключено');
+}
+function scheduleWeatherCheck(delay=1200){
+  const w=state.settings||{};if(!w.weatherTireEnabled||!weatherHasLocation()||!navigator.onLine)return;
+  const last=Date.parse(w.weatherLastCheckAt||'')||0;if(Date.now()-last<6*60*60*1000)return;
+  setTimeout(()=>checkTireWeather({notify:true,renderAfter:false}),delay);
+}
+
 async function showCurrentNotification(){
   const reminders=allReminders(); if(!('Notification' in window) || !navigator.serviceWorker){toast('Web-уведомления не поддерживаются этим режимом браузера');return;}
   try{const perm=await Notification.requestPermission(); if(perm!=='granted'){toast('Разрешение на уведомления не выдано');return;} const reg=await navigator.serviceWorker.ready; await reg.showNotification('АвтоЖурнал',{body:reminders.length?`${reminders.length} событий требуют внимания`:'Все сроки в порядке',icon:'./icons/icon-192.png',badge:'./icons/icon-192.png'});toast('Уведомление отправлено');}catch{toast('Не удалось показать уведомление');}
@@ -2702,13 +2855,14 @@ async function init(){
   applyTheme();
   render();
   if('serviceWorker' in navigator){try{await navigator.serviceWorker.register('./sw.js');}catch(err){console.warn('SW registration failed',err);}}
-  window.addEventListener('online',()=>{toast('Интернет доступен');autoSyncStatus='idle';scheduleAutoSync(150);});
+  window.addEventListener('online',()=>{toast('Интернет доступен');autoSyncStatus='idle';scheduleAutoSync(150);scheduleWeatherCheck(300);});
   window.addEventListener('offline',()=>{autoSyncStatus='offline';toast('Офлайн-режим: данные остаются доступны');});
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(autoSyncNeedsRender&&!ui.sheet){autoSyncNeedsRender=false;render();}scheduleAutoSync(120);}});
-  window.addEventListener('focus',()=>scheduleAutoSync(120));
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(autoSyncNeedsRender&&!ui.sheet){autoSyncNeedsRender=false;render();}scheduleAutoSync(120);scheduleWeatherCheck(300);}});
+  window.addEventListener('focus',()=>{scheduleAutoSync(120);scheduleWeatherCheck(300);});
   if(autoSyncInterval)clearInterval(autoSyncInterval);
   autoSyncInterval=setInterval(()=>{if(document.visibilityState==='visible')autoSyncNow(false);},5000);
   if(loadSyncVault())scheduleAutoSync(300);
+  scheduleWeatherCheck(800);
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(state.settings.theme==='system')applyTheme();});
 }
 
