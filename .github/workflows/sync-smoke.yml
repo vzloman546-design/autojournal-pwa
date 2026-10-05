@@ -26,4 +26,4 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Run persistent sync scenarios
-        run: npx playwright test --project=chromium-mobile -g "persistent vault auto-sync|two linked devices"
+        run: npx playwright test --project=chromium-mobile -g "persistent vault auto-sync|two linked devices|three linked devices|linked device refuses"
