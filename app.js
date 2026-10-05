@@ -355,7 +355,8 @@ const defaultState = () => ({
   components: [],
   expenses: [],
   documents: [],
-  refuels: []
+  refuels: [],
+  syncDevices: []
 });
 
 let state = defaultState();
@@ -378,6 +379,7 @@ let syncMediaStream=null;
 let syncScanFrame=0;
 let syncBusy=false;
 let syncPendingVault=null;
+let syncVaultConflict=null;
 let autoSyncTimer=0;
 let autoSyncInterval=0;
 let autoSyncRunning=false;
@@ -464,6 +466,10 @@ function migrate(raw) {
   const expenses=(Array.isArray(raw.expenses)?raw.expenses:[]).map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),odometer:nonneg(x.odometer),category:String(x.category||'Другое'),amount:nonneg(x.amount),description:String(x.description||''),note:String(x.note||''),linkedServiceId:String(x.linkedServiceId||''),linkedRefuelId:String(x.linkedRefuelId||'')}));
   const documents=(Array.isArray(raw.documents)?raw.documents:[]).map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),title:String(x.title||''),type:String(x.type||''),number:String(x.number||''),issueDate:String(x.issueDate||''),expiryDate:String(x.expiryDate||''),remindDays:x.remindDays==null?30:nonneg(x.remindDays),files:Array.isArray(x.files)?x.files.filter(f=>f&&safeStoredFileData(f.data)).map(f=>({id:String(f.id||uid()),name:String(f.name||'Файл'),type:String(f.type||''),size:nonneg(f.size),data:safeStoredFileData(f.data)})):[]}));
   const refuels=(Array.isArray(raw.refuels)?raw.refuels:[]).map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),odometer:nonneg(x.odometer),fuelType:String(x.fuelType||'Бензин'),amount:nonneg(x.amount),liters:nonneg(x.liters),pricePerLiter:nonneg(x.pricePerLiter),fullTank:Boolean(x.fullTank),station:String(x.station||''),address:String(x.address||''),notes:String(x.notes||''),createdAt:String(x.createdAt||new Date().toISOString())}));
+  const syncDevices=(Array.isArray(raw.syncDevices)?raw.syncDevices:[]).filter(x=>x&&x.id).map(x=>({
+    id:String(x.id),label:String(x.label||'Устройство'),platform:String(x.platform||''),browser:String(x.browser||''),
+    linkedAt:String(x.linkedAt||''),lastSeenAt:String(x.lastSeenAt||x.linkedAt||'')
+  }));
   for(const e of serviceEntries) if(e.carId&&dateOK(e.date)&&e.odometer>0) odometerLogs.push({id:`mileage-service-${e.id}`,carId:e.carId,date:e.date,value:e.odometer,note:'Восстановлено из сервисной истории',sourceType:'service',sourceId:e.id});
   for(const c of components) if(c.carId&&dateOK(c.baseInstalledDate)&&c.baseInstalledOdometer>0) odometerLogs.push({id:`mileage-component-${c.id}`,carId:c.carId,date:c.baseInstalledDate,value:c.baseInstalledOdometer,note:'Восстановлено из установки узла',sourceType:'component',sourceId:c.id});
   for(const e of expenses) if(e.carId&&dateOK(e.date)&&e.odometer>0&&!e.linkedServiceId&&!e.linkedRefuelId) odometerLogs.push({id:`mileage-expense-${e.id}`,carId:e.carId,date:e.date,value:e.odometer,note:'Восстановлено из расхода',sourceType:'expense',sourceId:e.id});
@@ -474,7 +480,7 @@ function migrate(raw) {
   const next=Math.max(nonneg(raw.nextSeq,1),...serviceEntries.map(x=>nonneg(x.seq)+1),1);
 
   const activeCarId=cars.some(c=>c.id===raw.activeCarId)?raw.activeCarId:(cars[0]?.id||null);
-  return {...base,...raw,version:APP_VERSION,nextSeq:next,activeCarId,settings,cars,odometerLogs,serviceEntries,components,expenses,documents,refuels};
+  return {...base,...raw,version:APP_VERSION,nextSeq:next,activeCarId,settings,cars,odometerLogs,serviceEntries,components,expenses,documents,refuels,syncDevices};
 }
 
 async function persist() { await saveState(state); scheduleAutoSync(); }
@@ -1418,6 +1424,7 @@ function syncErrorText(err){
   if(code.includes('AUTO_SYNC_TOO_LARGE'))return 'Одна из записей слишком большая для автоматической синхронизации. Ручной QR-обмен по-прежнему доступен.';
   if(code.includes('vault_conflict')||code.includes('unauthorized'))return 'Не удалось открыть общий зашифрованный журнал. Переподключите устройство через QR.';
   if(code.includes('vault_not_found'))return 'Общий журнал не найден на сервере. Переподключите устройство через QR.';
+  if(code.includes('VAULT_SWITCH_BLOCKED'))return 'Это устройство уже подключено к другому общему журналу. Сначала отключите текущую синхронизацию, если действительно хотите сменить журнал.';
   if(code.includes('OperationError'))return 'Не удалось расшифровать пакет. Проверьте, что используется QR именно этого сеанса.';
   return 'Не удалось выполнить обмен данными. Проверьте интернет и попробуйте ещё раз.';
 }
@@ -1426,7 +1433,8 @@ function syncSummaryHtml(s){
   return `<div class="v5-sync-summary"><div><strong>${x.cars}</strong><span>авто</span></div><div><strong>${x.service}</strong><span>сервис</span></div><div><strong>${x.refuels}</strong><span>заправки</span></div><div><strong>${x.expenses}</strong><span>расходы</span></div><div><strong>${x.components}</strong><span>узлы</span></div><div><strong>${x.documents}</strong><span>документы</span></div></div>`;
 }
 function syncOverviewSheet(){
-  const ready=Boolean(getSyncApiUrl()),vault=loadSyncVault(),linked=Boolean(vault);
+  const ready=Boolean(getSyncApiUrl()),vault=loadSyncVault(),linked=Boolean(vault),vaultCode=syncVaultCode(vault);
+  const devices=(state.syncDevices||[]).filter(x=>x?.id).sort((a,b)=>String(b.lastSeenAt||'').localeCompare(String(a.lastSeenAt||'')));
   const statusText=autoSyncStatus==='syncing'
     ?'Синхронизация…'
     :autoSyncStatus==='offline'
@@ -1441,22 +1449,28 @@ function syncOverviewSheet(){
       <div class="v5-sync-live-main"><strong>Автосинхронизация включена</strong><span>${esc(statusText)}${autoSyncPending?` · ожидают отправки: ${autoSyncPending}`:''}</span></div>
       <button class="btn small" data-action="sync-now" ${autoSyncRunning?'disabled':''}>Синхронизировать</button>
     </div>`:'';
-  const body=`<div class="v5-sync-intro"><div class="v5-sync-lock">↔</div><strong>${linked?'Общий журнал подключён':'Обмен без аккаунтов'}</strong><p>${linked?'Записи автоматически синхронизируются между связанными устройствами. QR нужен для подключения нового устройства или ручной передачи.':'На втором устройстве откройте этот же раздел и нажмите «Показать QR». На телефоне выберите направление и отсканируйте его.'}</p></div>
+  const deviceList=linked?`<div class="form-section"><div class="form-title">Общий журнал</div>
+      <div class="install-note"><strong>${esc(vaultCode)}</strong><br>На всех ваших устройствах здесь должен быть один и тот же код.</div>
+      <div class="form-title" style="margin-top:12px">Подключённые устройства · ${devices.length}</div>
+      <div class="v5-list">${devices.length?devices.map(d=>`<div class="list-row"><div class="row-icon">${String(d.id)===String(vault.deviceId)?'✓':'↔'}</div><div class="row-main"><div class="row-title">${esc(d.label||'Устройство')}${String(d.id)===String(vault.deviceId)?' · это устройство':''}</div><div class="row-sub">${esc(syncDeviceActivityText(d.lastSeenAt))} · ${esc(String(d.id).slice(0,6).toUpperCase())}</div></div></div>`).join(''):'<div class="helper">Список появится после первой синхронизации.</div>'}</div>
+    </div>`:'';
+  const body=`<div class="v5-sync-intro"><div class="v5-sync-lock">↔</div><strong>${linked?'Общий журнал подключён':'Синхронизация между устройствами'}</strong><p>${linked?`Это устройство входит в журнал ${esc(vaultCode)}. Чтобы добавить домашний, рабочий ПК или ещё один телефон, покажите QR именно с уже подключённого устройства.`:'Чтобы присоединиться к существующему журналу, покажите QR на уже подключённом устройстве, затем здесь выберите «Получение данных» и отсканируйте его.'}</p></div>
     ${linkedCard}
+    ${deviceList}
     ${!ready?'<div class="install-note"><strong>Relay ещё не подключён.</strong><br>Для синхронизации нужен URL Cloudflare Worker.</div>':''}
     <div class="v5-sync-mode-grid">
-      <button class="v5-sync-mode" data-action="sync-scan-push" ${ready?'':'disabled'}><span class="v5-sync-mode-icon">↑</span><strong>Передача данных</strong><small>Сканирую QR другого устройства и отправляю ему данные с этого устройства.</small></button>
-      <button class="v5-sync-mode" data-action="sync-scan-pull" ${ready?'':'disabled'}><span class="v5-sync-mode-icon">↓</span><strong>Получение данных</strong><small>Сканирую QR другого устройства и загружаю его данные на это устройство.</small></button>
+      <button class="v5-sync-mode" data-action="sync-scan-push" ${ready?'':'disabled'}><span class="v5-sync-mode-icon">↑</span><strong>Передача данных</strong><small>Отправить данные этому устройству по QR другого устройства.</small></button>
+      <button class="v5-sync-mode" data-action="sync-scan-pull" ${ready?'':'disabled'}><span class="v5-sync-mode-icon">↓</span><strong>Получение данных</strong><small>Подключиться к журналу устройства с QR и получить его данные.</small></button>
     </div>
-    <button class="btn block v5-sync-show" data-action="sync-show-qr" ${ready?'':'disabled'}>Показать QR на этом устройстве</button>
+    <button class="btn ${linked?'primary ':''}block v5-sync-show" data-action="sync-show-qr" ${ready?'':'disabled'}>${linked?'Добавить новое устройство':'Показать QR и создать общий журнал'}</button>
     ${linked?'<button class="btn danger block" style="margin-top:8px" data-action="sync-unlink">Отключить автосинхронизацию на этом устройстве</button>':''}
-    <div class="helper">QR одноразовый и действует ограниченное время. После успешного сопряжения устройства остаются связанными, а содержимое журнала хранится на сервере только в зашифрованном виде.</div>`;
+    <div class="helper">${linked?'QR добавляет новое устройство именно в текущий общий журнал. Уже подключённое устройство не сможет молча переключиться на другой журнал.':'Первое устройство создаёт общий журнал. Все следующие устройства нужно подключать к его QR.'}</div>`;
   return sheetWrap('Синхронизация',body);
 }
 function syncQrSheet(){
   if(!syncPair)return sheetWrap('QR для подключения','<div class="install-note">Сеанс не найден. Создайте QR ещё раз.</div>');
   let qr='';try{qr=pairingQrSvg(syncPair);}catch{}
-  const body=`<div class="v5-sync-qr-wrap"><div class="v5-sync-qr" data-sync-qr>${qr}</div><strong>Покажите этот QR другому устройству</strong><p>На телефоне выберите «Передача данных» или «Получение данных» и отсканируйте код.</p><div class="v5-sync-code">Сеанс ${esc(pairingCodeShort(syncPair))}</div><div class="v5-sync-status" data-sync-status>${esc(syncQrStatus)}</div></div>`;
+  const body=`<div class="v5-sync-qr-wrap"><div class="v5-sync-qr" data-sync-qr>${qr}</div><strong>Покажите этот QR новому устройству</strong><p>На новом устройстве откройте «Синхронизация», выберите «Получение данных» и отсканируйте код. Оно будет добавлено в ${esc(syncVaultCode(syncPendingVault))}.</p><div class="v5-sync-code">${esc(syncVaultCode(syncPendingVault))} · сеанс ${esc(pairingCodeShort(syncPair))}</div><div class="v5-sync-status" data-sync-status>${esc(syncQrStatus)}</div></div>`;
   return sheetWrap('QR для подключения',body);
 }
 function syncScanSheet(){
@@ -1480,6 +1494,12 @@ function syncImportSheet(){
 }
 function syncSuccessSheet(){
   return sheetWrap('Обмен завершён','<div class="v5-sync-success"><div class="v5-sync-success-icon">✓</div><strong>Устройства связаны</strong><p>Разовый QR-сеанс закрыт. Дальше изменения будут синхронизироваться автоматически при открытом приложении и при следующем запуске.</p></div>','<button class="btn primary block" data-action="close-sheet">Готово</button>');
+}
+function syncVaultConflictSheet(){
+  const c=syncVaultConflict||{};
+  const body=`<div class="install-note"><strong>QR относится к другому общему журналу.</strong><br>Сейчас это устройство подключено к <b>${esc(c.current||'другому журналу')}</b>, а отсканированный QR — к <b>${esc(c.incoming||'другому журналу')}</b>.</div>
+    <div class="form-section"><div class="helper">Переключение отменено, поэтому текущая синхронизация не потеряна. Если вы действительно хотите перенести это устройство в другой журнал, сначала нажмите «Отключить автосинхронизацию на этом устройстве», а затем подключитесь заново.</div></div>`;
+  return sheetWrap('Другой общий журнал',body,'<button class="btn primary block" data-action="sync-conflict-back">Вернуться к синхронизации</button>');
 }
 
 function inputField(label,name,value='',type='text',extra=''){ return `<div class="field"><label for="${name}">${label}</label><input class="input" id="${name}" name="${name}" type="${type}" value="${esc(value??'')}" ${extra}></div>`; }
@@ -1656,7 +1676,7 @@ function pdfReadySheet(){
   return sheetWrap('PDF готов',body,foot);
 }
 
-function renderSheet(){if(!ui.sheet)return '';if(ui.sheet==='sync')return syncOverviewSheet();if(ui.sheet==='sync-qr')return syncQrSheet();if(ui.sheet==='sync-scan')return syncScanSheet();if(ui.sheet==='sync-progress')return syncProgressSheet();if(ui.sheet==='sync-import')return syncImportSheet();if(ui.sheet==='sync-success')return syncSuccessSheet();if(ui.sheet==='pdf-ready')return pdfReadySheet();if(ui.sheet==='profile')return profileSheet();if(ui.sheet==='reminders')return remindersSheet();if(ui.sheet==='car')return carSheet(ui.sheetId);if(ui.sheet==='garage')return garageSheet();if(ui.sheet==='odometer')return odometerSheet();if(ui.sheet==='entry')return entrySheet(ui.sheetId);if(ui.sheet==='component')return componentSheet(ui.sheetId);if(ui.sheet==='expense')return expenseSheet(ui.sheetId);if(ui.sheet==='document')return documentSheet(ui.sheetId);if(ui.sheet==='refuel')return refuelSheet(ui.sheetId);if(ui.sheet==='entry-detail')return entryDetailSheet(ui.sheetId);if(ui.sheet==='component-detail')return componentDetailSheet(ui.sheetId);if(ui.sheet==='expense-detail')return expenseDetailSheet(ui.sheetId);if(ui.sheet==='document-detail')return documentDetailSheet(ui.sheetId);if(ui.sheet==='refuel-detail')return refuelDetailSheet(ui.sheetId);return '';}
+function renderSheet(){if(!ui.sheet)return '';if(ui.sheet==='sync')return syncOverviewSheet();if(ui.sheet==='sync-qr')return syncQrSheet();if(ui.sheet==='sync-scan')return syncScanSheet();if(ui.sheet==='sync-progress')return syncProgressSheet();if(ui.sheet==='sync-import')return syncImportSheet();if(ui.sheet==='sync-success')return syncSuccessSheet();if(ui.sheet==='sync-vault-conflict')return syncVaultConflictSheet();if(ui.sheet==='pdf-ready')return pdfReadySheet();if(ui.sheet==='profile')return profileSheet();if(ui.sheet==='reminders')return remindersSheet();if(ui.sheet==='car')return carSheet(ui.sheetId);if(ui.sheet==='garage')return garageSheet();if(ui.sheet==='odometer')return odometerSheet();if(ui.sheet==='entry')return entrySheet(ui.sheetId);if(ui.sheet==='component')return componentSheet(ui.sheetId);if(ui.sheet==='expense')return expenseSheet(ui.sheetId);if(ui.sheet==='document')return documentSheet(ui.sheetId);if(ui.sheet==='refuel')return refuelSheet(ui.sheetId);if(ui.sheet==='entry-detail')return entryDetailSheet(ui.sheetId);if(ui.sheet==='component-detail')return componentDetailSheet(ui.sheetId);if(ui.sheet==='expense-detail')return expenseDetailSheet(ui.sheetId);if(ui.sheet==='document-detail')return documentDetailSheet(ui.sheetId);if(ui.sheet==='refuel-detail')return refuelDetailSheet(ui.sheetId);return '';}
 
 function navigateTo(view,{replace=false}={}){
   if(!view)return;
@@ -2079,6 +2099,7 @@ document.addEventListener('click', async e=>{
   if(a==='remove-stored-file'){const d=state.documents.find(x=>x.id===el.dataset.doc),i=Number(el.dataset.index);if(d?.files?.[i]&&confirm(`Удалить файл «${d.files[i].name}»?`)){d.files.splice(i,1);await persist();render();toast('Файл удалён');}return;}
   if(a==='open-image'){window.open(el.getAttribute('src'),'_blank');return;}
   if(a==='sync-open'){resetSyncTransient();ui.sheet='sync';render();if(loadSyncVault())autoSyncNow(false);return;}
+  if(a==='sync-conflict-back'){syncVaultConflict=null;ui.sheet='sync';render();return;}
   if(a==='sync-now'){await autoSyncNow(true);return;}
   if(a==='sync-unlink'){if(confirm('Отключить автоматическую синхронизацию только на этом устройстве? Данные на устройстве не удалятся.')){if(autoSyncTimer){clearTimeout(autoSyncTimer);autoSyncTimer=0;}clearSyncVault();autoSyncStatus='idle';autoSyncLastError='';autoSyncPending=0;toast('Автосинхронизация отключена на этом устройстве');render();}return;}
   if(a==='sync-show-qr'){await startSyncDisplaySession();return;}
@@ -2307,7 +2328,7 @@ function downloadText(name,text,type='application/json'){ const blob=new Blob([t
 function mergeSyncStates(localRaw,incomingRaw){
   const local=migrate(localRaw),incoming=migrate(incomingRaw);
   const result={...local};
-  for(const key of ['cars','odometerLogs','serviceEntries','components','expenses','documents','refuels']){
+  for(const key of ['cars','odometerLogs','serviceEntries','components','expenses','documents','refuels','syncDevices']){
     const map=new Map((local[key]||[]).map(x=>[String(x.id),x]));
     for(const item of incoming[key]||[])map.set(String(item.id),item);
     result[key]=[...map.values()];
@@ -2316,6 +2337,40 @@ function mergeSyncStates(localRaw,incomingRaw){
   result.nextSeq=Math.max(nonneg(local.nextSeq,1),nonneg(incoming.nextSeq,1));
   result.activeCarId=result.cars.some(x=>x.id===incoming.activeCarId)?incoming.activeCarId:(result.cars.some(x=>x.id===local.activeCarId)?local.activeCarId:result.cars[0]?.id||null);
   return migrate(result);
+}
+function syncVaultCode(vault=loadSyncVault()){
+  return vault?.id?`AJ-${String(vault.id).slice(0,8).toUpperCase()}`:'';
+}
+function syncDeviceIdentity(){
+  const ua=String(navigator.userAgent||''),platform=String(navigator.platform||'');
+  const isiOS=/iPhone|iPad|iPod/i.test(ua)||(platform==='MacIntel'&&Number(navigator.maxTouchPoints)>1);
+  const os=isiOS?'iPhone / iPad':/Android/i.test(ua)?'Android':/Windows/i.test(ua)?'Windows PC':/Mac/i.test(platform||ua)?'Mac':/Linux/i.test(ua)?'Linux':'Устройство';
+  const browser=/Edg\//i.test(ua)?'Edge':/CriOS|Chrome\//i.test(ua)?'Chrome':/FxiOS|Firefox\//i.test(ua)?'Firefox':/Safari\//i.test(ua)?'Safari':'Браузер';
+  return {label:`${os} · ${browser}`,platform:os,browser};
+}
+function ensureCurrentSyncDevice(vault,{touch=false}={}){
+  if(!vault?.deviceId)return false;
+  state.syncDevices=Array.isArray(state.syncDevices)?state.syncDevices:[];
+  const now=new Date().toISOString(),info=syncDeviceIdentity();
+  let item=state.syncDevices.find(x=>String(x.id)===String(vault.deviceId)),changed=false;
+  if(!item){
+    item={id:String(vault.deviceId),label:info.label,platform:info.platform,browser:info.browser,linkedAt:now,lastSeenAt:now};
+    state.syncDevices.push(item);changed=true;
+  }else{
+    for(const [k,v] of Object.entries({label:info.label,platform:info.platform,browser:info.browser})){
+      if(item[k]!==v){item[k]=v;changed=true;}
+    }
+    if(touch){
+      const last=Date.parse(item.lastSeenAt||item.linkedAt||0)||0;
+      if(Date.now()-last>5*60*1000){item.lastSeenAt=now;changed=true;}
+    }
+  }
+  return changed;
+}
+function syncDeviceActivityText(value){
+  if(!value)return 'активность не зафиксирована';
+  const d=new Date(value);if(Number.isNaN(d.getTime()))return 'активность не зафиксирована';
+  return `активность ${new Intl.DateTimeFormat('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(d)}`;
 }
 function stopSyncPolling(){if(syncPollTimer){clearTimeout(syncPollTimer);syncPollTimer=0;}}
 function stopSyncScanner(){
@@ -2388,6 +2443,7 @@ async function autoSyncNow(showToast=false){
   autoSyncRunning=true;autoSyncStatus='syncing';autoSyncLastError='';
   if(showToast&&ui.sheet==='sync')render();
   try{
+    if(ensureCurrentSyncDevice(vault,{touch:true}))await saveState(state);
     const changes=await diffSyncState(state,vault);
     autoSyncPending=changes.length;
     if(changes.length){
@@ -2419,11 +2475,12 @@ async function finalizePendingVaultLink(){
   if(!syncPendingVault){syncPair=null;return loadSyncVault();}
   const vault=await adoptSyncVault(syncPendingVault);
   syncPendingVault=null;syncPair=null;
+  if(ensureCurrentSyncDevice(vault,{touch:true}))await saveState(state);
   scheduleAutoSync(250);
   return vault;
 }
 function resetSyncTransient(){
-  stopSyncPolling();stopSyncScanner();syncBusy=false;syncPair=null;syncMode='';syncIncoming=null;syncIncomingPair=null;syncPendingVault=null;syncQrStatus='Ждём сканирования на другом устройстве…';syncProgressTitle='';syncProgressText='';
+  stopSyncPolling();stopSyncScanner();syncBusy=false;syncPair=null;syncMode='';syncIncoming=null;syncIncomingPair=null;syncPendingVault=null;syncVaultConflict=null;syncQrStatus='Ждём сканирования на другом устройстве…';syncProgressTitle='';syncProgressText='';
 }
 async function startSyncDisplaySession(){
   try{
@@ -2497,6 +2554,11 @@ async function handleScannedSyncCode(raw){
   syncPair=pair;
   try{
     syncPendingVault=await readSessionVault(pair);
+    const currentVault=loadSyncVault();
+    if(currentVault&&currentVault.id!==syncPendingVault.id){
+      syncVaultConflict={current:syncVaultCode(currentVault),incoming:syncVaultCode(syncPendingVault)};
+      syncPendingVault=null;syncPair=null;syncMode='';ui.sheet='sync-vault-conflict';render();return;
+    }
     if(syncMode==='push'){
       syncProgressTitle='Передача данных';syncProgressText='Шифруем журнал и отправляем на другое устройство…';ui.sheet='sync-progress';render();
       await requestSyncMode(pair,'push');await uploadSyncState(pair,state,'scanner');
@@ -2559,6 +2621,8 @@ async function requestPersistentStorage(){ try{if(!navigator.storage?.persist){t
 async function init(){
   state=migrate(await loadState());
   state.refuels ||= [];
+  const initialVault=loadSyncVault();
+  if(initialVault&&ensureCurrentSyncDevice(initialVault,{touch:true}))await saveState(state);
   ui.analyticsTab ||= 'expenses';
   ui.analyticsPeriod ||= 'month';
   if(state.activeCarId && !state.cars.some(c=>c.id===state.activeCarId))state.activeCarId=state.cars[0]?.id||null;
