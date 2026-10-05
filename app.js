@@ -1831,9 +1831,27 @@ async function handleSubmit(e){
   }
   if(formId==='component-form'){
     const d=formObject(f),id=d.id||uid();let x=state.components.find(v=>v.id===id);const info=vehicleSystemInfo(d.systemKey);if(!info){toast('Выберите узел автомобиля');return;}
-    const installKm=nonneg(d.installedOdometer);if(installKm>currentKm()){toast('Пробег установки не может быть больше текущего пробега');return;}if(d.installedDate>today()){toast('Дата установки не может быть в будущем');return;}
+    const installKm=nonneg(d.installedOdometer);if(!dateOK(d.installedDate)){toast('Укажите корректную дату установки');return;}if(installKm>currentKm()){toast('Пробег установки не может быть больше текущего пробега');return;}if(d.installedDate>today()){toast('Дата установки не может быть в будущем');return;}
     const obj={id,carId:car().id,name:info.label,category:info.group,systemKey:info.key,brand:d.brand,partNumber:d.partNumber,baseInstalledDate:d.installedDate,baseInstalledOdometer:installKm,installedDate:d.installedDate,installedOdometer:installKm,lifeKm:nonneg(d.lifeKm),lifeMonths:nonneg(d.lifeMonths),inspectKm:nonneg(d.inspectKm),inspectMonths:nonneg(d.inspectMonths),warnKm:nonneg(d.warnKm),warnDays:nonneg(d.warnDays),cost:nonneg(d.cost),notes:d.notes,sourceEntryId:x?.sourceEntryId||'',lastInspectionDate:x?.lastInspectionDate||d.installedDate,lastInspectionOdometer:x?.lastInspectionOdometer||installKm};
-    if(x)Object.assign(x,obj);else state.components.push(obj);recordMileageObservation(installKm,d.installedDate,'Установка узла','component',id);await persist();ui.healthSystemKey='';ui.sheet=null;toast('Узел сохранён');render();return;
+    if(x){
+      Object.assign(x,obj);
+      recordMileageObservation(installKm,d.installedDate,'Установка узла','component',id);
+      await persist();ui.healthSystemKey='';ui.sheet=null;toast('Узел сохранён');render();return;
+    }
+    state.components.push(obj);
+    const entry={
+      id:uid(),carId:obj.carId,date:obj.baseInstalledDate,odometer:obj.baseInstalledOdometer,
+      type:'replacement',title:`Установка: ${obj.name}`,category:obj.category||'',faultKey:'',
+      workText:'',partsText:[obj.brand,obj.partNumber].filter(Boolean).join(' · '),
+      partsCost:obj.cost,laborCost:0,otherCost:0,systemKey:obj.systemKey,
+      componentId:obj.id,componentAction:'replace',componentEventOdometer:obj.baseInstalledOdometer,
+      notes:obj.notes?`Добавлено из «Здоровья автомобиля». ${obj.notes}`:'Добавлено из «Здоровья автомобиля»',
+      photos:[],createdAt:new Date().toISOString(),seq:nextSeq()
+    };
+    state.serviceEntries.push(entry);
+    syncEntryExpense(entry);
+    recordMileageObservation(installKm,d.installedDate,'Из сервисной записи','service',entry.id);
+    await persist();ui.healthSystemKey='';ui.sheet=null;toast('Узел сохранён · запись и расход добавлены в журнал');render();return;
   }
   if(formId==='expense-form'){
     const d=formObject(f), id=d.id||uid(); let x=state.expenses.find(v=>v.id===id); if(x?.linkedServiceId){toast('Связанный расход изменяется через сервисную запись');return;} const obj={id,carId:car().id,date:d.date,odometer:nonneg(d.odometer),category:d.category,amount:nonneg(d.amount),description:d.description.trim(),note:d.note,linkedServiceId:''}; if(!dateOK(obj.date)){toast('Укажи корректную дату');return;} if(obj.date>today()){toast('Дата расхода не может быть в будущем');return;} const err=obj.odometer?mileageConsistencyError(obj.odometer,obj.date,'expense',id):null;if(err&&obj.odometer>nonneg(car().initialOdometer)){toast(err);return;} if(x)Object.assign(x,obj);else state.expenses.push(obj); if(obj.odometer)recordMileageObservation(obj.odometer,obj.date,'Из расхода','expense',id);else removeMileageSource('expense',id); await persist();ui.sheet=null;toast('Расход сохранён');render();return;
