@@ -1140,6 +1140,93 @@ test('QR relay payload is encrypted and relay auth is not the QR encryption secr
 });
 
 
+test('linked device refuses to switch silently to another sync vault', async({page})=>{
+  await installSyncRelayMock(page);
+  const result=await page.evaluate(async()=>{
+    const sync=await import(new URL('./sync.js?qa-vault-guard=1',location.href).href);
+    const first=sync.createSyncVaultLink();
+    await sync.registerSyncVault(first);
+    await sync.adoptSyncVault(first);
+    const second=sync.createSyncVaultLink();
+    await sync.registerSyncVault(second);
+    let error='';
+    try{await sync.adoptSyncVault(second);}catch(err){error=String(err?.message||err);}
+    const active=sync.loadSyncVault();
+    return {first:first.id,second:second.id,active:active?.id||'',error};
+  });
+  expect(result.first).not.toBe(result.second);
+  expect(result.active).toBe(result.first);
+  expect(result.error).toContain('VAULT_SWITCH_BLOCKED');
+});
+
+test('three linked devices stay in one vault and receive the same changes', async({page,context,browserName})=>{
+  test.skip(browserName==='webkit','Shared multi-page relay scenario runs on Chromium; persistent sync itself is covered on WebKit.');
+  const relay=await installSharedVaultRelay(context);
+  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync_test__'));
+  await page.reload();
+  await addCar(page);
+
+  const link=await page.evaluate(async()=>{
+    const sync=await import(new URL('./sync.js?qa-three-device=1',location.href).href);
+    const vault=sync.createSyncVaultLink();
+    await sync.registerSyncVault(vault);
+    await sync.adoptSyncVault(vault);
+    window.dispatchEvent(new Event('focus'));
+    return {id:vault.id,secret:vault.secret,api:vault.api};
+  });
+  await expect.poll(()=>Object.values(relay)[0]?.revision||0,{timeout:10000}).toBeGreaterThan(0);
+
+  const connect=async p=>{
+    await p.goto('/');
+    await p.evaluate(async link=>{
+      localStorage.setItem('autojournal-sync-api',location.origin+'/__sync_test__');
+      const sync=await import(new URL('./sync.js?qa-three-device=1',location.href).href);
+      await sync.adoptSyncVault(link);
+      window.dispatchEvent(new Event('focus'));
+    },link);
+    await expect.poll(async()=>((await state(p)).cars||[]).length,{timeout:10000}).toBe(1);
+  };
+
+  const homePc=await context.newPage();
+  await connect(homePc);
+  const workPc=await context.newPage();
+  await connect(workPc);
+
+  for(let i=0;i<4;i++){
+    await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    await homePc.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    await workPc.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    await page.waitForTimeout(350);
+  }
+
+  await expect.poll(async()=>((await state(page)).syncDevices||[]).length,{timeout:10000}).toBe(3);
+  await expect.poll(async()=>((await state(homePc)).syncDevices||[]).length,{timeout:10000}).toBe(3);
+  await expect.poll(async()=>((await state(workPc)).syncDevices||[]).length,{timeout:10000}).toBe(3);
+
+  const ids=await Promise.all([page,homePc,workPc].map(async p=>p.evaluate(async()=>{
+    const sync=await import(new URL('./sync.js?qa-three-device=1',location.href).href);
+    return sync.loadSyncVault()?.id||'';
+  })));
+  expect(new Set(ids).size).toBe(1);
+  expect(ids[0]).toBe(link.id);
+
+  await page.locator('[data-action="add-odometer"]').click();
+  await page.locator('#value').fill('211777');
+  await page.locator('button[form="odometer-form"]').click();
+  await workPc.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await expect.poll(async()=>((await state(workPc)).cars[0]?.currentOdometer||0),{timeout:10000}).toBe(211777);
+
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="more"]').click();
+  await page.locator('[data-action="sync-open"]').click();
+  await expect(page.locator('.sheet')).toContainText('Подключённые устройства · 3');
+  await expect(page.locator('.sheet')).toContainText('AJ-');
+  await expect(page.locator('[data-action="sync-show-qr"]')).toHaveText('Добавить новое устройство');
+
+  await homePc.close();
+  await workPc.close();
+});
+
 test('persistent vault auto-sync pushes local changes and pulls remote changes', async({page})=>{
   await installSyncRelayMock(page);
   await addCar(page);
