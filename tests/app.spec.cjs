@@ -127,8 +127,7 @@ async function installSyncRelayMock(page){
   });
 }
 
-async function installSharedVaultRelay(context){
-  const vaults={};
+async function installSharedVaultRelay(context,vaults={}){
   await context.route('**/__sync_test__/**',async route=>{
     const req=route.request(),url=new URL(req.url()),method=req.method().toUpperCase(),path=url.pathname.replace(/^\/__sync_test__/,'');
     const json=(status,value)=>route.fulfill({status,headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
@@ -438,6 +437,7 @@ test('health replacement is visible in journal even after stale filters', async(
   await page.locator('#installedOdometer').fill('200000');
   await page.locator('button[form="component-form"]').click();
 
+  await page.locator('[data-action="go-back"]').click();
   await page.locator('.v5-tabbar [data-view="records"]').click();
   await page.locator('[data-input="history-type"]').selectOption('repair');
   await page.locator('[data-input="history-search"]').fill('несуществующий фильтр');
@@ -1221,10 +1221,10 @@ test('linked device refuses to switch silently to another sync vault', async({pa
   expect(result.error).toContain('VAULT_SWITCH_BLOCKED');
 });
 
-test('three linked devices stay in one vault and receive the same changes', async({page,context,browserName})=>{
-  test.skip(browserName==='webkit','Shared multi-page relay scenario runs on Chromium; persistent sync itself is covered on WebKit.');
-  const relay=await installSharedVaultRelay(context);
-  await page.evaluate(()=>localStorage.setItem('autojournal-sync-api',location.origin+'/__sync_test__'));
+test('three linked devices stay in one vault and receive the same changes', async({page,context,browser,browserName})=>{
+  test.skip(browserName==='webkit','Shared multi-context relay scenario runs on Chromium; persistent sync itself is covered on WebKit.');
+  const relay={};
+  await installSharedVaultRelay(context,relay);
   await page.reload();
   await addCar(page);
 
@@ -1233,32 +1233,36 @@ test('three linked devices stay in one vault and receive the same changes', asyn
     const vault=sync.createSyncVaultLink();
     await sync.registerSyncVault(vault);
     await sync.adoptSyncVault(vault);
-    window.dispatchEvent(new Event('focus'));
     return {id:vault.id,secret:vault.secret,api:vault.api};
   });
+  await page.reload();
   await expect.poll(()=>Object.values(relay)[0]?.revision||0,{timeout:10000}).toBeGreaterThan(0);
 
+  const homeContext=await browser.newContext();
+  const workContext=await browser.newContext();
+  await installSharedVaultRelay(homeContext,relay);
+  await installSharedVaultRelay(workContext,relay);
+  const homePc=await homeContext.newPage();
+  const workPc=await workContext.newPage();
+
   const connect=async p=>{
-    await p.goto('/');
+    await p.goto(page.url());
     await p.evaluate(async link=>{
-      localStorage.setItem('autojournal-sync-api',location.origin+'/__sync_test__');
       const sync=await import(new URL('./sync.js?qa-three-device=1',location.href).href);
       await sync.adoptSyncVault(link);
-      window.dispatchEvent(new Event('focus'));
     },link);
+    await p.reload();
     await expect.poll(async()=>((await state(p)).cars||[]).length,{timeout:10000}).toBe(1);
   };
 
-  const homePc=await context.newPage();
   await connect(homePc);
-  const workPc=await context.newPage();
   await connect(workPc);
 
-  for(let i=0;i<4;i++){
+  for(let i=0;i<5;i++){
     await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
     await homePc.evaluate(()=>window.dispatchEvent(new Event('focus')));
     await workPc.evaluate(()=>window.dispatchEvent(new Event('focus')));
-    await page.waitForTimeout(350);
+    await page.waitForTimeout(450);
   }
 
   await expect.poll(async()=>((await state(page)).syncDevices||[]).length,{timeout:10000}).toBe(3);
@@ -1285,8 +1289,8 @@ test('three linked devices stay in one vault and receive the same changes', asyn
   await expect(page.locator('.sheet')).toContainText('AJ-');
   await expect(page.locator('[data-action="sync-show-qr"]')).toHaveText('Добавить новое устройство');
 
-  await homePc.close();
-  await workPc.close();
+  await homeContext.close();
+  await workContext.close();
 });
 
 test('persistent vault auto-sync pushes local changes and pulls remote changes', async({page})=>{
