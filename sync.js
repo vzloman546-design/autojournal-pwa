@@ -8,7 +8,7 @@ const CHUNK_CHARS=250000;
 const MAX_ENCRYPTED_CHARS=45*1024*1024;
 const MAX_PUSH_BODY_CHARS=1800000;
 const VAULT_KEY='autojournal-sync-vault-v2';
-const STATE_COLLECTIONS=['cars','odometerLogs','serviceEntries','components','expenses','documents','refuels'];
+const STATE_COLLECTIONS=['cars','odometerLogs','serviceEntries','components','expenses','documents','refuels','syncDevices'];
 
 function bytesToBase64Url(bytes){
   let s='';
@@ -193,10 +193,11 @@ export async function registerSyncVault(vault){
   });
   return res.json();
 }
-export async function adoptSyncVault(link){
+export async function adoptSyncVault(link,{allowSwitch=false}={}){
   if(!link?.id||!link?.secret)throw new Error('INVALID_VAULT');
   const existing=loadSyncVault();
-  const vault=existing?.id===link.id
+  if(existing&&existing.id!==String(link.id)&&!allowSwitch)throw new Error('VAULT_SWITCH_BLOCKED');
+  const vault=existing?.id===String(link.id)
     ?{...existing,api:normalizeApi(link.api||existing.api||getSyncApiUrl())}
     :{id:String(link.id),secret:String(link.secret),api:normalizeApi(link.api||getSyncApiUrl()),deviceId:randomToken(9),lastRevision:0,lastSyncAt:'',shadow:{}};
   await registerSyncVault(vault);
