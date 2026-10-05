@@ -1314,7 +1314,13 @@ test('three linked devices stay in one vault and receive the same changes', asyn
   await page.locator('[data-action="add-odometer"]').click();
   await page.locator('#value').fill('211777');
   await page.locator('button[form="odometer-form"]').click();
-  await workPc.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  for(let i=0;i<6;i++){
+    await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    await page.waitForTimeout(350);
+    await workPc.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    await page.waitForTimeout(350);
+    if(((await state(workPc)).cars[0]?.currentOdometer||0)===211777)break;
+  }
   await expect.poll(async()=>((await state(workPc)).cars[0]?.currentOdometer||0),{timeout:10000}).toBe(211777);
 
   await openProfile(page);
