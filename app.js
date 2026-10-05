@@ -1680,6 +1680,7 @@ function renderSheet(){if(!ui.sheet)return '';if(ui.sheet==='sync')return syncOv
 
 function navigateTo(view,{replace=false}={}){
   if(!view)return;
+  if(view==='records'){ui.historyType='all';ui.search='';}
   if(view===ui.view){ui.sheet=null;render();return;}
   if(!replace){navStack.push(ui.view);if(navStack.length>30)navStack.shift();}
   ui.view=view;ui.sheet=null;ui.sheetId=null;nextTransition='forward';render();
@@ -2228,7 +2229,7 @@ document.addEventListener('touchcancel',()=>{
   else sheetSwipe=null;
 },{passive:true});
 
-async function markComponent(id,action){ const c=state.components.find(x=>x.id===id); if(!c)return; const km=currentKm(), date=nowISO(); const entry={id:uid(),carId:c.carId,date,odometer:km,type:action==='inspect'?'inspection':'replacement',title:`${action==='inspect'?'Проверка':'Замена'}: ${c.name}`,category:c.category||'',faultKey:'',workText:'',partsText:action==='replace'?[c.brand,c.partNumber].filter(Boolean).join(' · '):'',partsCost:action==='replace'?nonneg(c.cost):0,laborCost:0,otherCost:0,systemKey:c.systemKey||inferSystemKey(c.name,c.category),componentId:c.id,componentAction:action,componentEventOdometer:km,notes:'Отмечено из карточки узла',photos:[],createdAt:new Date().toISOString(),seq:nextSeq()}; state.serviceEntries.push(entry); syncEntryExpense(entry); recordMileageObservation(km,date,'Из сервисной записи','service',entry.id); await persist();toast(action==='inspect'?'Проверка отмечена':'Замена отмечена, циклы сброшены');ui.sheet='component-detail';render(); }
+async function markComponent(id,action){ const c=state.components.find(x=>x.id===id); if(!c)return; const km=currentKm(), date=nowISO(); const entry={id:uid(),carId:c.carId,date,odometer:km,type:action==='inspect'?'inspection':'replacement',title:`${action==='inspect'?'Проверка':'Замена'}: ${c.name}`,category:c.category||'',faultKey:'',workText:'',partsText:action==='replace'?[c.brand,c.partNumber].filter(Boolean).join(' · '):'',partsCost:action==='replace'?nonneg(c.cost):0,laborCost:0,otherCost:0,systemKey:c.systemKey||inferSystemKey(c.name,c.category),componentId:c.id,componentAction:action,componentEventOdometer:km,notes:'Отмечено из карточки узла',photos:[],createdAt:new Date().toISOString(),seq:nextSeq()}; state.serviceEntries.push(entry); syncEntryExpense(entry); recordMileageObservation(km,date,'Из сервисной записи','service',entry.id); await persist();toast(action==='inspect'?'Проверка отмечена · запись добавлена в журнал':'Замена отмечена · запись добавлена в журнал, циклы сброшены');ui.sheet='component-detail';render(); }
 
 const storedFilePreviewUrls=[];
 function dataUrlBlob(data,type=''){
