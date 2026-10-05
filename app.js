@@ -345,7 +345,18 @@ const defaultState = () => ({
     defaultWarnKm: 1000,
     defaultWarnDays: 14,
     currency: 'RUB',
-    lastBackupAt: ''
+    lastBackupAt: '',
+    weatherTireEnabled: false,
+    weatherTireThreshold: 5,
+    weatherTireLat: null,
+    weatherTireLon: null,
+    weatherLocationUpdatedAt: '',
+    weatherLastCheckAt: '',
+    weatherTireForecast: [],
+    weatherTireTriggerDate: '',
+    weatherTireTriggerTemp: null,
+    weatherTireConditionActive: false,
+    weatherLastLocalAlertAt: ''
   },
   activeCarId: null,
   nextSeq: 1,
@@ -476,7 +487,20 @@ function migrate(raw) {
   for(const r of refuels) if(r.carId&&dateOK(r.date)&&r.odometer>0) odometerLogs.push({id:`mileage-refuel-${r.id}`,carId:r.carId,date:r.date,value:r.odometer,note:'Восстановлено из заправки',sourceType:'refuel',sourceId:r.id});
   for(const c of cars){ const vals=odometerLogs.filter(x=>x.carId===c.id).map(x=>Number(x.value)).filter(Number.isFinite); const loggedMax=vals.length?Math.max(...vals):0; if(c.currentOdometer>Math.max(c.initialOdometer,loggedMax)) odometerLogs.push({id:uid(),carId:c.id,date:c.trackingStartDate||today(),value:c.currentOdometer,note:'Восстановлено из текущего пробега',sourceType:'manual',sourceId:`legacy-current-${c.id}`}); const allVals=odometerLogs.filter(x=>x.carId===c.id).map(x=>nonneg(x.value)); c.currentOdometer=Math.max(c.initialOdometer,...(allVals.length?allVals:[0])); if(!c.trackingStartDate){const dates=odometerLogs.filter(x=>x.carId===c.id&&dateOK(x.date)).map(x=>x.date).sort();c.trackingStartDate=dates[0]||today();} }
   const theme=['system','light','dark'].includes(rs.theme)?rs.theme:base.settings.theme;
-  const settings={...base.settings,theme,defaultWarnKm:nonneg(rs.defaultWarnKm??base.settings.defaultWarnKm,base.settings.defaultWarnKm),defaultWarnDays:nonneg(rs.defaultWarnDays??base.settings.defaultWarnDays,base.settings.defaultWarnDays),currency:'RUB',lastBackupAt:String(rs.lastBackupAt||'')};
+  const weatherLat=Number(rs.weatherTireLat),weatherLon=Number(rs.weatherTireLon),weatherThreshold=Number(rs.weatherTireThreshold);
+  const settings={...base.settings,theme,defaultWarnKm:nonneg(rs.defaultWarnKm??base.settings.defaultWarnKm,base.settings.defaultWarnKm),defaultWarnDays:nonneg(rs.defaultWarnDays??base.settings.defaultWarnDays,base.settings.defaultWarnDays),currency:'RUB',lastBackupAt:String(rs.lastBackupAt||''),
+    weatherTireEnabled:Boolean(rs.weatherTireEnabled),
+    weatherTireThreshold:Number.isFinite(weatherThreshold)?clamp(weatherThreshold,-20,20):5,
+    weatherTireLat:Number.isFinite(weatherLat)&&weatherLat>=-90&&weatherLat<=90?weatherLat:null,
+    weatherTireLon:Number.isFinite(weatherLon)&&weatherLon>=-180&&weatherLon<=180?weatherLon:null,
+    weatherLocationUpdatedAt:String(rs.weatherLocationUpdatedAt||''),
+    weatherLastCheckAt:String(rs.weatherLastCheckAt||''),
+    weatherTireForecast:Array.isArray(rs.weatherTireForecast)?rs.weatherTireForecast.slice(0,7).filter(x=>x&&dateOK(x.date)&&Number.isFinite(Number(x.mean))).map(x=>({date:String(x.date),mean:Number(x.mean)})):[],
+    weatherTireTriggerDate:dateOK(rs.weatherTireTriggerDate)?String(rs.weatherTireTriggerDate):'',
+    weatherTireTriggerTemp:Number.isFinite(Number(rs.weatherTireTriggerTemp))?Number(rs.weatherTireTriggerTemp):null,
+    weatherTireConditionActive:Boolean(rs.weatherTireConditionActive),
+    weatherLastLocalAlertAt:String(rs.weatherLastLocalAlertAt||'')
+  };
   const next=Math.max(nonneg(raw.nextSeq,1),...serviceEntries.map(x=>nonneg(x.seq)+1),1);
 
   const activeCarId=cars.some(c=>c.id===raw.activeCarId)?raw.activeCarId:(cars[0]?.id||null);
@@ -896,7 +920,7 @@ async function storageInfoText(){ try{if(!navigator.storage?.estimate)return 'Н
 
 function morePage(){
   const syncReady=Boolean(getSyncApiUrl()),syncLinked=Boolean(loadSyncVault());
-  return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Настройки</h1><div class="v5-menu-page"><div class="v5-setting-row"><div><strong>Тема</strong><span>Системная, светлая или тёмная</span></div><select data-input="theme"><option value="system" ${state.settings.theme==='system'?'selected':''}>Система</option><option value="light" ${state.settings.theme==='light'?'selected':''}>Светлая</option><option value="dark" ${state.settings.theme==='dark'?'selected':''}>Тёмная</option></select></div><button data-action="sync-open">${icons.import}<span><strong>Синхронизация и QR</strong><small>${syncLinked?'Автосинхронизация включена':syncReady?'Без аккаунта · зашифрованный обмен между устройствами':'Модуль готов · требуется подключить бесплатный relay'}</small></span><b>›</b></button><button data-action="calendar-export">${icons.calendar}<span><strong>Экспорт напоминаний</strong><small>Файл .ics для системного календаря</small></span><b>›</b></button><button data-action="backup-export">${icons.export}<span><strong>Резервная копия</strong><small>Все локальные данные в JSON</small></span><b>›</b></button><button data-action="backup-import">${icons.import}<span><strong>Восстановить копию</strong><small>Заменит текущие данные после подтверждения</small></span><b>›</b></button><button data-action="persist-storage">${icons.check}<span><strong>Защитить хранилище</strong><small>Запросить persistent storage</small></span><b>›</b></button></div><section class="section"><button class="btn danger block" data-action="reset-all">Удалить все локальные данные</button></section></div><input id="backup-input" type="file" accept="application/json,.json" hidden></main>`;
+  return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Настройки</h1><div class="v5-menu-page"><div class="v5-setting-row"><div><strong>Тема</strong><span>Системная, светлая или тёмная</span></div><select data-input="theme"><option value="system" ${state.settings.theme==='system'?'selected':''}>Система</option><option value="light" ${state.settings.theme==='light'?'selected':''}>Светлая</option><option value="dark" ${state.settings.theme==='dark'?'selected':''}>Тёмная</option></select></div><button data-action="sync-open">${icons.import}<span><strong>Синхронизация и QR</strong><small>${syncLinked?'Автосинхронизация включена':syncReady?'Без аккаунта · зашифрованный обмен между устройствами':'Модуль готов · требуется подключить бесплатный relay'}</small></span><b>›</b></button><button data-action="weather-open">${icons.alert}<span><strong>Погода и шины</strong><small>${state.settings.weatherTireEnabled?(state.settings.weatherTireLat!=null?'Прогноз на 7 дней · порог '+fmtNum(state.settings.weatherTireThreshold,1)+' °C':'Включено · нужно определить местоположение'):'Напоминание о сезонной смене шин'}</small></span><b>›</b></button><button data-action="calendar-export">${icons.calendar}<span><strong>Экспорт напоминаний</strong><small>Файл .ics для системного календаря</small></span><b>›</b></button><button data-action="backup-export">${icons.export}<span><strong>Резервная копия</strong><small>Все локальные данные в JSON</small></span><b>›</b></button><button data-action="backup-import">${icons.import}<span><strong>Восстановить копию</strong><small>Заменит текущие данные после подтверждения</small></span><b>›</b></button><button data-action="persist-storage">${icons.check}<span><strong>Защитить хранилище</strong><small>Запросить persistent storage</small></span><b>›</b></button></div><section class="section"><button class="btn danger block" data-action="reset-all">Удалить все локальные данные</button></section></div><input id="backup-input" type="file" accept="application/json,.json" hidden></main>`;
 }
 
 
@@ -1000,6 +1024,10 @@ function appNotifications(){
 
 function autoNotifications(){
   const out=allReminders().map((x,i)=>({id:`rem-${i}`,title:x.title,text:describeDue(x),date:x.dueDate?fmtDate(x.dueDate):(x.dueKm!=null?`${fmtNum(x.dueKm)} км`:'Сейчас'),event:x,status:x.status,icon:x.kind==='document'?icons.doc:x.kind==='inspect'?icons.check:icons.wrench}));
+  const ws=state.settings||{};
+  if(ws.weatherTireEnabled&&ws.weatherTireTriggerDate&&Number.isFinite(Number(ws.weatherTireTriggerTemp))){
+    out.unshift({id:'weather-tires',title:'Пора планировать смену шин',text:`По прогнозу на ${fmtDate(ws.weatherTireTriggerDate)} среднесуточная температура около ${fmtNum(ws.weatherTireTriggerTemp,1)} °C. Порог: ${fmtNum(ws.weatherTireThreshold,1)} °C.`,date:fmtDate(ws.weatherTireTriggerDate),icon:icons.alert,action:'weather-open',status:'soon'});
+  }
   const c=car();if(c){const logs=odometerTimeline(c),last=logs.at(-1);if(last&&daysBetween(last.date,today())>=14)out.unshift({id:'odo',title:'Обновить пробег',text:`Последнее показание: ${fmtNum(last.value)} км. Актуальный пробег помогает точнее рассчитывать сроки.`,date:fmtDate(last.date),icon:icons.speed,action:'add-odometer',status:'soon'});}return out;
 }
 
@@ -1502,6 +1530,31 @@ function syncVaultConflictSheet(){
   return sheetWrap('Другой общий журнал',body,'<button class="btn primary block" data-action="sync-conflict-back">Вернуться к синхронизации</button>');
 }
 
+function weatherSettingsSheet(){
+  const w=state.settings||{},hasLoc=Number.isFinite(Number(w.weatherTireLat))&&Number.isFinite(Number(w.weatherTireLon));
+  const link=loadWeatherPushLink(),pushSupported='serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+  const forecast=Array.isArray(w.weatherTireForecast)?w.weatherTireForecast:[];
+  const forecastHtml=forecast.length?`<div class="v5-list">${forecast.map(x=>`<div class="list-row"><div class="row-main"><div class="row-title">${fmtDate(x.date)}</div><div class="row-sub">Среднесуточная температура</div></div><div class="row-side"><div class="row-value">${fmtNum(x.mean,1)} °C</div></div></div>`).join('')}</div>`:'<div class="helper">Прогноз ещё не загружен.</div>';
+  const trigger=w.weatherTireTriggerDate?`<div class="install-note"><strong>Порог достигнут.</strong><br>${fmtDate(w.weatherTireTriggerDate)}: около ${fmtNum(w.weatherTireTriggerTemp,1)} °C при пороге ${fmtNum(w.weatherTireThreshold,1)} °C.</div>`:'';
+  const body=`<div class="form-section"><div class="form-title">Сезонная смена шин</div>
+    <label class="v5-check-line"><input type="checkbox" data-input="weather-tire-enabled" ${w.weatherTireEnabled?'checked':''}> Напоминать, когда прогноз становится холоднее порога</label>
+    <div class="field" style="margin-top:10px"><label for="weather-threshold">Порог среднесуточной температуры, °C</label><input class="input" id="weather-threshold" data-input="weather-threshold" type="number" min="-20" max="20" step="0.5" value="${esc(w.weatherTireThreshold??5)}"></div>
+    <div class="helper">AutoJournal анализирует ближайшие 7 дней и срабатывает, если хотя бы на один день прогнозируемая среднесуточная температура ≤ заданного порога.</div>
+  </div>
+  <div class="form-section"><div class="form-title">Местоположение</div>
+    <div class="install-note">${hasLoc?`Для прогноза сохранены округлённые координаты: <strong>${fmtNum(w.weatherTireLat,2)}, ${fmtNum(w.weatherTireLon,2)}</strong>.`:'Местоположение ещё не задано.'}</div>
+    <button class="btn block" data-action="weather-locate">Определить местоположение</button>
+    <div class="helper">Координаты округляются до 2 знаков — точности уровня города достаточно для такого напоминания.</div>
+  </div>
+  <div class="form-section"><div class="form-title">Фоновое уведомление</div>
+    <div class="install-note">${!pushSupported?'Этот браузер не поддерживает Web Push.':link?'Это устройство зарегистрировано для фоновых погодных уведомлений.':'Фоновый Web Push на этом устройстве ещё не включён.'}</div>
+    <button class="btn primary block" data-action="weather-enable-push" ${(!pushSupported||!hasLoc)?'disabled':''}>${link?'Обновить фоновое уведомление':'Включить фоновое уведомление'}</button>
+    ${link?'<button class="btn block" style="margin-top:8px" data-action="weather-disable-push">Отключить фоновое уведомление</button>':''}
+  </div>
+  <div class="form-section"><div class="form-title">Прогноз на 7 дней</div>${trigger}${forecastHtml}<button class="btn block" style="margin-top:8px" data-action="weather-check" ${hasLoc?'':'disabled'}>Проверить прогноз сейчас</button><div class="helper">Погодные данные: Open-Meteo.</div></div>`;
+  return sheetWrap('Погода и шины',body);
+}
+
 function inputField(label,name,value='',type='text',extra=''){ return `<div class="field"><label for="${name}">${label}</label><input class="input" id="${name}" name="${name}" type="${type}" value="${esc(value??'')}" ${extra}></div>`; }
 function selectField(label,name,options,value=''){ return `<div class="field"><label for="${name}">${label}</label><select class="input" id="${name}" name="${name}">${options.map(o=>{const [v,t]=Array.isArray(o)?o:[o,o];return `<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(t)}</option>`}).join('')}</select></div>`; }
 
@@ -1676,7 +1729,7 @@ function pdfReadySheet(){
   return sheetWrap('PDF готов',body,foot);
 }
 
-function renderSheet(){if(!ui.sheet)return '';if(ui.sheet==='sync')return syncOverviewSheet();if(ui.sheet==='sync-qr')return syncQrSheet();if(ui.sheet==='sync-scan')return syncScanSheet();if(ui.sheet==='sync-progress')return syncProgressSheet();if(ui.sheet==='sync-import')return syncImportSheet();if(ui.sheet==='sync-success')return syncSuccessSheet();if(ui.sheet==='sync-vault-conflict')return syncVaultConflictSheet();if(ui.sheet==='pdf-ready')return pdfReadySheet();if(ui.sheet==='profile')return profileSheet();if(ui.sheet==='reminders')return remindersSheet();if(ui.sheet==='car')return carSheet(ui.sheetId);if(ui.sheet==='garage')return garageSheet();if(ui.sheet==='odometer')return odometerSheet();if(ui.sheet==='entry')return entrySheet(ui.sheetId);if(ui.sheet==='component')return componentSheet(ui.sheetId);if(ui.sheet==='expense')return expenseSheet(ui.sheetId);if(ui.sheet==='document')return documentSheet(ui.sheetId);if(ui.sheet==='refuel')return refuelSheet(ui.sheetId);if(ui.sheet==='entry-detail')return entryDetailSheet(ui.sheetId);if(ui.sheet==='component-detail')return componentDetailSheet(ui.sheetId);if(ui.sheet==='expense-detail')return expenseDetailSheet(ui.sheetId);if(ui.sheet==='document-detail')return documentDetailSheet(ui.sheetId);if(ui.sheet==='refuel-detail')return refuelDetailSheet(ui.sheetId);return '';}
+function renderSheet(){if(!ui.sheet)return '';if(ui.sheet==='sync')return syncOverviewSheet();if(ui.sheet==='sync-qr')return syncQrSheet();if(ui.sheet==='sync-scan')return syncScanSheet();if(ui.sheet==='sync-progress')return syncProgressSheet();if(ui.sheet==='sync-import')return syncImportSheet();if(ui.sheet==='sync-success')return syncSuccessSheet();if(ui.sheet==='sync-vault-conflict')return syncVaultConflictSheet();if(ui.sheet==='weather')return weatherSettingsSheet();if(ui.sheet==='pdf-ready')return pdfReadySheet();if(ui.sheet==='profile')return profileSheet();if(ui.sheet==='reminders')return remindersSheet();if(ui.sheet==='car')return carSheet(ui.sheetId);if(ui.sheet==='garage')return garageSheet();if(ui.sheet==='odometer')return odometerSheet();if(ui.sheet==='entry')return entrySheet(ui.sheetId);if(ui.sheet==='component')return componentSheet(ui.sheetId);if(ui.sheet==='expense')return expenseSheet(ui.sheetId);if(ui.sheet==='document')return documentSheet(ui.sheetId);if(ui.sheet==='refuel')return refuelSheet(ui.sheetId);if(ui.sheet==='entry-detail')return entryDetailSheet(ui.sheetId);if(ui.sheet==='component-detail')return componentDetailSheet(ui.sheetId);if(ui.sheet==='expense-detail')return expenseDetailSheet(ui.sheetId);if(ui.sheet==='document-detail')return documentDetailSheet(ui.sheetId);if(ui.sheet==='refuel-detail')return refuelDetailSheet(ui.sheetId);return '';}
 
 function navigateTo(view,{replace=false}={}){
   if(!view)return;
