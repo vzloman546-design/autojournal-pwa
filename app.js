@@ -509,7 +509,7 @@ function migrate(raw) {
 
 async function persist() { await saveState(state); scheduleAutoSync(); }
 
-function compareLifecycle(a,b){ return String(a.date||'').localeCompare(String(b.date||'')) || Number(a.odometer||0)-Number(b.odometer||0) || String(a.createdAt||'').localeCompare(String(b.createdAt||'')) || Number(a.seq||0)-Number(b.seq||0) || String(a.id||'').localeCompare(String(b.id||'')); }
+function compareLifecycle(a,b){ const ak=nonneg(a.componentEventOdometer??a.odometer),bk=nonneg(b.componentEventOdometer??b.odometer); return String(a.date||'').localeCompare(String(b.date||'')) || ak-bk || String(a.createdAt||'').localeCompare(String(b.createdAt||'')) || Number(a.seq||0)-Number(b.seq||0) || String(a.id||'').localeCompare(String(b.id||'')); }
 function componentState(comp){
   let installedDate=comp.baseInstalledDate||comp.installedDate||today(), installedOdometer=nonneg(comp.baseInstalledOdometer??comp.installedOdometer);
   let lastInspectionDate=installedDate, lastInspectionOdometer=installedOdometer;
