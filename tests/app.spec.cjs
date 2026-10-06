@@ -1455,23 +1455,26 @@ test('new desktop can show QR and linked phone can attach it to the existing vau
   await desktop.getByRole('button',{name:/Показать QR/}).click();
   await expect(desktop.locator('[data-sync-qr] svg')).toBeVisible();
   await expect(desktop.locator('.sheet')).toContainText('уже подключённом устройстве');
-  const qrDataUrl=await desktop.locator('[data-sync-qr] svg').evaluate(async svg=>{
+  const qrCode=await desktop.locator('[data-sync-qr] svg').evaluate(async svg=>{
     const xml=new XMLSerializer().serializeToString(svg);
     const blob=new Blob([xml],{type:'image/svg+xml'});
     const url=URL.createObjectURL(blob),img=new Image();
     img.src=url;await img.decode();
     const box=svg.viewBox?.baseVal,width=Math.max(1,Math.round(box?.width||256)),height=Math.max(1,Math.round(box?.height||256)),scale=6;
     const canvas=document.createElement('canvas');canvas.width=width*scale;canvas.height=height*scale;
-    const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
     URL.revokeObjectURL(url);
-    return canvas.toDataURL('image/png');
+    const image=ctx.getImageData(0,0,canvas.width,canvas.height);
+    return window.jsQR?.(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'})?.data||'';
   });
-  const qr=Buffer.from(qrDataUrl.split(',')[1],'base64');
+  expect(qrCode).toMatch(/^AJ1:/);
 
   await openProfile(page);
   await page.locator('[data-action="sync-open"]').click();
   await page.locator('[data-action="sync-scan-link"]').click();
-  await page.locator('[data-sync-photo]').setInputFiles({name:'pair.png',mimeType:'image/png',buffer:qr});
+  await page.locator('[data-sync-manual]').fill(qrCode);
+  await page.locator('[data-action="sync-manual-code"]').click();
 
   await expect(desktop.locator('.sheet')).toContainText('Получен зашифрованный журнал',{timeout:15000});
   await desktop.locator('[data-action="sync-import-merge"]').click();
@@ -1572,8 +1575,9 @@ test('three linked devices stay in one vault and receive the same changes', asyn
 });
 
 test('persistent vault auto-sync pushes local changes and pulls remote changes', async({page})=>{
-  await installSyncRelayMock(page);
   await addCar(page);
+  await page.waitForTimeout(500);
+  await installSyncRelayMock(page);
   const linked=await page.evaluate(async()=>{
     const sync=await import(new URL('./sync.js',location.href).href);
     const vault=sync.createSyncVaultLink();
