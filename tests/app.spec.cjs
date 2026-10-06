@@ -446,7 +446,7 @@ test('health replacement is visible in journal even after stale filters', async(
 
   await page.locator('[data-action="component-detail"]',{hasText:'Передние тормозные колодки'}).click();
   await page.locator('[data-action="mark-replacement"]').click();
-  await expect(page.getByText(/запись добавлена в журнал/i)).toBeVisible();
+  await expect(page.getByText(/запись добавлена в журнал/i).last()).toBeVisible();
 
   await page.locator('.sheet-close').click();
   await page.locator('[data-action="go-back"]').click();
@@ -477,7 +477,7 @@ test('maintenance inspect and replace reset independent cycles', async({page})=>
   let s=await state(page);
   let actions=s.serviceEntries.filter(x=>x.componentAction);
   expect(actions).toHaveLength(2);
-  expect(actions.filter(x=>x.componentAction==='replace')).toHaveLength(2);
+  expect(actions.filter(x=>x.componentAction==='replace')).toHaveLength(1);
   expect(actions.filter(x=>x.componentAction==='inspect')).toHaveLength(1);
   const comp=s.components[0];
   expect(comp.baseInstalledOdometer).toBe(200000);
@@ -485,7 +485,7 @@ test('maintenance inspect and replace reset independent cycles', async({page})=>
   await page.locator('[data-action="mark-replacement"]').click();
   s=await state(page);
   actions=s.serviceEntries.filter(x=>x.componentAction);
-  expect(actions.filter(x=>x.componentAction==='replace')).toHaveLength(1);
+  expect(actions.filter(x=>x.componentAction==='replace')).toHaveLength(2);
   expect(actions.filter(x=>x.componentAction==='inspect')).toHaveLength(1);
   await expect(page.locator('.sheet')).toContainText('через 40 000 км');
   await expect(page.locator('.sheet')).toContainText('через 10 000 км');
@@ -536,20 +536,23 @@ test('7-day weather forecast creates tire-change notification at 5C threshold', 
   await page.evaluate(async data=>{const db=await import('./db.js');await db.saveState(data);},seeded);
   await page.reload();
 
+  await gotoSecondary(page,'more');
+  await page.locator('[data-action="weather-open"]').click();
+  await page.locator('[data-action="weather-check"]').click();
   await expect.poll(async()=>((await state(page)).settings.weatherTireTriggerDate||''),{timeout:10000}).toBe(dates[2]);
   const saved=await state(page);
   expect(saved.settings.weatherTireTriggerTemp).toBe(4.8);
   expect(saved.settings.weatherTireForecast).toHaveLength(7);
-
-  await page.locator('.v5-tabbar [data-view="notifications"]').click();
-  await expect(page.getByText('Пора планировать смену шин',{exact:true})).toBeVisible();
-  await expect(page.getByText(/4,8 °C/)).toBeVisible();
-
-  await gotoSecondary(page,'more');
-  await page.locator('[data-action="weather-open"]').click();
   await expect(page.locator('.sheet')).toContainText('Прогноз на 7 дней');
   await expect(page.locator('.sheet')).toContainText('Порог достигнут');
   await expect(page.locator('.sheet')).toContainText('Open-Meteo');
+
+  await page.locator('.sheet-close').click();
+  await page.locator('[data-action="go-back"]').click();
+  await page.locator('[data-action="go-back"]').click();
+  await page.locator('.v5-tabbar [data-view="notifications"]').click();
+  await expect(page.getByText('Пора планировать смену шин',{exact:true})).toBeVisible();
+  await expect(page.getByText(/4,8 °C/)).toBeVisible();
 });
 
 test('statistics categories and periods render without cross-period leakage', async({page})=>{
@@ -1180,7 +1183,7 @@ test.describe('offline PWA',()=>{
     });
     if(!await page.evaluate(()=>!!navigator.serviceWorker.controller))await page.reload();
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.13.0');
+    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.14.0');
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
@@ -1314,18 +1317,20 @@ test('three linked devices stay in one vault and receive the same changes', asyn
   await page.locator('[data-action="add-odometer"]').click();
   await page.locator('#value').fill('211777');
   await page.locator('button[form="odometer-form"]').click();
-  for(let i=0;i<6;i++){
-    await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
-    await page.waitForTimeout(350);
-    await workPc.evaluate(()=>window.dispatchEvent(new Event('focus')));
-    await page.waitForTimeout(350);
-    if(((await state(workPc)).cars[0]?.currentOdometer||0)===211777)break;
-  }
-  await expect.poll(async()=>((await state(workPc)).cars[0]?.currentOdometer||0),{timeout:10000}).toBe(211777);
 
   await openProfile(page);
   await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
+  await page.locator('[data-action="sync-now"]').click();
+  await expect(page.locator('[data-action="sync-now"]')).toBeEnabled({timeout:10000});
+
+  await openProfile(workPc);
+  await workPc.locator('.v5-menu [data-view="more"]').click();
+  await workPc.locator('[data-action="sync-open"]').click();
+  await workPc.locator('[data-action="sync-now"]').click();
+  await expect(workPc.locator('[data-action="sync-now"]')).toBeEnabled({timeout:10000});
+  await expect.poll(async()=>((await state(workPc)).cars[0]?.currentOdometer||0),{timeout:10000}).toBe(211777);
+
   await expect(page.locator('.sheet')).toContainText('Подключённые устройства · 3');
   await expect(page.locator('.sheet')).toContainText('AJ-');
   await expect(page.locator('[data-action="sync-show-qr"]')).toHaveText('Добавить новое устройство');
