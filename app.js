@@ -372,7 +372,7 @@ const defaultState = () => ({
 
 let state = defaultState();
 let ui = { view:'home', sheet:null, sheetId:null, search:'', historyType:'all', expenseFilter:'all', notificationTab:'auto', analyticsTab:'expenses', analyticsPeriod:'month', reportMode:'short', healthSystemKey:'' };
-const primaryViews=new Set(['home','records','refuels']);
+const primaryViews=new Set(['home','records','refuels','weather']);
 const secondaryTitles={profile:'Профиль',carcard:'Паспорт автомобиля',report:'Отчёт автомобиля',analytics:'Статистика',documents:'Документы',parts:'Здоровье автомобиля',notifications:'Уведомления',more:'Настройки'};
 let navStack=[];
 let nextTransition='';
@@ -628,11 +628,10 @@ function topbar() {
   </header>`;
 }
 
-const tabs=[['home','Главная',icons.home],['records','Записи',icons.history],['refuels','Заправки',icons.fuel]];
+const tabs=[['home','Главная',icons.home],['records','Записи',icons.history],['refuels','Заправки',icons.fuel],['weather','Погода и шины',icons.alert]];
 function tabbar(){
   return `<div class="v5-tab-wrap"><nav class="v5-tabbar">
-    ${tabs.map(([id,label,ic])=>`<button class="v5-tab ${ui.view===id?'active':''}" data-view="${id}" ${ui.view===id?'aria-current="page"':''}>${ic}<span>${label}</span></button>`).join('')}
-    <button class="v5-tab v5-weather-tab" data-action="weather-open" aria-label="Погода и шины">${icons.alert}<span>Погода и шины</span></button>
+    ${tabs.map(([id,label,ic])=>`<button class="v5-tab ${id==='weather'?'v5-weather-tab ':''}${ui.view===id?'active':''}" data-view="${id}" ${ui.view===id?'aria-current="page"':''}>${ic}<span>${label}</span></button>`).join('')}
   </nav></div>`;
 }
 
@@ -1558,7 +1557,7 @@ function syncVaultConflictSheet(){
   return sheetWrap('Другой общий журнал',body,'<button class="btn primary block" data-action="sync-conflict-back">Вернуться к синхронизации</button>');
 }
 
-function weatherSettingsSheet(){
+function weatherContent(){
   const w=state.settings||{},hasLoc=Number.isFinite(Number(w.weatherTireLat))&&Number.isFinite(Number(w.weatherTireLon));
   const link=loadWeatherPushLink(),pushSupported='serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
   const forecast=Array.isArray(w.weatherTireForecast)?w.weatherTireForecast:[];
@@ -1580,7 +1579,17 @@ function weatherSettingsSheet(){
     ${link?'<button class="btn block" style="margin-top:8px" data-action="weather-disable-push">Отключить фоновое уведомление</button>':''}
   </div>
   <div class="form-section"><div class="form-title">Прогноз на 7 дней</div>${trigger}${forecastHtml}<button class="btn block" style="margin-top:8px" data-action="weather-check" ${hasLoc?'':'disabled'}>Проверить прогноз сейчас</button><div class="helper">Погодные данные: Open-Meteo.</div></div>`;
-  return sheetWrap('Погода и шины',body);
+  return body;
+}
+function weatherSettingsSheet(){
+  return sheetWrap('Погода и шины',weatherContent());
+}
+function weatherPage(){
+  return `<main class="v5-main"><div class="v5-page v5-weather-page">
+    <h1 class="v5-title">Погода и шины</h1>
+    <p class="v5-secondary-lead">Прогноз на 7 дней и напоминание о сезонной смене шин.</p>
+    <div class="v5-weather-content">${weatherContent()}</div>
+  </div></main>`;
 }
 
 function inputField(label,name,value='',type='text',extra=''){ return `<div class="field"><label for="${name}">${label}</label><input class="input" id="${name}" name="${name}" type="${type}" value="${esc(value??'')}" ${extra}></div>`; }
@@ -1784,7 +1793,7 @@ function render(){
     return;
   }
   delete root.dataset.firstRun;
-  const page={home:homePage,records:historyPage,refuels:refuelsPage,notifications:notificationsPage,profile:profilePage,carcard:carCardPage,report:reportPage,parts:partsPage,analytics:analyticsPage,documents:documentsPage,more:morePage}[ui.view]||homePage;
+  const page={home:homePage,records:historyPage,refuels:refuelsPage,weather:weatherPage,notifications:notificationsPage,profile:profilePage,carcard:carCardPage,report:reportPage,parts:partsPage,analytics:analyticsPage,documents:documentsPage,more:morePage}[ui.view]||homePage;
   const secondary=!primaryViews.has(ui.view);
   root.dataset.secondary=secondary?'true':'false';
   root.innerHTML=`${topbar()}${page()}${secondary?'':tabbar()}${renderSheet()}`;
@@ -2201,7 +2210,7 @@ document.addEventListener('click', async e=>{
   if(a==='share-stored-file'){await shareStoredFile(el.dataset.doc,Number(el.dataset.index));return;}
   if(a==='remove-stored-file'){const d=state.documents.find(x=>x.id===el.dataset.doc),i=Number(el.dataset.index);if(d?.files?.[i]&&confirm(`Удалить файл «${d.files[i].name}»?`)){d.files.splice(i,1);await persist();render();toast('Файл удалён');}return;}
   if(a==='open-image'){window.open(el.getAttribute('src'),'_blank');return;}
-  if(a==='weather-open'){ui.sheet='weather';render();scheduleWeatherCheck(50);return;}
+  if(a==='weather-open'){navigateTo('weather');scheduleWeatherCheck(50);return;}
   if(a==='weather-locate'){await locateForTireWeather();return;}
   if(a==='weather-check'){await checkTireWeather({notify:false,renderAfter:true});return;}
   if(a==='weather-enable-push'){await enableWeatherPush();return;}
