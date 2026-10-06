@@ -1222,8 +1222,16 @@ test.describe('offline PWA',()=>{
 });
 
 
-test('mobile sync UI prefers scanning but still allows showing QR', async({page})=>{
+test('mobile sync UI prefers scanning, starts camera immediately and still allows showing QR', async({page})=>{
   await installSyncRelayMock(page);
+  await page.evaluate(()=>{
+    window.__cameraCalls=0;
+    const mediaDevices=navigator.mediaDevices||{};
+    Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{
+      ...mediaDevices,
+      getUserMedia:async()=>{window.__cameraCalls++;throw new DOMException('No camera in QA','NotAllowedError');}
+    }});
+  });
   await addCar(page);
   await openProfile(page);
   await page.locator('.v5-menu [data-view="more"]').click();
@@ -1232,6 +1240,7 @@ test('mobile sync UI prefers scanning but still allows showing QR', async({page}
   await expect(page.locator('[data-action="sync-show-qr"]')).toHaveText('Показать QR на этом устройстве');
   await page.locator('[data-action="sync-scan-link"]').click();
   await expect(page.locator('.sheet')).toContainText('Подключение устройства');
+  await expect.poll(()=>page.evaluate(()=>window.__cameraCalls)).toBe(1);
   await expect(page.locator('[data-action="sync-camera-start"]')).toBeVisible();
   await page.locator('[data-action="close-sheet"]').last().click();
 
