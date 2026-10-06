@@ -1520,9 +1520,10 @@ function syncScanSheet(){
   const heading=linking?'Подключение устройства':sending?'Передача данных':'Получение данных';
   const explain=linking?'Отсканируйте QR с другого устройства. AutoJournal сам определит, какое устройство уже содержит общий журнал и в какую сторону передать данные.':sending?'После сканирования данные с этого устройства будут зашифрованы и отправлены устройству с QR.':'После сканирования это устройство запросит зашифрованные данные у устройства с QR.';
   const body=`<div class="v5-sync-scan-intro"><strong>${heading}</strong><p>${explain}</p></div>
-    <div class="v5-sync-camera"><video data-sync-video playsinline muted></video><div class="v5-sync-camera-frame"></div><div class="v5-sync-camera-placeholder" data-sync-camera-placeholder>Камера ещё не запущена</div></div>
-    <button class="btn primary block" data-action="sync-camera-start">Открыть камеру</button>
-    <button class="btn block" style="margin-top:8px" data-action="sync-photo-open">Считать QR с фотографии</button>
+    <div class="v5-sync-camera"><video data-sync-video playsinline muted></video><div class="v5-sync-camera-frame"></div><div class="v5-sync-camera-placeholder" data-sync-camera-placeholder>Запускаем камеру…</div></div>
+    <button class="btn block" data-action="sync-photo-open">Считать QR с фотографии</button>
+    <button class="btn block" style="margin-top:8px" data-action="sync-show-qr">Показать мой QR вместо сканирования</button>
+    <button class="btn block" style="margin-top:8px" data-action="sync-overview">Настройки синхронизации</button>
     <input type="file" accept="image/*" capture="environment" data-sync-photo hidden>
     <div class="v5-sync-manual"><div class="field"><label for="syncManualCode">Или вставьте код вручную</label><textarea class="input" id="syncManualCode" data-sync-manual placeholder="AJ1:…"></textarea></div><button class="btn block" data-action="sync-manual-code">Продолжить</button></div>`;
   return sheetWrap(heading,body);
@@ -2194,14 +2195,23 @@ document.addEventListener('click', async e=>{
   if(a==='weather-check'){await checkTireWeather({notify:false,renderAfter:true});return;}
   if(a==='weather-enable-push'){await enableWeatherPush();return;}
   if(a==='weather-disable-push'){await disableWeatherPush();return;}
-  if(a==='sync-open'){resetSyncTransient();ui.sheet='sync';render();if(loadSyncVault())autoSyncNow(false);return;}
+  if(a==='sync-open'){
+    resetSyncTransient();
+    if(syncDeviceKind()==='mobile'){
+      syncMode='link';ui.sheet='sync-scan';render();await startSyncCamera();
+    }else{
+      ui.sheet='sync';render();if(loadSyncVault())autoSyncNow(false);
+    }
+    return;
+  }
+  if(a==='sync-overview'){stopSyncScanner();resetSyncTransient();ui.sheet='sync';render();if(loadSyncVault())autoSyncNow(false);return;}
   if(a==='sync-conflict-back'){syncVaultConflict=null;ui.sheet='sync';render();return;}
   if(a==='sync-now'){await autoSyncNow(true);return;}
   if(a==='sync-unlink'){if(confirm('Отключить автоматическую синхронизацию только на этом устройстве? Данные на устройстве не удалятся.')){if(autoSyncTimer){clearTimeout(autoSyncTimer);autoSyncTimer=0;}clearSyncVault();autoSyncStatus='idle';autoSyncLastError='';autoSyncPending=0;toast('Автосинхронизация отключена на этом устройстве');render();}return;}
   if(a==='sync-show-qr'){await startSyncDisplaySession();return;}
-  if(a==='sync-scan-link'){resetSyncTransient();syncMode='link';ui.sheet='sync-scan';render();return;}
-  if(a==='sync-scan-push'){syncMode='push';ui.sheet='sync-scan';render();return;}
-  if(a==='sync-scan-pull'){syncMode='pull';ui.sheet='sync-scan';render();return;}
+  if(a==='sync-scan-link'){resetSyncTransient();syncMode='link';ui.sheet='sync-scan';render();await startSyncCamera();return;}
+  if(a==='sync-scan-push'){syncMode='push';ui.sheet='sync-scan';render();await startSyncCamera();return;}
+  if(a==='sync-scan-pull'){syncMode='pull';ui.sheet='sync-scan';render();await startSyncCamera();return;}
   if(a==='sync-camera-start'){await startSyncCamera();return;}
   if(a==='sync-photo-open'){document.querySelector('[data-sync-photo]')?.click();return;}
   if(a==='sync-manual-code'){const value=document.querySelector('[data-sync-manual]')?.value||'';if(!value.trim()){toast('Вставьте код из QR');return;}await handleScannedSyncCode(value);return;}
