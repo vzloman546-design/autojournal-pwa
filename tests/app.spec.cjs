@@ -568,6 +568,36 @@ test('multiple cars are isolated', async({page})=>{
   await expect(page.getByText('Только Focus',{exact:true})).toHaveCount(0);
 });
 
+test('Weather and Tires keeps cards, text and controls on one mobile grid', async({page})=>{
+  await addCar(page);
+  const seeded=await state(page);
+  seeded.settings.weatherTireEnabled=true;
+  seeded.settings.weatherTireLat=55.75;
+  seeded.settings.weatherTireLon=37.62;
+  seeded.settings.weatherTireForecast=[0,1,2,3,4,5,6].map((n,i)=>({date:isoOffset(n),mean:8-i}));
+  await page.evaluate(async data=>{const db=await import('./db.js');await db.saveState(data);},seeded);
+  await page.reload();
+
+  await page.locator('.v5-tabbar [data-view="weather"]').click();
+  await expect(page.locator('.v5-weather-page')).toBeVisible();
+
+  for(const width of [320,390,430]){
+    await page.setViewportSize({width,height:844});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    const metrics=await page.locator('.v5-weather-card').evaluateAll(cards=>cards.map(card=>{
+      const box=card.getBoundingClientRect();
+      const title=card.querySelector('.v5-weather-section-head h2')?.getBoundingClientRect();
+      const first=card.querySelector('.v5-weather-card-body')?.firstElementChild?.getBoundingClientRect();
+      return {x:box.x,width:box.width,titleX:title?.x||0,bodyX:first?.x||0};
+    }));
+    expect(metrics).toHaveLength(4);
+    expect(Math.max(...metrics.map(x=>x.x))-Math.min(...metrics.map(x=>x.x))).toBeLessThan(1);
+    expect(Math.max(...metrics.map(x=>x.width))-Math.min(...metrics.map(x=>x.width))).toBeLessThan(1);
+    for(const m of metrics)expect(Math.abs(m.titleX-m.bodyX)).toBeLessThan(1);
+  }
+  await expect(page.locator('.v5-weather-forecast-row')).toHaveCount(7);
+});
+
 test('7-day weather forecast creates tire-change notification at 5C threshold', async({page,browserName})=>{
   test.skip(browserName==='webkit','Cross-origin Open-Meteo interception is unreliable in Playwright WebKit; weather UI remains covered by WebKit tests.');
   await addCar(page);
