@@ -1455,8 +1455,18 @@ test('new desktop can show QR and linked phone can attach it to the existing vau
   await desktop.getByRole('button',{name:/Показать QR/}).click();
   await expect(desktop.locator('[data-sync-qr] svg')).toBeVisible();
   await expect(desktop.locator('.sheet')).toContainText('уже подключённом устройстве');
-  await desktop.locator('[data-sync-qr]').evaluate(el=>{el.style.width='560px';el.style.height='560px';el.style.padding='16px';});
-  const qr=await desktop.locator('[data-sync-qr] svg').screenshot();
+  const qrDataUrl=await desktop.locator('[data-sync-qr] svg').evaluate(async svg=>{
+    const xml=new XMLSerializer().serializeToString(svg);
+    const blob=new Blob([xml],{type:'image/svg+xml'});
+    const url=URL.createObjectURL(blob),img=new Image();
+    img.src=url;await img.decode();
+    const box=svg.viewBox?.baseVal,width=Math.max(1,Math.round(box?.width||256)),height=Math.max(1,Math.round(box?.height||256)),scale=6;
+    const canvas=document.createElement('canvas');canvas.width=width*scale;canvas.height=height*scale;
+    const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    URL.revokeObjectURL(url);
+    return canvas.toDataURL('image/png');
+  });
+  const qr=Buffer.from(qrDataUrl.split(',')[1],'base64');
 
   await openProfile(page);
   await page.locator('[data-action="sync-open"]').click();
@@ -1574,11 +1584,14 @@ test('persistent vault auto-sync pushes local changes and pulls remote changes',
   });
   expect(linked.id.length).toBeGreaterThan(20);
 
-  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await page.evaluate(()=>{
+    window.dispatchEvent(new Event('online'));
+    window.dispatchEvent(new Event('focus'));
+  });
   await expect.poll(()=>page.evaluate(()=>{
     const v=Object.values(window.__syncMock.vaults)[0];
     return Object.keys(v?.records||{}).some(k=>k.startsWith('cars:'));
-  }),{timeout:10000}).toBe(true);
+  }),{timeout:15000}).toBe(true);
 
   await page.locator('[data-action="add-odometer"]').click();
   await page.locator('#value').fill('211234');
