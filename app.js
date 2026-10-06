@@ -377,6 +377,18 @@ const primaryViews=new Set(['home','records','refuels','weather']);
 const secondaryTitles={profile:'Профиль',carcard:'Паспорт автомобиля',report:'Отчёт автомобиля',analytics:'Статистика',documents:'Документы',parts:'Здоровье автомобиля',notifications:'Уведомления',more:'Настройки'};
 let navStack=[];
 let nextTransition='';
+const viewScrollPositions=new Map();
+let renderedView=ui.view;
+function rememberViewScroll(view=renderedView,root=$('#app')){
+  const main=root?.querySelector?.('.v5-main,.main-scroll');
+  if(main&&view)viewScrollPositions.set(view,main.scrollTop);
+}
+function restoreViewScroll(view=ui.view,root=$('#app')){
+  const main=root?.querySelector?.('.v5-main,.main-scroll');
+  if(!main)return;
+  const pos=viewScrollPositions.get(view);
+  main.scrollTop=Number.isFinite(pos)?pos:0;
+}
 let pendingPdfFile=null;
 let pendingPdfUrl='';
 let syncPair=null;
@@ -1840,10 +1852,12 @@ function goBack(){
 function render(){
   cleanupStoredFilePreviewUrls();
   const root=$('#app');
+  rememberViewScroll(renderedView,root);
   if(shouldShowFirstRun()){
     root.dataset.secondary='false';
     root.dataset.firstRun='true';
     root.innerHTML=`${firstRunPage()}${renderSheet()}`;
+    renderedView=ui.view;
     requestAnimationFrame(()=>hydrateStoredFilePreviews(root));
     if(nextTransition)nextTransition='';
     return;
@@ -1853,7 +1867,11 @@ function render(){
   const secondary=!primaryViews.has(ui.view);
   root.dataset.secondary=secondary?'true':'false';
   root.innerHTML=`${topbar()}${page()}${secondary?'':tabbar()}${renderSheet()}`;
-  requestAnimationFrame(()=>hydrateStoredFilePreviews(root));
+  renderedView=ui.view;
+  requestAnimationFrame(()=>{
+    restoreViewScroll(ui.view,root);
+    hydrateStoredFilePreviews(root);
+  });
   if(nextTransition){
     const main=root.querySelector('.v5-main,.main-scroll');
     if(main){const cls=nextTransition==='back'?'v5-enter-back':nextTransition==='fade'?'v5-enter-fade':'v5-enter-forward';main.classList.add(cls);setTimeout(()=>main.classList.remove('v5-enter-back','v5-enter-forward','v5-enter-fade'),280);}
