@@ -128,10 +128,33 @@ async function installSyncRelayMock(page){
 }
 
 async function installSharedVaultRelay(context,vaults={}){
+  if(!Object.prototype.hasOwnProperty.call(vaults,'__sessions'))Object.defineProperty(vaults,'__sessions',{value:{},enumerable:false,writable:true});
+  const sessions=vaults.__sessions;
   await context.route('**/__sync_test__/**',async route=>{
     const req=route.request(),url=new URL(req.url()),method=req.method().toUpperCase(),path=url.pathname.replace(/^\/__sync_test__/,'');
     const json=(status,value)=>route.fulfill({status,headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
+    const text=(status,value)=>route.fulfill({status,headers:{'Content-Type':'text/plain'},body:String(value||'')});
     if(method==='OPTIONS')return route.fulfill({status:204,body:''});
+    if(path==='/v1/sessions'&&method==='POST'){
+      const body=JSON.parse(req.postData()||'{}'),id=body.id;
+      sessions[id]={id,status:'waiting',mode:null,chunks:{},pairing:null,totalChunks:null,iv:null,sender:null,expiresAt:Date.now()+600000};
+      return json(201,{ok:true,expiresAt:sessions[id].expiresAt});
+    }
+    const sessionMatch=path.match(/^\/v1\/sessions\/([^/]+)(?:\/(.*))?$/);
+    if(sessionMatch){
+      const id=sessionMatch[1],tail=sessionMatch[2]||'',item=sessions[id];
+      if(!item)return json(404,{error:'session_not_found'});
+      if(!tail&&method==='GET')return json(200,{id,status:item.status,mode:item.mode,totalChunks:item.totalChunks,iv:item.iv,sender:item.sender,expiresAt:item.expiresAt});
+      if(tail==='pairing'&&method==='PUT'){const body=JSON.parse(req.postData()||'{}');item.pairing={payload:body.payload,iv:body.iv};return json(200,{ok:true});}
+      if(tail==='pairing'&&method==='GET'){if(!item.pairing)return json(409,{error:'pairing_not_ready'});return json(200,item.pairing);}
+      if(tail==='request'&&method==='POST'){const body=JSON.parse(req.postData()||'{}');item.mode=body.mode;item.status='requested';return json(200,{ok:true,mode:item.mode,status:item.status});}
+      const chunk=tail.match(/^chunks\/(\d+)$/);
+      if(chunk&&method==='PUT'){item.chunks[Number(chunk[1])]=req.postData()||'';item.status='uploading';return json(200,{ok:true});}
+      if(chunk&&method==='GET')return text(200,item.chunks[Number(chunk[1])]||'');
+      if(tail==='complete'&&method==='POST'){const body=JSON.parse(req.postData()||'{}');item.totalChunks=body.totalChunks;item.iv=body.iv;item.sender=body.sender;item.status='ready';return json(200,{ok:true,status:'ready'});}
+      if(tail==='consume'&&method==='POST'){item.status='consumed';item.chunks={};item.pairing=null;return json(200,{ok:true,status:'consumed'});}
+      return json(404,{error:'not_found'});
+    }
     if(path==='/v1/vaults'&&method==='POST'){
       const body=JSON.parse(req.postData()||'{}'),id=body.id,existing=vaults[id];
       if(existing&&existing.verifier!==body.verifier)return json(409,{error:'vault_conflict'});
@@ -179,9 +202,9 @@ async function addRefuel(page,{date,odometer,amount,liters,station='АЗС',full
 test.beforeEach(async({page})=>{ await clearApp(page); });
 
 
-test('first launch offers receive data or a new journal', async({page})=>{
+test('first launch offers device-aware QR connection or a new journal', async({page})=>{
   await expect(page.locator('.v5-first-run')).toBeVisible();
-  await expect(page.getByRole('button',{name:/Получить данные/})).toBeVisible();
+  await expect(page.getByRole('button',{name:/Сканировать QR/})).toBeVisible();
   await expect(page.getByRole('button',{name:/Новый журнал/})).toBeVisible();
   await expect(page.locator('.v5-topbar')).toHaveCount(0);
   await expect(page.locator('.v5-tabbar')).toHaveCount(0);
@@ -202,7 +225,7 @@ test('new journal from first launch opens vehicle form immediately', async({page
   await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
 });
 
-test('receive data from first launch opens QR scanner in pull mode', async({page})=>{
+test('mobile first launch opens universal QR scanner', async({page})=>{
   await page.evaluate(()=>{
     const mediaDevices=navigator.mediaDevices||{};
     Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{
@@ -210,8 +233,8 @@ test('receive data from first launch opens QR scanner in pull mode', async({page
       getUserMedia:async()=>{throw new DOMException('No camera in QA','NotAllowedError');}
     }});
   });
-  await page.getByRole('button',{name:/Получить данные/}).click();
-  await expect(page.locator('.sheet')).toContainText('Получение данных');
+  await page.getByRole('button',{name:/Сканировать QR/}).click();
+  await expect(page.locator('.sheet')).toContainText('Подключение устройства');
   await expect(page.locator('[data-sync-video]')).toBeVisible();
   await expect(page.locator('[data-action="sync-photo-open"]')).toBeVisible();
   await expect(page.locator('[data-sync-manual]')).toBeVisible();
@@ -1199,23 +1222,22 @@ test.describe('offline PWA',()=>{
 });
 
 
-test('QR transfer exposes directional modes and generates one-time QR session', async({page})=>{
+test('mobile sync UI prefers scanning but still allows showing QR', async({page})=>{
   await installSyncRelayMock(page);
   await addCar(page);
   await openProfile(page);
   await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
-  await expect(page.locator('.sheet')).toContainText('Передача данных');
-  await expect(page.locator('.sheet')).toContainText('Получение данных');
-  await page.locator('[data-action="sync-scan-push"]').click();
-  await expect(page.locator('.sheet')).toContainText('Передача данных');
+  await expect(page.locator('[data-action="sync-scan-link"]')).toHaveText('Сканировать QR другого устройства');
+  await expect(page.locator('[data-action="sync-show-qr"]')).toHaveText('Показать QR на этом устройстве');
+  await page.locator('[data-action="sync-scan-link"]').click();
+  await expect(page.locator('.sheet')).toContainText('Подключение устройства');
   await expect(page.locator('[data-action="sync-camera-start"]')).toBeVisible();
   await page.locator('[data-action="close-sheet"]').last().click();
 
   await page.locator('[data-action="sync-open"]').click();
   await page.locator('[data-action="sync-show-qr"]').click();
   await expect(page.locator('[data-sync-qr] svg')).toBeVisible();
-  await expect(page.locator('[data-sync-status]')).toContainText('Ждём сканирования');
   const sessions=await page.evaluate(()=>Object.values(window.__syncMock.sessions));
   expect(sessions).toHaveLength(1);
   expect(sessions[0].id.length).toBeGreaterThan(20);
@@ -1240,6 +1262,57 @@ test('QR relay payload is encrypted and relay auth is not the QR encryption secr
   expect(result.ciphertext).not.toContain('SecretModel');
 });
 
+
+test('new desktop can show QR and linked phone can attach it to the existing vault', async({page,context,browser,browserName})=>{
+  test.skip(browserName==='webkit','Cross-context QR screenshot pairing is covered on Chromium.');
+  const relay={};
+  await installSharedVaultRelay(context,relay);
+  await page.reload();
+  await addCar(page,{current:'210555'});
+  const phoneVault=await page.evaluate(async()=>{
+    const sync=await import(new URL('./sync.js?qa-pc-pair=1',location.href).href);
+    const vault=sync.createSyncVaultLink();
+    await sync.registerSyncVault(vault);
+    await sync.adoptSyncVault(vault);
+    return {id:vault.id,secret:vault.secret,api:vault.api};
+  });
+  await page.reload();
+  await expect.poll(()=>Object.values(relay)[0]?.revision||0,{timeout:10000}).toBeGreaterThan(0);
+
+  const desktopContext=await browser.newContext({
+    viewport:{width:1440,height:900},
+    userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36',
+    isMobile:false,hasTouch:false
+  });
+  await installSharedVaultRelay(desktopContext,relay);
+  const desktop=await desktopContext.newPage();
+  await desktop.goto(page.url());
+  await expect(desktop.locator('.v5-first-run')).toBeVisible();
+  await expect(desktop.getByRole('button',{name:/Показать QR/})).toBeVisible();
+  await desktop.getByRole('button',{name:/Показать QR/}).click();
+  await expect(desktop.locator('[data-sync-qr] svg')).toBeVisible();
+  await expect(desktop.locator('.sheet')).toContainText('уже подключённом устройстве');
+  const qr=await desktop.locator('[data-sync-qr] svg').screenshot();
+
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="more"]').click();
+  await page.locator('[data-action="sync-open"]').click();
+  await page.locator('[data-action="sync-scan-link"]').click();
+  await page.locator('[data-sync-photo]').setInputFiles({name:'pair.png',mimeType:'image/png',buffer:qr});
+
+  await expect(desktop.locator('.sheet')).toContainText('Получен зашифрованный журнал',{timeout:15000});
+  await desktop.locator('[data-action="sync-import-merge"]').click();
+  await expect(desktop.locator('.sheet')).toContainText('Устройства связаны',{timeout:10000});
+
+  const desktopVault=await desktop.evaluate(async()=>{
+    const sync=await import(new URL('./sync.js?qa-pc-pair=1',location.href).href);
+    return sync.loadSyncVault();
+  });
+  expect(desktopVault?.id).toBe(phoneVault.id);
+  await expect.poll(async()=>((await state(desktop)).cars[0]?.currentOdometer||0),{timeout:10000}).toBe(210555);
+
+  await desktopContext.close();
+});
 
 test('linked device refuses to switch silently to another sync vault', async({page})=>{
   await installSyncRelayMock(page);
