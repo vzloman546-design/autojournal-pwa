@@ -684,7 +684,7 @@ function homePage(){
       <div class="v5-local-note">Все данные хранятся только на этом устройстве и доступны офлайн.</div>
     </section>
   </div></main>`;
-  const entries=carItems(state.serviceEntries).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const entries=carItems(state.serviceEntries).sort(compareServiceNewest);
   const docs=carItems(state.documents);
   const refs=carItems(state.refuels||[]);
   const ex=carItems(state.expenses);
@@ -726,6 +726,12 @@ function homePage(){
 
 function reminderCard(r){ return `<button class="reminder-card" data-action="reminder-open" data-id="${r.componentId||r.documentId||''}" data-kind="${r.kind}"><div class="reminder-symbol ${r.status}">${r.status==='overdue'?icons.alert:icons.calendar}</div><div><div class="reminder-title">${esc(r.title)}</div><div class="reminder-sub">${esc(describeDue(r))}</div></div>${statusPill(r.status)}</button>`; }
 
+function compareServiceNewest(a,b){
+  return String(b.date||'').localeCompare(String(a.date||''))
+    || Number(b.seq||0)-Number(a.seq||0)
+    || String(b.createdAt||'').localeCompare(String(a.createdAt||''))
+    || String(b.id||'').localeCompare(String(a.id||''));
+}
 function entryRow(e){
   const meta=[fmtDate(e.date),nonneg(e.odometer)>0?`${fmtNum(e.odometer)} км`:'',e.category?esc(e.category):''].filter(Boolean).join(' · ');
   return `<button class="list-row" data-action="entry-detail" data-id="${e.id}"><div class="row-icon">${e.type==='repair'?icons.wrench:e.type==='inspection'?icons.check:icons.history}</div><div class="row-main"><div class="row-title">${esc(e.title)}</div><div class="row-sub">${meta}</div></div><div class="row-side">${totalServiceCost(e)?`<div class="row-value">${money(totalServiceCost(e))}</div>`:''}<div class="row-sub">›</div></div></button>`;
@@ -733,7 +739,7 @@ function entryRow(e){
 
 function historyPage(){
   if(!car())return `<main class="v5-main"><div class="v5-page">${emptyState('Сначала добавьте автомобиль','Записи привязываются к конкретной машине.','add-car','Добавить автомобиль')}</div></main>`;
-  let items=carItems(state.serviceEntries).sort((a,b)=>String(b.date).localeCompare(String(a.date))||Number(b.seq||0)-Number(a.seq||0));
+  let items=carItems(state.serviceEntries).sort(compareServiceNewest);
   if(ui.historyType!=='all')items=items.filter(x=>x.type===ui.historyType);
   if(ui.search.trim()){
     const q=ui.search.toLowerCase();
