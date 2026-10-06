@@ -1393,7 +1393,7 @@ test('three linked devices stay in one vault and receive the same changes', asyn
   await page.locator('[data-action="sync-open"]').click();
   await expect(page.locator('.sheet')).toContainText('Подключённые устройства · 3');
   await expect(page.locator('.sheet')).toContainText('AJ-');
-  await expect(page.locator('[data-action="sync-show-qr"]')).toHaveText('Добавить новое устройство');
+  await expect(page.locator('[data-action="sync-show-qr"]')).toHaveText('Показать QR на этом устройстве');
 
   await homeContext.close();
   await workContext.close();
