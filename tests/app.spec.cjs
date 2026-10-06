@@ -380,7 +380,7 @@ test('document file, expiry reminder, edit and delete full cycle', async({page})
 
   await page.locator('[data-action="go-back"]').click();
   await page.locator('[data-action="go-back"]').click();
-  await page.locator('.v5-tabbar [data-view="notifications"]').click();
+  await page.locator('.v5-head-notifications').click();
   await expect(page.getByText(/Документ: ОСАГО QA изменено/)).toBeVisible();
 
   await gotoSecondary(page,'documents');
@@ -602,7 +602,7 @@ test('7-day weather forecast creates tire-change notification at 5C threshold', 
   await page.locator('.sheet-close').click();
   await page.locator('[data-action="go-back"]').click();
   await page.locator('[data-action="go-back"]').click();
-  await page.locator('.v5-tabbar [data-view="notifications"]').click();
+  await page.locator('.v5-head-notifications').click();
   await expect(page.getByText('Пора планировать смену шин',{exact:true})).toBeVisible();
   await expect(page.getByText(/4,8 °C/)).toBeVisible();
 });
@@ -873,18 +873,27 @@ test('secondary screens hide bottom nav and no horizontal overflow at mobile wid
   }
 });
 
-test('notifications surface maintenance/document/backup states', async({page})=>{
+test('header bell opens standalone notifications while Weather and Tires occupies the fourth bottom tab', async({page})=>{
   await addCar(page);
+  await expect(page.locator('.v5-tabbar [data-view="notifications"]')).toHaveCount(0);
+  await expect(page.locator('.v5-tabbar [data-action="weather-open"]')).toBeVisible();
+  await expect(page.locator('.v5-tabbar [data-action="weather-open"]')).toContainText('Погода и шины');
+  await expect(page.locator('.v5-head-notifications')).toBeVisible();
   const s=await state(page),carId=s.cars[0].id;
   s.components.push({id:'cmp',carId,name:'Ремень QA',category:'Двигатель',brand:'',partNumber:'',baseInstalledDate:isoOffset(-400),baseInstalledOdometer:190000,installedDate:isoOffset(-400),installedOdometer:190000,lifeKm:10000,lifeMonths:12,inspectKm:0,inspectMonths:0,warnKm:1000,warnDays:30,cost:0,notes:'',sourceEntryId:'',lastInspectionDate:isoOffset(-400),lastInspectionOdometer:190000});
   s.documents.push({id:'doc',carId,title:'ОСАГО уведомление',type:'Страховка',number:'',issueDate:isoOffset(-30),expiryDate:isoOffset(5),remindDays:30,files:[]});
   await page.evaluate(async data=>{const db=await import('./db.js');await db.saveState(data);},s);
   await page.reload();
-  await page.locator('.v5-tabbar [data-view="notifications"]').click();
+  await page.locator('.v5-head-notifications').click();
+  await expect(page.locator('.v5-subbar-title')).toHaveText('Уведомления');
+  await expect(page.locator('.v5-tabbar')).toHaveCount(0);
   await expect(page.getByText(/Ремень QA/)).toBeVisible();
   await expect(page.getByText(/ОСАГО уведомление/)).toBeVisible();
   await page.locator('[data-action="notif-tab"][data-value="app"]').click();
   await expect(page.getByText(/резервную копию/i)).toBeVisible();
+  await page.locator('[data-action="go-back"]').click();
+  await page.locator('.v5-tabbar [data-action="weather-open"]').click();
+  await expect(page.locator('.sheet')).toContainText('Погода и шины');
 });
 
 
