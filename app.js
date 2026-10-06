@@ -2313,10 +2313,11 @@ document.addEventListener('click', async e=>{
 let edgeSwipe=null;
 document.addEventListener('touchstart',e=>{
   if(ui.sheet)return; // bottom sheets use their own downward gesture
+  if(primaryViews.has(ui.view))return; // root tabs never swipe back
+  if(!secondaryTitles[ui.view])return; // only secondary pages have a back destination
   if(e.touches.length!==1)return;
   const t=e.touches[0];
   if(t.clientX>28)return;
-  if(!navStack.length&&!secondaryTitles[ui.view])return;
   edgeSwipe={x:t.clientX,y:t.clientY,dx:0,active:false};
 },{passive:true});
 document.addEventListener('touchmove',e=>{
