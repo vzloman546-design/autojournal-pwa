@@ -3015,7 +3015,21 @@ async function init(){
   if(state.activeCarId && !state.cars.some(c=>c.id===state.activeCarId))state.activeCarId=state.cars[0]?.id||null;
   applyTheme();
   render();
-  if('serviceWorker' in navigator){try{await navigator.serviceWorker.register('./sw.js');}catch(err){console.warn('SW registration failed',err);}}
+  if('serviceWorker' in navigator){
+    try{
+      const hadController=Boolean(navigator.serviceWorker.controller);
+      let reloadingForUpdate=false;
+      if(hadController){
+        navigator.serviceWorker.addEventListener('controllerchange',()=>{
+          if(reloadingForUpdate)return;
+          reloadingForUpdate=true;
+          location.reload();
+        },{once:true});
+      }
+      const registration=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
+      registration.update().catch(err=>console.warn('SW update check failed',err));
+    }catch(err){console.warn('SW registration failed',err);}
+  }
   window.addEventListener('online',()=>{toast('Интернет доступен');autoSyncStatus='idle';scheduleAutoSync(150);scheduleWeatherCheck(300);});
   window.addEventListener('offline',()=>{autoSyncStatus='offline';toast('Офлайн-режим: данные остаются доступны');});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(autoSyncNeedsRender&&!ui.sheet){autoSyncNeedsRender=false;render();}scheduleAutoSync(120);scheduleWeatherCheck(300);}});
