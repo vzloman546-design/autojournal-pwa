@@ -1561,25 +1561,78 @@ function weatherContent(){
   const w=state.settings||{},hasLoc=Number.isFinite(Number(w.weatherTireLat))&&Number.isFinite(Number(w.weatherTireLon));
   const link=loadWeatherPushLink(),pushSupported='serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
   const forecast=Array.isArray(w.weatherTireForecast)?w.weatherTireForecast:[];
-  const forecastHtml=forecast.length?`<div class="v5-list">${forecast.map(x=>`<div class="list-row"><div class="row-main"><div class="row-title">${fmtDate(x.date)}</div><div class="row-sub">Среднесуточная температура</div></div><div class="row-side"><div class="row-value">${fmtNum(x.mean,1)} °C</div></div></div>`).join('')}</div>`:'<div class="helper">Прогноз ещё не загружен.</div>';
-  const trigger=w.weatherTireTriggerDate?`<div class="install-note"><strong>Порог достигнут.</strong><br>${fmtDate(w.weatherTireTriggerDate)}: около ${fmtNum(w.weatherTireTriggerTemp,1)} °C при пороге ${fmtNum(w.weatherTireThreshold,1)} °C.</div>`:'';
-  const body=`<div class="form-section"><div class="form-title">Сезонная смена шин</div>
-    <label class="v5-check-line"><input type="checkbox" data-input="weather-tire-enabled" ${w.weatherTireEnabled?'checked':''}> Напоминать, когда прогноз становится холоднее порога</label>
-    <div class="field" style="margin-top:10px"><label for="weather-threshold">Порог среднесуточной температуры, °C</label><input class="input" id="weather-threshold" data-input="weather-threshold" type="number" min="-20" max="20" step="0.5" value="${esc(w.weatherTireThreshold??5)}"></div>
-    <div class="helper">AutoJournal анализирует ближайшие 7 дней и срабатывает, если хотя бы на один день прогнозируемая среднесуточная температура ≤ заданного порога.</div>
-  </div>
-  <div class="form-section"><div class="form-title">Местоположение</div>
-    <div class="install-note">${hasLoc?`Для прогноза сохранены округлённые координаты: <strong>${fmtNum(w.weatherTireLat,2)}, ${fmtNum(w.weatherTireLon,2)}</strong>.`:'Местоположение ещё не задано.'}</div>
-    <button class="btn block" data-action="weather-locate">Определить местоположение</button>
-    <div class="helper">Координаты округляются до 2 знаков — точности уровня города достаточно для такого напоминания.</div>
-  </div>
-  <div class="form-section"><div class="form-title">Фоновое уведомление</div>
-    <div class="install-note">${!pushSupported?'Этот браузер не поддерживает Web Push.':link?'Это устройство зарегистрировано для фоновых погодных уведомлений.':'Фоновый Web Push на этом устройстве ещё не включён.'}</div>
-    <button class="btn primary block" data-action="weather-enable-push" ${(!pushSupported||!hasLoc)?'disabled':''}>${link?'Обновить фоновое уведомление':'Включить фоновое уведомление'}</button>
-    ${link?'<button class="btn block" style="margin-top:8px" data-action="weather-disable-push">Отключить фоновое уведомление</button>':''}
-  </div>
-  <div class="form-section"><div class="form-title">Прогноз на 7 дней</div>${trigger}${forecastHtml}<button class="btn block" style="margin-top:8px" data-action="weather-check" ${hasLoc?'':'disabled'}>Проверить прогноз сейчас</button><div class="helper">Погодные данные: Open-Meteo.</div></div>`;
-  return body;
+  const forecastHtml=forecast.length
+    ?`<div class="v5-weather-forecast-list">${forecast.map(x=>`<div class="v5-weather-forecast-row"><div class="v5-weather-forecast-copy"><strong>${fmtDate(x.date)}</strong><span>Среднесуточная температура</span></div><div class="v5-weather-temp">${fmtNum(x.mean,1)} °C</div></div>`).join('')}</div>`
+    :'<div class="v5-weather-empty">Прогноз ещё не загружен.</div>';
+  const trigger=w.weatherTireTriggerDate
+    ?`<div class="v5-weather-status is-warning"><strong>Порог достигнут</strong><span>${fmtDate(w.weatherTireTriggerDate)} · около ${fmtNum(w.weatherTireTriggerTemp,1)} °C при пороге ${fmtNum(w.weatherTireThreshold,1)} °C</span></div>`
+    :'';
+  const locationText=hasLoc
+    ?`Координаты для прогноза: <strong>${fmtNum(w.weatherTireLat,2)}, ${fmtNum(w.weatherTireLon,2)}</strong>`
+    :'Местоположение ещё не задано.';
+  const pushText=!pushSupported
+    ?'Этот браузер не поддерживает Web Push.'
+    :link
+      ?'Это устройство зарегистрировано для фоновых погодных уведомлений.'
+      :'Фоновое Web Push на этом устройстве ещё не включено.';
+
+  return `<div class="v5-weather-grid">
+    <section class="v5-weather-card">
+      <div class="v5-weather-section-head">
+        <h2>Сезонная смена шин</h2>
+        <p>Настройте температурный порог для напоминания.</p>
+      </div>
+      <div class="v5-weather-card-body">
+        <label class="v5-weather-toggle">
+          <span><strong>Напоминание по прогнозу</strong><small>Сообщить, когда среднесуточная температура опустится до заданного порога.</small></span>
+          <input type="checkbox" data-input="weather-tire-enabled" ${w.weatherTireEnabled?'checked':''}>
+        </label>
+        <div class="v5-weather-divider"></div>
+        <label class="v5-weather-field" for="weather-threshold">
+          <span><strong>Температурный порог</strong><small>Анализируются ближайшие 7 дней.</small></span>
+          <span class="v5-weather-number"><input class="input" id="weather-threshold" data-input="weather-threshold" type="number" min="-20" max="20" step="0.5" value="${esc(w.weatherTireThreshold??5)}"><b>°C</b></span>
+        </label>
+      </div>
+    </section>
+
+    <section class="v5-weather-card">
+      <div class="v5-weather-section-head">
+        <h2>Местоположение</h2>
+        <p>Для прогноза достаточно точности уровня города.</p>
+      </div>
+      <div class="v5-weather-card-body">
+        <div class="v5-weather-status"><strong>${hasLoc?'Местоположение сохранено':'Нужно определить местоположение'}</strong><span>${locationText}</span></div>
+        <button class="btn block v5-weather-action" data-action="weather-locate">Определить местоположение</button>
+        <div class="v5-weather-caption">Координаты сохраняются округлёнными до 2 знаков.</div>
+      </div>
+    </section>
+
+    <section class="v5-weather-card">
+      <div class="v5-weather-section-head">
+        <h2>Фоновое уведомление</h2>
+        <p>Предупреждение придёт даже когда AutoJournal закрыт.</p>
+      </div>
+      <div class="v5-weather-card-body">
+        <div class="v5-weather-status"><strong>${link?'Уведомления подключены':pushSupported?'Уведомления не подключены':'Web Push недоступен'}</strong><span>${pushText}</span></div>
+        <div class="v5-weather-actions">
+          <button class="btn primary block" data-action="weather-enable-push" ${(!pushSupported||!hasLoc)?'disabled':''}>${link?'Обновить фоновое уведомление':'Включить фоновое уведомление'}</button>
+          ${link?'<button class="btn block" data-action="weather-disable-push">Отключить фоновое уведомление</button>':''}
+        </div>
+      </div>
+    </section>
+
+    <section class="v5-weather-card v5-weather-forecast-card">
+      <div class="v5-weather-section-head">
+        <h2>Прогноз на 7 дней</h2>
+        <p>Среднесуточная температура по данным Open-Meteo.</p>
+      </div>
+      <div class="v5-weather-card-body">
+        ${trigger}
+        ${forecastHtml}
+        <button class="btn block v5-weather-action" data-action="weather-check" ${hasLoc?'':'disabled'}>Проверить прогноз сейчас</button>
+      </div>
+    </section>
+  </div>`;
 }
 function weatherSettingsSheet(){
   return sheetWrap('Погода и шины',weatherContent());
