@@ -2199,7 +2199,7 @@ document.addEventListener('click', async e=>{
   if(a==='sync-now'){await autoSyncNow(true);return;}
   if(a==='sync-unlink'){if(confirm('Отключить автоматическую синхронизацию только на этом устройстве? Данные на устройстве не удалятся.')){if(autoSyncTimer){clearTimeout(autoSyncTimer);autoSyncTimer=0;}clearSyncVault();autoSyncStatus='idle';autoSyncLastError='';autoSyncPending=0;toast('Автосинхронизация отключена на этом устройстве');render();}return;}
   if(a==='sync-show-qr'){await startSyncDisplaySession();return;}
-  if(a==='sync-scan-link'){resetSyncTransient();syncMode='link';ui.sheet='sync-scan';render();return;}
+  if(a==='sync-scan-link'){resetSyncTransient();syncMode='link';ui.sheet='sync-scan';render();await startSyncCamera();return;}
   if(a==='sync-scan-push'){syncMode='push';ui.sheet='sync-scan';render();return;}
   if(a==='sync-scan-pull'){syncMode='pull';ui.sheet='sync-scan';render();return;}
   if(a==='sync-camera-start'){await startSyncCamera();return;}
