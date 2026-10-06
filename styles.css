@@ -1682,3 +1682,20 @@ body.v5-sheet-settling .sheet-backdrop{
 }
 
 .v5-weather-tab span{white-space:normal!important;line-height:1.02;text-align:center;max-width:70px}
+
+/* Weather & Tires is a full primary tab, not a modal sheet. */
+.v5-weather-page{padding-top:1px}
+.v5-weather-content{display:grid;gap:12px}
+.v5-weather-content .form-section{
+  margin:0;
+  padding:16px;
+  border:1px solid var(--v5-line);
+  border-radius:22px;
+  background:var(--v5-card);
+}
+.v5-weather-content .form-title{font-size:16px;margin-bottom:10px}
+.v5-weather-content .install-note{
+  box-shadow:none;
+  background:var(--v5-soft);
+  border-color:var(--v5-line);
+}
