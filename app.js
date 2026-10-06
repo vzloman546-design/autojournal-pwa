@@ -350,6 +350,7 @@ const defaultState = () => ({
     weatherTireThreshold: 5,
     weatherTireLat: null,
     weatherTireLon: null,
+    weatherLocationCity: '',
     weatherLocationUpdatedAt: '',
     weatherLastCheckAt: '',
     weatherTireForecast: [],
@@ -493,6 +494,7 @@ function migrate(raw) {
     weatherTireThreshold:Number.isFinite(weatherThreshold)?clamp(weatherThreshold,-20,20):5,
     weatherTireLat:Number.isFinite(weatherLat)&&weatherLat>=-90&&weatherLat<=90?weatherLat:null,
     weatherTireLon:Number.isFinite(weatherLon)&&weatherLon>=-180&&weatherLon<=180?weatherLon:null,
+    weatherLocationCity:String(rs.weatherLocationCity||'').trim().slice(0,120),
     weatherLocationUpdatedAt:String(rs.weatherLocationUpdatedAt||''),
     weatherLastCheckAt:String(rs.weatherLastCheckAt||''),
     weatherTireForecast:Array.isArray(rs.weatherTireForecast)?rs.weatherTireForecast.slice(0,7).filter(x=>x&&dateOK(x.date)&&Number.isFinite(Number(x.mean))).map(x=>({date:String(x.date),mean:Number(x.mean)})):[],
@@ -1567,8 +1569,9 @@ function weatherContent(){
   const trigger=w.weatherTireTriggerDate
     ?`<div class="v5-weather-status is-warning"><strong>Порог достигнут</strong><span>${fmtDate(w.weatherTireTriggerDate)} · около ${fmtNum(w.weatherTireTriggerTemp,1)} °C при пороге ${fmtNum(w.weatherTireThreshold,1)} °C</span></div>`
     :'';
+  const locationCity=String(w.weatherLocationCity||'').trim();
   const locationText=hasLoc
-    ?`Координаты для прогноза: <strong>${fmtNum(w.weatherTireLat,2)}, ${fmtNum(w.weatherTireLon,2)}</strong>`
+    ?`Координаты для прогноза: ${fmtNum(w.weatherTireLat,2)}, ${fmtNum(w.weatherTireLon,2)}`
     :'Местоположение ещё не задано.';
   const pushText=!pushSupported
     ?'Этот браузер не поддерживает Web Push.'
@@ -1601,7 +1604,7 @@ function weatherContent(){
         <p>Для прогноза достаточно точности уровня города.</p>
       </div>
       <div class="v5-weather-card-body">
-        <div class="v5-weather-status"><strong>${hasLoc?'Местоположение сохранено':'Нужно определить местоположение'}</strong><span>${locationText}</span></div>
+        <div class="v5-weather-status"><strong>${hasLoc?(locationCity?esc(locationCity):'Местоположение сохранено'):'Нужно определить местоположение'}</strong><span>${locationText}</span></div>
         <button class="btn block v5-weather-action" data-action="weather-locate">Определить местоположение</button>
         <div class="v5-weather-caption">Координаты сохраняются округлёнными до 2 знаков.</div>
       </div>
@@ -2873,17 +2876,35 @@ async function checkTireWeather({notify=true,renderAfter=true}={}){
     return null;
   }
 }
+async function reverseGeocodeWeatherCity(latitude,longitude){
+  try{
+    const url=new URL('https://api.bigdatacloud.net/data/reverse-geocode-client');
+    url.searchParams.set('latitude',String(latitude));
+    url.searchParams.set('longitude',String(longitude));
+    url.searchParams.set('localityLanguage','ru');
+    const res=await fetch(url,{headers:{Accept:'application/json'}});
+    if(!res.ok)throw new Error('reverse_geocode_http_'+res.status);
+    const data=await res.json();
+    return String(data?.city||data?.locality||'').trim().slice(0,120);
+  }catch(err){
+    console.warn('Weather reverse geocoding failed',err);
+    return '';
+  }
+}
 async function locateForTireWeather(){
   if(!navigator.geolocation){toast('Геолокация недоступна в этом браузере');return;}
   try{
     const pos=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:false,timeout:12000,maximumAge:3600000}));
-    state.settings.weatherTireLat=Math.round(Number(pos.coords.latitude)*100)/100;
-    state.settings.weatherTireLon=Math.round(Number(pos.coords.longitude)*100)/100;
+    const latitude=Number(pos.coords.latitude),longitude=Number(pos.coords.longitude);
+    const city=await reverseGeocodeWeatherCity(latitude,longitude);
+    state.settings.weatherTireLat=Math.round(latitude*100)/100;
+    state.settings.weatherTireLon=Math.round(longitude*100)/100;
+    state.settings.weatherLocationCity=city;
     state.settings.weatherLocationUpdatedAt=new Date().toISOString();
     await persist();
     await updateWeatherPushRegistration();
     await checkTireWeather({notify:false,renderAfter:false});
-    render();toast('Местоположение для прогноза сохранено');
+    render();toast(city?`Местоположение сохранено · ${city}`:'Местоположение для прогноза сохранено');
   }catch(err){console.warn('Weather location failed',err);toast('Не удалось определить местоположение');}
 }
 async function weatherPushRequest(path,{method='GET',body,secret}={}){
