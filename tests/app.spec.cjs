@@ -280,6 +280,34 @@ test('service entry without mileage syncs one expense through edit and delete', 
   expect(s.components).toHaveLength(0);
 });
 
+test('latest home records include newest same-day entry without mileage', async({page})=>{
+  await addCar(page);
+  for(let i=1;i<=4;i++){
+    await page.locator('[data-action="add-entry"]').first().click();
+    await page.locator('#title').fill('Запись без пробега '+i);
+    await expect(page.locator('#odometer')).toHaveValue('');
+    await page.locator('button[form="entry-form"]').click();
+    await expect(page.locator('#entry-form')).toHaveCount(0);
+  }
+
+  await page.locator('.v5-tabbar [data-view="home"]').click();
+  const recent=page.locator('.v5-section').filter({has:page.getByRole('heading',{name:'Последние записи'})});
+  await expect(recent).toContainText('Запись без пробега 4');
+  await expect(recent).toContainText('Запись без пробега 3');
+  await expect(recent).toContainText('Запись без пробега 2');
+  await expect(recent).not.toContainText('Запись без пробега 1');
+
+  await page.locator('.v5-tabbar [data-view="records"]').click();
+  const titles=await page.locator('.v5-list .row-title').evaluateAll(nodes=>nodes.slice(0,4).map(n=>n.textContent?.trim()));
+  expect(titles).toEqual([
+    'Запись без пробега 4',
+    'Запись без пробега 3',
+    'Запись без пробега 2',
+    'Запись без пробега 1'
+  ]);
+});
+
+
 test('refuel live math and linked expense remain one-to-one', async({page})=>{
   await addCar(page);
   await page.locator('.v5-tabbar [data-view="refuels"]').click();
