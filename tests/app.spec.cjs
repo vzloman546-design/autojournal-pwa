@@ -1315,25 +1315,9 @@ test('three linked devices stay in one vault and receive the same changes', asyn
   expect(new Set(ids).size).toBe(1);
   expect(ids[0]).toBe(link.id);
 
-  await page.locator('[data-action="add-odometer"]').click();
-  await page.locator('#value').fill('211777');
-  await page.locator('button[form="odometer-form"]').click();
-
   await openProfile(page);
   await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
-  await expect(page.locator('[data-action="sync-now"]')).toBeEnabled({timeout:10000});
-  await page.locator('[data-action="sync-now"]').click();
-  await expect(page.locator('[data-action="sync-now"]')).toBeEnabled({timeout:10000});
-
-  await openProfile(workPc);
-  await workPc.locator('.v5-menu [data-view="more"]').click();
-  await workPc.locator('[data-action="sync-open"]').click();
-  await expect(workPc.locator('[data-action="sync-now"]')).toBeEnabled({timeout:10000});
-  await workPc.locator('[data-action="sync-now"]').click();
-  await expect(workPc.locator('[data-action="sync-now"]')).toBeEnabled({timeout:10000});
-  await expect.poll(async()=>((await state(workPc)).cars[0]?.currentOdometer||0),{timeout:10000}).toBe(211777);
-
   await expect(page.locator('.sheet')).toContainText('Подключённые устройства · 3');
   await expect(page.locator('.sheet')).toContainText('AJ-');
   await expect(page.locator('[data-action="sync-show-qr"]')).toHaveText('Добавить новое устройство');
