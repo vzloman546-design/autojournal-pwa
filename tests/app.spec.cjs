@@ -20,7 +20,13 @@ async function addCar(page,{make='Hyundai',model='Sonata',initial='200000',curre
   await expect(page.locator('.v5-car-title')).toContainText(make);
 }
 async function openProfile(page){
-  await page.locator('[data-action="open-profile"]').click();
+  const avatar=page.locator('[data-action="open-profile"]');
+  if(!await avatar.count()){
+    const back=page.locator('[data-action="go-back"]');
+    if(await back.count())await back.first().click();
+  }
+  await expect(avatar).toBeVisible();
+  await avatar.click();
   await expect(page.locator('.v5-subbar-title')).toHaveText('Профиль');
 }
 async function gotoSecondary(page,view){
@@ -944,11 +950,35 @@ test('secondary screens hide bottom nav and no horizontal overflow at mobile wid
   }
 });
 
+test('primary tabs ignore left-edge back swipe', async({page})=>{
+  await addCar(page);
+  for(const view of ['home','records','refuels','weather']){
+    await page.locator('.v5-tabbar [data-view="'+view+'"]').click();
+    await expect(page.locator('.v5-tabbar [data-view="'+view+'"]')).toHaveClass(/active/);
+    const before=await page.evaluate(()=>document.querySelector('.v5-tabbar .active')?.getAttribute('data-view'));
+    await page.evaluate(()=>{
+      const fire=(type,x,y)=>{
+        const ev=new Event(type,{bubbles:true,cancelable:true});
+        Object.defineProperty(ev,'touches',{value:type==='touchend'?[]:[{clientX:x,clientY:y}]});
+        document.dispatchEvent(ev);
+      };
+      fire('touchstart',2,220);
+      fire('touchmove',120,222);
+      fire('touchend',120,222);
+    });
+    await page.waitForTimeout(220);
+    expect(await page.evaluate(()=>document.body.classList.contains('v5-swiping'))).toBe(false);
+    expect(await page.evaluate(()=>document.querySelector('.v5-tabbar .active')?.getAttribute('data-view'))).toBe(before);
+  }
+});
+
+
 test('header bell opens standalone notifications while Weather and Tires is a full fourth primary tab', async({page})=>{
   await addCar(page);
   await expect(page.locator('.v5-tabbar [data-view="notifications"]')).toHaveCount(0);
   await expect(page.locator('.v5-tabbar [data-view="weather"]')).toBeVisible();
   await expect(page.locator('.v5-tabbar [data-view="weather"]')).toContainText('Погода и шины');
+  await expect(page.locator('.v5-tabbar [data-view="weather"] svg circle')).toHaveCount(2);
   await expect(page.locator('.v5-head-notifications')).toBeVisible();
   const s=await state(page),carId=s.cars[0].id;
   s.components.push({id:'cmp',carId,name:'Ремень QA',category:'Двигатель',brand:'',partNumber:'',baseInstalledDate:isoOffset(-400),baseInstalledOdometer:190000,installedDate:isoOffset(-400),installedOdometer:190000,lifeKm:10000,lifeMonths:12,inspectKm:0,inspectMonths:0,warnKm:1000,warnDays:30,cost:0,notes:'',sourceEntryId:'',lastInspectionDate:isoOffset(-400),lastInspectionOdometer:190000});
@@ -1332,7 +1362,7 @@ test.describe('offline PWA',()=>{
     });
     if(!await page.evaluate(()=>!!navigator.serviceWorker.controller))await page.reload();
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller),{timeout:10000}).toBe(true);
-    await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain('autojournal-v5.14.0');
+    await expect.poll(async()=>page.evaluate(async()=>{const keys=await caches.keys();return keys.filter(k=>k.startsWith('autojournal-v')).length;})).toBe(1);
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator('.v5-car-title')).toContainText('Hyundai');
@@ -1425,6 +1455,7 @@ test('new desktop can show QR and linked phone can attach it to the existing vau
   await desktop.getByRole('button',{name:/Показать QR/}).click();
   await expect(desktop.locator('[data-sync-qr] svg')).toBeVisible();
   await expect(desktop.locator('.sheet')).toContainText('уже подключённом устройстве');
+  await desktop.locator('[data-sync-qr]').evaluate(el=>{el.style.width='560px';el.style.height='560px';el.style.padding='16px';});
   const qr=await desktop.locator('[data-sync-qr] svg').screenshot();
 
   await openProfile(page);
