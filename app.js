@@ -646,18 +646,20 @@ function shouldShowFirstRun(){
   return journalIsEmpty()&&!loadSyncVault();
 }
 function firstRunPage(){
-  const syncReady=Boolean(getSyncApiUrl());
+  const syncReady=Boolean(getSyncApiUrl()),mobile=syncDeviceKind()==='mobile';
+  const linkTitle=mobile?'Сканировать QR':'Показать QR';
+  const linkText=mobile?'Отсканировать QR с другого устройства и подключиться к общему журналу':'Показать QR на этом ПК. Уже подключённый телефон отсканирует его и передаст общий журнал сюда';
   return `<main class="v5-first-run">
     <div class="v5-first-run-shell">
       <div class="v5-first-run-brand"><div class="v5-first-run-logo">${icons.car}</div><span>АвтоЖурнал</span></div>
       <div class="v5-first-run-copy">
         <h1>Как начать?</h1>
-        <p>Перенесите существующий журнал с другого устройства или создайте новый.</p>
+        <p>Подключитесь к существующему журналу с другого устройства или создайте новый.</p>
       </div>
       <div class="v5-first-run-actions">
-        <button class="v5-first-run-card receive" data-action="first-run-receive" ${syncReady?'':'disabled'}>
-          <span class="v5-first-run-card-icon">↓</span>
-          <span class="v5-first-run-card-text"><strong>Получить данные</strong><small>Отсканировать QR-код другого устройства и перенести журнал сюда</small></span>
+        <button class="v5-first-run-card receive" data-action="first-run-link" ${syncReady?'':'disabled'}>
+          <span class="v5-first-run-card-icon">${mobile?'⌗':'▦'}</span>
+          <span class="v5-first-run-card-text"><strong>${linkTitle}</strong><small>${linkText}</small></span>
           <b>›</b>
         </button>
         <button class="v5-first-run-card new" data-action="add-car">
@@ -1462,7 +1464,7 @@ function syncSummaryHtml(s){
   return `<div class="v5-sync-summary"><div><strong>${x.cars}</strong><span>авто</span></div><div><strong>${x.service}</strong><span>сервис</span></div><div><strong>${x.refuels}</strong><span>заправки</span></div><div><strong>${x.expenses}</strong><span>расходы</span></div><div><strong>${x.components}</strong><span>узлы</span></div><div><strong>${x.documents}</strong><span>документы</span></div></div>`;
 }
 function syncOverviewSheet(){
-  const ready=Boolean(getSyncApiUrl()),vault=loadSyncVault(),linked=Boolean(vault),vaultCode=syncVaultCode(vault);
+  const ready=Boolean(getSyncApiUrl()),vault=loadSyncVault(),linked=Boolean(vault),vaultCode=syncVaultCode(vault),mobile=syncDeviceKind()==='mobile';
   const devices=(state.syncDevices||[]).filter(x=>x?.id).sort((a,b)=>String(b.lastSeenAt||'').localeCompare(String(a.lastSeenAt||'')));
   const statusText=autoSyncStatus==='syncing'
     ?'Синхронизация…'
@@ -1483,34 +1485,47 @@ function syncOverviewSheet(){
       <div class="form-title" style="margin-top:12px">Подключённые устройства · ${devices.length}</div>
       <div class="v5-list">${devices.length?devices.map(d=>`<div class="list-row"><div class="row-icon">${String(d.id)===String(vault.deviceId)?'✓':'↔'}</div><div class="row-main"><div class="row-title">${esc(d.label||'Устройство')}${String(d.id)===String(vault.deviceId)?' · это устройство':''}</div><div class="row-sub">${esc(syncDeviceActivityText(d.lastSeenAt))} · ${esc(String(d.id).slice(0,6).toUpperCase())}</div></div></div>`).join(''):'<div class="helper">Список появится после первой синхронизации.</div>'}</div>
     </div>`:'';
-  const body=`<div class="v5-sync-intro"><div class="v5-sync-lock">↔</div><strong>${linked?'Общий журнал подключён':'Синхронизация между устройствами'}</strong><p>${linked?`Это устройство входит в журнал ${esc(vaultCode)}. Чтобы добавить домашний, рабочий ПК или ещё один телефон, покажите QR именно с уже подключённого устройства.`:'Чтобы присоединиться к существующему журналу, покажите QR на уже подключённом устройстве, затем здесь выберите «Получение данных» и отсканируйте его.'}</p></div>
+  const intro=mobile
+    ?(linked?'Чтобы подключить ПК, откройте на ПК «Синхронизацию» → «Показать QR», затем отсканируйте этот QR здесь. Для нового телефона можно наоборот показать QR на этом устройстве.':'Если журнал уже есть на другом устройстве — отсканируйте его QR. Если подключаете этот телефон к новому ПК, можно показать QR на ПК и отсканировать его здесь.')
+    :(linked?'Чтобы подключить телефон, просто покажите QR на этом ПК и отсканируйте его телефоном. Если QR показан на другом устройстве, ПК также может считать его камерой, из изображения или вручную.':'Покажите QR на этом ПК. Если журнал уже есть на телефоне, отсканируйте этот QR телефоном — телефон передаст существующий общий журнал на ПК.');
+  const primary=mobile
+    ?`<button class="btn primary block" data-action="sync-scan-link" ${ready?'':'disabled'}>Сканировать QR другого устройства</button>
+       <button class="btn block" style="margin-top:8px" data-action="sync-show-qr" ${ready?'':'disabled'}>Показать QR на этом устройстве</button>`
+    :`<button class="btn primary block" data-action="sync-show-qr" ${ready?'':'disabled'}>Показать QR для подключения</button>
+       <button class="btn block" style="margin-top:8px" data-action="sync-scan-link" ${ready?'':'disabled'}>Сканировать QR другого устройства</button>`;
+  const body=`<div class="v5-sync-intro"><div class="v5-sync-lock">↔</div><strong>${linked?'Общий журнал подключён':'Синхронизация между устройствами'}</strong><p>${intro}</p></div>
     ${linkedCard}
     ${deviceList}
     ${!ready?'<div class="install-note"><strong>Relay ещё не подключён.</strong><br>Для синхронизации нужен URL Cloudflare Worker.</div>':''}
-    <div class="v5-sync-mode-grid">
-      <button class="v5-sync-mode" data-action="sync-scan-push" ${ready?'':'disabled'}><span class="v5-sync-mode-icon">↑</span><strong>Передача данных</strong><small>Отправить данные этому устройству по QR другого устройства.</small></button>
-      <button class="v5-sync-mode" data-action="sync-scan-pull" ${ready?'':'disabled'}><span class="v5-sync-mode-icon">↓</span><strong>Получение данных</strong><small>Подключиться к журналу устройства с QR и получить его данные.</small></button>
+    <div class="form-section"><div class="form-title">${linked?'Подключить ещё одно устройство':'Подключиться к общему журналу'}</div>${primary}
+      <div class="helper" style="margin-top:8px">AutoJournal сам определит направление передачи. Не нужно выбирать «отправить» или «получить».</div>
     </div>
-    <button class="btn ${linked?'primary ':''}block v5-sync-show" data-action="sync-show-qr" ${ready?'':'disabled'}>${linked?'Добавить новое устройство':'Показать QR и создать общий журнал'}</button>
-    ${linked?'<button class="btn danger block" style="margin-top:8px" data-action="sync-unlink">Отключить автосинхронизацию на этом устройстве</button>':''}
-    <div class="helper">${linked?'QR добавляет новое устройство именно в текущий общий журнал. Уже подключённое устройство не сможет молча переключиться на другой журнал.':'Первое устройство создаёт общий журнал. Все следующие устройства нужно подключать к его QR.'}</div>`;
+    ${linked?'<button class="btn danger block" data-action="sync-unlink">Отключить автосинхронизацию на этом устройстве</button>':''}`;
   return sheetWrap('Синхронизация',body);
 }
 function syncQrSheet(){
   if(!syncPair)return sheetWrap('QR для подключения','<div class="install-note">Сеанс не найден. Создайте QR ещё раз.</div>');
   let qr='';try{qr=pairingQrSvg(syncPair);}catch{}
-  const body=`<div class="v5-sync-qr-wrap"><div class="v5-sync-qr" data-sync-qr>${qr}</div><strong>Покажите этот QR новому устройству</strong><p>На новом устройстве откройте «Синхронизация», выберите «Получение данных» и отсканируйте код. Оно будет добавлено в ${esc(syncVaultCode(syncPendingVault))}.</p><div class="v5-sync-code">${esc(syncVaultCode(syncPendingVault))} · сеанс ${esc(pairingCodeShort(syncPair))}</div><div class="v5-sync-status" data-sync-status>${esc(syncQrStatus)}</div></div>`;
+  const hasVault=Boolean(syncPendingVault),code=syncVaultCode(syncPendingVault);
+  const title=hasVault?'Отсканируйте этот QR на новом устройстве':'Отсканируйте этот QR на уже подключённом устройстве';
+  const text=hasVault
+    ?`На новом устройстве откройте «Синхронизация» и нажмите «Сканировать QR». Оно присоединится к ${esc(code)}.`
+    :'Если общий журнал уже есть на телефоне, откройте на нём «Синхронизацию» → «Сканировать QR» и наведите камеру на этот экран. Телефон передаст существующий журнал этому устройству.';
+  const codeLine=hasVault?`${esc(code)} · сеанс ${esc(pairingCodeShort(syncPair))}`:`Сеанс ${esc(pairingCodeShort(syncPair))}`;
+  const body=`<div class="v5-sync-qr-wrap"><div class="v5-sync-qr" data-sync-qr>${qr}</div><strong>${title}</strong><p>${text}</p><div class="v5-sync-code">${codeLine}</div><div class="v5-sync-status" data-sync-status>${esc(syncQrStatus)}</div></div>`;
   return sheetWrap('QR для подключения',body);
 }
 function syncScanSheet(){
-  const sending=syncMode==='push';
-  const body=`<div class="v5-sync-scan-intro"><strong>${sending?'Передача данных':'Получение данных'}</strong><p>${sending?'После сканирования данные с этого устройства будут зашифрованы и отправлены устройству с QR.':'После сканирования это устройство запросит зашифрованные данные у устройства с QR.'}</p></div>
+  const sending=syncMode==='push',linking=syncMode==='link';
+  const heading=linking?'Подключение устройства':sending?'Передача данных':'Получение данных';
+  const explain=linking?'Отсканируйте QR с другого устройства. AutoJournal сам определит, какое устройство уже содержит общий журнал и в какую сторону передать данные.':sending?'После сканирования данные с этого устройства будут зашифрованы и отправлены устройству с QR.':'После сканирования это устройство запросит зашифрованные данные у устройства с QR.';
+  const body=`<div class="v5-sync-scan-intro"><strong>${heading}</strong><p>${explain}</p></div>
     <div class="v5-sync-camera"><video data-sync-video playsinline muted></video><div class="v5-sync-camera-frame"></div><div class="v5-sync-camera-placeholder" data-sync-camera-placeholder>Камера ещё не запущена</div></div>
     <button class="btn primary block" data-action="sync-camera-start">Открыть камеру</button>
     <button class="btn block" style="margin-top:8px" data-action="sync-photo-open">Считать QR с фотографии</button>
     <input type="file" accept="image/*" capture="environment" data-sync-photo hidden>
     <div class="v5-sync-manual"><div class="field"><label for="syncManualCode">Или вставьте код вручную</label><textarea class="input" id="syncManualCode" data-sync-manual placeholder="AJ1:…"></textarea></div><button class="btn block" data-action="sync-manual-code">Продолжить</button></div>`;
-  return sheetWrap(sending?'Передача данных':'Получение данных',body);
+  return sheetWrap(heading,body);
 }
 function syncProgressSheet(){
   return sheetWrap(syncProgressTitle||'Обмен данными',`<div class="v5-sync-progress"><div class="v5-sync-spinner"></div><strong>${esc(syncProgressTitle||'Обмен данными')}</strong><p>${esc(syncProgressText||'Выполняется защищённый обмен…')}</p></div>`);
@@ -2131,10 +2146,11 @@ document.addEventListener('click', async e=>{
   }
   if(a==='download-ready-pdf'){downloadPendingPdf();return;}
   if(a==='notif-tab'){ui.notificationTab=el.dataset.value||'auto';render();return;}
-  if(a==='first-run-receive'){
+  if(a==='first-run-link'){
     if(!getSyncApiUrl()){toast('Сервер синхронизации недоступен');return;}
-    resetSyncTransient();syncMode='pull';ui.sheet='sync-scan';render();
-    await startSyncCamera();
+    if(syncDeviceKind()==='mobile'){
+      resetSyncTransient();syncMode='link';ui.sheet='sync-scan';render();await startSyncCamera();
+    }else await startSyncDisplaySession();
     return;
   }
   if(a==='add-car'){ui.sheet='car';ui.sheetId=null;render();return;}
@@ -2183,6 +2199,7 @@ document.addEventListener('click', async e=>{
   if(a==='sync-now'){await autoSyncNow(true);return;}
   if(a==='sync-unlink'){if(confirm('Отключить автоматическую синхронизацию только на этом устройстве? Данные на устройстве не удалятся.')){if(autoSyncTimer){clearTimeout(autoSyncTimer);autoSyncTimer=0;}clearSyncVault();autoSyncStatus='idle';autoSyncLastError='';autoSyncPending=0;toast('Автосинхронизация отключена на этом устройстве');render();}return;}
   if(a==='sync-show-qr'){await startSyncDisplaySession();return;}
+  if(a==='sync-scan-link'){resetSyncTransient();syncMode='link';ui.sheet='sync-scan';render();return;}
   if(a==='sync-scan-push'){syncMode='push';ui.sheet='sync-scan';render();return;}
   if(a==='sync-scan-pull'){syncMode='pull';ui.sheet='sync-scan';render();return;}
   if(a==='sync-camera-start'){await startSyncCamera();return;}
@@ -2428,6 +2445,13 @@ function syncDeviceIdentity(){
   const browser=/Edg\//i.test(ua)?'Edge':/CriOS|Chrome\//i.test(ua)?'Chrome':/FxiOS|Firefox\//i.test(ua)?'Firefox':/Safari\//i.test(ua)?'Safari':'Браузер';
   return {label:`${os} · ${browser}`,platform:os,browser};
 }
+function syncDeviceKind(){
+  const ua=String(navigator.userAgent||''),platform=String(navigator.platform||'');
+  const mobileUa=/Android|iPhone|iPad|iPod|Mobile/i.test(ua)||(platform==='MacIntel'&&Number(navigator.maxTouchPoints)>1);
+  let coarse=false;try{coarse=Boolean(matchMedia?.('(pointer: coarse)').matches);}catch{}
+  const narrow=Math.min(Number(innerWidth)||9999,Number(innerHeight)||9999)<900;
+  return mobileUa||(coarse&&narrow)?'mobile':'desktop';
+}
 function ensureCurrentSyncDevice(vault,{touch=false}={}){
   if(!vault?.deviceId)return false;
   state.syncDevices=Array.isArray(state.syncDevices)?state.syncDevices:[];
@@ -2565,11 +2589,12 @@ function resetSyncTransient(){
 async function startSyncDisplaySession(){
   try{
     resetSyncTransient();syncQrStatus='Создаём защищённый одноразовый сеанс…';
-    syncPendingVault=loadSyncVault()||createSyncVaultLink();
-    await registerSyncVault(syncPendingVault);
+    syncPendingVault=loadSyncVault();
+    if(syncPendingVault)await registerSyncVault(syncPendingVault);
     syncPair=await createSyncSession();
-    await publishSessionVault(syncPair,syncPendingVault);
-    syncQrStatus='Ждём сканирования на другом устройстве…';ui.sheet='sync-qr';render();pollSyncDisplay();
+    if(syncPendingVault)await publishSessionVault(syncPair,syncPendingVault);
+    syncQrStatus=syncPendingVault?'Ждём сканирования на другом устройстве…':'Покажите этот QR уже подключённому смартфону…';
+    ui.sheet='sync-qr';render();pollSyncDisplay();
   }catch(err){console.error('Could not create sync session',err);toast(syncErrorText(err));}
 }
 function scheduleSyncPoll(fn,ms=1100){stopSyncPolling();syncPollTimer=setTimeout(fn,ms);}
@@ -2584,6 +2609,7 @@ async function pollSyncDisplay(){
       syncQrStatus='Данные готовы. Ждём сохранения на другом устройстве…';syncBusy=false;if(ui.sheet==='sync-qr')render();
     }else if(status.status==='ready'&&status.mode==='push'&&!syncBusy){
       syncBusy=true;syncQrStatus='Получаем и расшифровываем журнал…';if(ui.sheet==='sync-qr')render();
+      if(!syncPendingVault)syncPendingVault=await readSessionVault(pair);
       syncIncoming=await downloadSyncState(pair,status);syncIncomingPair=pair;syncBusy=false;stopSyncPolling();ui.sheet='sync-import';render();return;
     }else if(status.status==='consumed'){
       stopSyncPolling();await finalizePendingVaultLink();ui.sheet='sync-success';render();return;
@@ -2633,13 +2659,32 @@ async function handleScannedSyncCode(raw){
   let pair;try{pair=parsePairingCode(raw);}catch(err){toast(syncErrorText(err));return;}
   syncPair=pair;
   try{
-    syncPendingVault=await readSessionVault(pair);
     const currentVault=loadSyncVault();
-    if(currentVault&&currentVault.id!==syncPendingVault.id){
-      syncVaultConflict={current:syncVaultCode(currentVault),incoming:syncVaultCode(syncPendingVault)};
+    let advertisedVault=null;
+    try{advertisedVault=await readSessionVault(pair);}
+    catch(err){
+      if(!(syncMode==='link'&&err?.status===409&&String(err?.message||'').includes('pairing_not_ready')))throw err;
+      const sourceVault=currentVault||createSyncVaultLink();
+      await registerSyncVault(sourceVault);
+      await publishSessionVault(pair,sourceVault);
+      syncPendingVault=sourceVault;
+      syncProgressTitle='Подключение устройства';syncProgressText='Передаём этому устройству ваш общий журнал…';ui.sheet='sync-progress';render();
+      await requestSyncMode(pair,'push');await uploadSyncState(pair,state,'scanner');
+      syncProgressText='Данные отправлены. Завершите подключение на другом устройстве.';render();pollSyncSenderConsumed();
+      return;
+    }
+    syncPendingVault=advertisedVault;
+    if(currentVault&&currentVault.id!==advertisedVault.id){
+      syncVaultConflict={current:syncVaultCode(currentVault),incoming:syncVaultCode(advertisedVault)};
       syncPendingVault=null;syncPair=null;syncMode='';ui.sheet='sync-vault-conflict';render();return;
     }
-    if(syncMode==='push'){
+    if(syncMode==='link'){
+      if(currentVault&&currentVault.id===advertisedVault.id){
+        resetSyncTransient();ui.sheet='sync';render();toast('Оба устройства уже подключены к одному общему журналу');return;
+      }
+      syncProgressTitle='Подключение устройства';syncProgressText='Получаем общий журнал с другого устройства…';ui.sheet='sync-progress';render();
+      await requestSyncMode(pair,'pull');pollSyncReceiverReady();
+    }else if(syncMode==='push'){
       syncProgressTitle='Передача данных';syncProgressText='Шифруем журнал и отправляем на другое устройство…';ui.sheet='sync-progress';render();
       await requestSyncMode(pair,'push');await uploadSyncState(pair,state,'scanner');
       syncProgressText='Данные отправлены. Подтвердите получение на другом устройстве.';render();pollSyncSenderConsumed();
