@@ -590,18 +590,17 @@ test('7-day weather forecast creates tire-change notification at 5C threshold', 
 
   await gotoSecondary(page,'more');
   await page.locator('[data-action="weather-open"]').click();
+  await expect(page.locator('.v5-weather-page')).toBeVisible();
+  await expect(page.locator('.v5-tabbar [data-view="weather"]')).toHaveClass(/active/);
   await page.locator('[data-action="weather-check"]').click();
   await expect.poll(async()=>((await state(page)).settings.weatherTireTriggerDate||''),{timeout:10000}).toBe(dates[2]);
   const saved=await state(page);
   expect(saved.settings.weatherTireTriggerTemp).toBe(4.8);
   expect(saved.settings.weatherTireForecast).toHaveLength(7);
-  await expect(page.locator('.sheet')).toContainText('Прогноз на 7 дней');
-  await expect(page.locator('.sheet')).toContainText('Порог достигнут');
-  await expect(page.locator('.sheet')).toContainText('Open-Meteo');
+  await expect(page.locator('.v5-weather-page')).toContainText('Прогноз на 7 дней');
+  await expect(page.locator('.v5-weather-page')).toContainText('Порог достигнут');
+  await expect(page.locator('.v5-weather-page')).toContainText('Open-Meteo');
 
-  await page.locator('.sheet-close').click();
-  await page.locator('[data-action="go-back"]').click();
-  await page.locator('[data-action="go-back"]').click();
   await page.locator('.v5-head-notifications').click();
   await expect(page.getByText('Пора планировать смену шин',{exact:true})).toBeVisible();
   await expect(page.getByText(/4,8 °C/)).toBeVisible();
@@ -873,11 +872,11 @@ test('secondary screens hide bottom nav and no horizontal overflow at mobile wid
   }
 });
 
-test('header bell opens standalone notifications while Weather and Tires occupies the fourth bottom tab', async({page})=>{
+test('header bell opens standalone notifications while Weather and Tires is a full fourth primary tab', async({page})=>{
   await addCar(page);
   await expect(page.locator('.v5-tabbar [data-view="notifications"]')).toHaveCount(0);
-  await expect(page.locator('.v5-tabbar [data-action="weather-open"]')).toBeVisible();
-  await expect(page.locator('.v5-tabbar [data-action="weather-open"]')).toContainText('Погода и шины');
+  await expect(page.locator('.v5-tabbar [data-view="weather"]')).toBeVisible();
+  await expect(page.locator('.v5-tabbar [data-view="weather"]')).toContainText('Погода и шины');
   await expect(page.locator('.v5-head-notifications')).toBeVisible();
   const s=await state(page),carId=s.cars[0].id;
   s.components.push({id:'cmp',carId,name:'Ремень QA',category:'Двигатель',brand:'',partNumber:'',baseInstalledDate:isoOffset(-400),baseInstalledOdometer:190000,installedDate:isoOffset(-400),installedOdometer:190000,lifeKm:10000,lifeMonths:12,inspectKm:0,inspectMonths:0,warnKm:1000,warnDays:30,cost:0,notes:'',sourceEntryId:'',lastInspectionDate:isoOffset(-400),lastInspectionOdometer:190000});
@@ -892,8 +891,11 @@ test('header bell opens standalone notifications while Weather and Tires occupie
   await page.locator('[data-action="notif-tab"][data-value="app"]').click();
   await expect(page.getByText(/резервную копию/i)).toBeVisible();
   await page.locator('[data-action="go-back"]').click();
-  await page.locator('.v5-tabbar [data-action="weather-open"]').click();
-  await expect(page.locator('.sheet')).toContainText('Погода и шины');
+  await page.locator('.v5-tabbar [data-view="weather"]').click();
+  await expect(page.locator('.v5-weather-page')).toBeVisible();
+  await expect(page.locator('.v5-tabbar')).toBeVisible();
+  await expect(page.locator('.v5-tabbar [data-view="weather"]')).toHaveClass(/active/);
+  await expect(page.locator('.sheet')).toHaveCount(0);
 });
 
 
