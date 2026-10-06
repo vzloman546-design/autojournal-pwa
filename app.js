@@ -632,6 +632,7 @@ const tabs=[['home','Главная',icons.home],['records','Записи',icons
 function tabbar(){
   return `<div class="v5-tab-wrap"><nav class="v5-tabbar">
     ${tabs.map(([id,label,ic])=>`<button class="v5-tab ${ui.view===id?'active':''}" data-view="${id}" ${ui.view===id?'aria-current="page"':''}>${ic}<span>${label}</span></button>`).join('')}
+    <button class="v5-tab v5-weather-tab" data-action="weather-open" aria-label="Погода и шины">${icons.alert}<span>Погода и шины</span></button>
   </nav></div>`;
 }
 
