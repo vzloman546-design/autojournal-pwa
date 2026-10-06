@@ -1132,6 +1132,20 @@ test('vehicle passport fallback is a recognizable dedicated car silhouette', asy
   expect(box.width).toBeGreaterThan(box.height);
 });
 
+test('profile places Sync and QR immediately after vehicle report and removes it from Settings', async({page})=>{
+  await addCar(page);
+  await openProfile(page);
+
+  const labels=await page.locator('.v5-menu > button').evaluateAll(btns=>btns.map(b=>b.querySelector('strong')?.textContent?.trim()||''));
+  const reportIndex=labels.indexOf('Отчёт автомобиля');
+  const syncIndex=labels.indexOf('Синхронизация и QR');
+  expect(reportIndex).toBeGreaterThanOrEqual(0);
+  expect(syncIndex).toBe(reportIndex+1);
+
+  await page.locator('.v5-menu [data-view="more"]').click();
+  await expect(page.getByText('Синхронизация и QR',{exact:true})).toHaveCount(0);
+});
+
 test('short and full vehicle reports render and download a real PDF file', async({page})=>{
   await addCar(page);
   await page.locator('[data-action="add-entry"]').first().click();
@@ -1234,7 +1248,6 @@ test('mobile sync UI prefers scanning, starts camera immediately and still allow
   });
   await addCar(page);
   await openProfile(page);
-  await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
   await expect(page.locator('[data-action="sync-scan-link"]')).toHaveText('Сканировать QR другого устройства');
   await expect(page.locator('[data-action="sync-show-qr"]')).toHaveText('Показать QR на этом устройстве');
@@ -1304,7 +1317,6 @@ test('new desktop can show QR and linked phone can attach it to the existing vau
   const qr=await desktop.locator('[data-sync-qr] svg').screenshot();
 
   await openProfile(page);
-  await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
   await page.locator('[data-action="sync-scan-link"]').click();
   await page.locator('[data-sync-photo]').setInputFiles({name:'pair.png',mimeType:'image/png',buffer:qr});
@@ -1398,7 +1410,6 @@ test('three linked devices stay in one vault and receive the same changes', asyn
   expect(ids[0]).toBe(link.id);
 
   await openProfile(page);
-  await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
   await expect(page.locator('.sheet')).toContainText('Подключённые устройства · 3');
   await expect(page.locator('.sheet')).toContainText('AJ-');
@@ -1469,7 +1480,6 @@ test('persistent vault auto-sync pushes local changes and pulls remote changes',
 
   await page.locator('[data-action="go-back"]').click();
   await expect(page.locator('.v5-subbar-title')).toHaveText('Профиль');
-  await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-action="sync-open"]').click();
   await expect(page.locator('.sheet')).toContainText('Автосинхронизация включена');
 });
