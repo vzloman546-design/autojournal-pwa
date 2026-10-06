@@ -568,6 +568,48 @@ test('multiple cars are isolated', async({page})=>{
   await expect(page.getByText('Только Focus',{exact:true})).toHaveCount(0);
 });
 
+test('Weather and Tires shows the city resolved from the selected geolocation', async({page})=>{
+  await addCar(page);
+  await page.route('https://api.bigdatacloud.net/**',async route=>{
+    await route.fulfill({
+      status:200,
+      contentType:'application/json',
+      body:JSON.stringify({
+        latitude:55.7558,
+        longitude:37.6176,
+        city:'Москва',
+        locality:'Москва',
+        principalSubdivision:'Москва',
+        countryName:'Россия'
+      })
+    });
+  });
+  await page.evaluate(()=>{
+    Object.defineProperty(navigator,'geolocation',{
+      configurable:true,
+      value:{
+        getCurrentPosition(success){
+          success({coords:{latitude:55.7558,longitude:37.6176,accuracy:50}});
+        }
+      }
+    });
+  });
+
+  await page.locator('.v5-tabbar [data-view="weather"]').click();
+  await page.locator('[data-action="weather-locate"]').click();
+
+  await expect(page.locator('.v5-weather-card').filter({hasText:'Местоположение'})).toContainText('Москва');
+  await expect(page.locator('.v5-weather-card').filter({hasText:'Местоположение'})).toContainText('55,76');
+  const saved=await state(page);
+  expect(saved.settings.weatherLocationCity).toBe('Москва');
+  expect(saved.settings.weatherTireLat).toBe(55.76);
+  expect(saved.settings.weatherTireLon).toBe(37.62);
+
+  await page.reload();
+  await page.locator('.v5-tabbar [data-view="weather"]').click();
+  await expect(page.locator('.v5-weather-card').filter({hasText:'Местоположение'})).toContainText('Москва');
+});
+
 test('Weather and Tires keeps cards, text and controls on one mobile grid', async({page})=>{
   await addCar(page);
   const seeded=await state(page);
