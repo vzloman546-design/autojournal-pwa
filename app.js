@@ -372,8 +372,8 @@ const defaultState = () => ({
 
 let state = defaultState();
 let ui = { view:'home', sheet:null, sheetId:null, search:'', historyType:'all', expenseFilter:'all', notificationTab:'auto', analyticsTab:'expenses', analyticsPeriod:'month', reportMode:'short', healthSystemKey:'' };
-const primaryViews=new Set(['home','records','refuels','notifications']);
-const secondaryTitles={profile:'Профиль',carcard:'Паспорт автомобиля',report:'Отчёт автомобиля',analytics:'Статистика',documents:'Документы',parts:'Здоровье автомобиля',more:'Настройки'};
+const primaryViews=new Set(['home','records','refuels']);
+const secondaryTitles={profile:'Профиль',carcard:'Паспорт автомобиля',report:'Отчёт автомобиля',analytics:'Статистика',documents:'Документы',parts:'Здоровье автомобиля',notifications:'Уведомления',more:'Настройки'};
 let navStack=[];
 let nextTransition='';
 let pendingPdfFile=null;
@@ -605,11 +605,15 @@ function pageHeaderTitle() {
   return ({home:'АвтоЖурнал',history:'История',parts:'Здоровье автомобиля',expenses:'Расходы',analytics:'Аналитика',documents:'Документы',more:'Ещё'})[ui.view] || 'АвтоЖурнал';
 }
 
+function notificationAttentionCount(){
+  const weatherAttention=state.settings?.weatherTireEnabled&&state.settings?.weatherTireTriggerDate?1:0;
+  return allReminders().length+weatherAttention;
+}
 function topbar() {
   if(secondaryTitles[ui.view]){
     return `<header class="v5-subbar"><button class="v5-back" data-action="go-back" aria-label="Назад">‹</button><div class="v5-subbar-title">${secondaryTitles[ui.view]}</div><div class="v5-subbar-spacer"></div></header>`;
   }
-  const c=car();
+  const c=car(),attention=notificationAttentionCount();
   const title=c?`${esc(c.make)} ${esc(c.model)}`:'АвтоЖурнал';
   const sub=c?(c.plate?esc(c.plate):`${fmtNum(c.currentOdometer)} км`):'Локальная сервисная книжка';
   return `<header class="v5-topbar">
@@ -617,16 +621,17 @@ function topbar() {
       <div class="v5-car-title">${title}<span class="v5-chevron">⌄</span></div>
       <div class="v5-car-sub">${sub}</div>
     </button>
-    <button class="v5-avatar" data-action="open-profile" aria-label="Профиль">AJ</button>
+    <div class="v5-head-actions">
+      <button class="v5-head-notifications" data-view="notifications" aria-label="Уведомления">${icons.bell}${attention?'<i class="v5-head-unread"></i>':''}</button>
+      <button class="v5-avatar" data-action="open-profile" aria-label="Профиль">AJ</button>
+    </div>
   </header>`;
 }
 
-const tabs=[['home','Главная',icons.home],['records','Записи',icons.history],['refuels','Заправки',icons.fuel],['notifications','Уведомления',icons.bell]];
+const tabs=[['home','Главная',icons.home],['records','Записи',icons.history],['refuels','Заправки',icons.fuel]];
 function tabbar(){
-  const weatherAttention=state.settings?.weatherTireEnabled&&state.settings?.weatherTireTriggerDate?1:0;
-  const attention=allReminders().length+weatherAttention;
   return `<div class="v5-tab-wrap"><nav class="v5-tabbar">
-    ${tabs.map(([id,label,ic])=>`<button class="v5-tab ${ui.view===id?'active':''}" data-view="${id}" ${ui.view===id?'aria-current="page"':''}>${ic}<span>${label}</span>${id==='notifications'&&attention?'<i class="v5-unread"></i>':''}</button>`).join('')}
+    ${tabs.map(([id,label,ic])=>`<button class="v5-tab ${ui.view===id?'active':''}" data-view="${id}" ${ui.view===id?'aria-current="page"':''}>${ic}<span>${label}</span></button>`).join('')}
   </nav></div>`;
 }
 
