@@ -1116,6 +1116,7 @@ test('iPhone-like layout handles long content, themes and safe-area inputs', asy
   if(browserName==='chromium'){
     await page.locator('[data-action="go-back"]').click();
     await page.locator('[data-action="go-back"]').click();
+    await page.locator('[data-action="go-back"]').click();
     await expect(page.locator('.v5-tab-wrap')).toBeVisible();
     const cdp=await context.newCDPSession(page);
     await cdp.send('Emulation.setSafeAreaInsetsOverride',{insets:{top:47,bottom:34,left:0,right:0}});
