@@ -1063,6 +1063,18 @@ test('accent color can be changed, persisted and adapted to dark theme', async({
 
   await page.locator('.v5-accent-swatch[data-value="green"]').click();
   await expect(page.locator('.v5-accent-swatch[data-value="green"]')).toHaveClass(/active/);
+  const ringGeometry=await page.locator('.v5-accent-swatch[data-value="green"]').evaluate(el=>{
+    const button=el.getBoundingClientRect(),dot=el.querySelector('span').getBoundingClientRect(),ring=getComputedStyle(el,'::after');
+    return {
+      dx:Math.abs((button.left+button.width/2)-(dot.left+dot.width/2)),
+      dy:Math.abs((button.top+button.height/2)-(dot.top+dot.height/2)),
+      borderTop:ring.borderTopWidth,
+      insetTop:ring.top
+    };
+  });
+  expect(ringGeometry.dx).toBeLessThan(.25);
+  expect(ringGeometry.dy).toBeLessThan(.25);
+  expect(ringGeometry.borderTop).toBe('2px');
   expect(await page.evaluate(()=>document.documentElement.dataset.accent)).toBe('green');
   expect(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--v5-accent').trim().toLowerCase())).toBe('#208a4b');
   expect((await state(page)).settings.accentColor).toBe('green');
