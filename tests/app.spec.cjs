@@ -1048,6 +1048,36 @@ test('header bell opens standalone notifications while Weather and Tires is a fu
 });
 
 
+test('accent color can be changed, persisted and adapted to dark theme', async({page})=>{
+  await addCar(page);
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="more"]').click();
+
+  await expect(page.locator('.v5-accent-swatch')).toHaveCount(7);
+  await expect(page.locator('.v5-accent-swatch.active')).toHaveAttribute('data-value','blue');
+  expect(await page.evaluate(()=>document.documentElement.dataset.accent)).toBe('blue');
+
+  await page.locator('.v5-accent-swatch[data-value="green"]').click();
+  await expect(page.locator('.v5-accent-swatch[data-value="green"]')).toHaveClass(/active/);
+  expect(await page.evaluate(()=>document.documentElement.dataset.accent)).toBe('green');
+  expect(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--v5-accent').trim().toLowerCase())).toBe('#208a4b');
+  expect((await state(page)).settings.accentColor).toBe('green');
+
+  await page.reload();
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.accent)).toBe('green');
+  expect(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--v5-accent').trim().toLowerCase())).toBe('#208a4b');
+
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="more"]').click();
+  await page.locator('[data-input="theme"]').selectOption('dark');
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.getAttribute('data-theme'))).toBe('dark');
+  expect(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--v5-accent').trim().toLowerCase())).toBe('#45d483');
+  await expect(page.locator('.v5-accent-swatch[data-value="green"]')).toHaveAttribute('aria-pressed','true');
+
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+
 test('iPhone-like layout handles long content, themes and safe-area inputs', async({page,context,browserName})=>{
   await addCar(page,{make:'Mercedes-Benz',model:'C-Class Очень длинное название автомобиля',initial:'9000000',current:'9999999'});
   await page.setViewportSize({width:320,height:568});
