@@ -1095,6 +1095,61 @@ test('accent color can be changed, persisted and adapted to dark theme', async({
 });
 
 
+test('OLED text size and compact density persist without breaking the grid', async({page})=>{
+  await addCar(page);
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="more"]').click();
+  await page.locator('[data-view="appearance"]').click();
+
+  await expect(page.locator('[data-input="dark-style"]')).toHaveValue('standard');
+  await expect(page.locator('[data-input="text-size"]')).toHaveValue('standard');
+  await expect(page.locator('[data-input="interface-density"]')).toHaveValue('standard');
+
+  const standardRowHeight=await page.locator('.v5-setting-row').first().evaluate(el=>el.getBoundingClientRect().height);
+
+  await page.locator('[data-input="theme"]').selectOption('dark');
+  await page.locator('[data-input="dark-style"]').selectOption('oled');
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.oled)).toBe('true');
+  expect(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--v5-bg').trim().toLowerCase())).toBe('#000000');
+  expect(await page.evaluate(()=>getComputedStyle(document.querySelector('#app')).backgroundColor)).toBe('rgb(0, 0, 0)');
+
+  await page.locator('[data-input="text-size"]').selectOption('large');
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.textSize)).toBe('large');
+  expect(await page.evaluate(()=>{
+    const s=getComputedStyle(document.documentElement);
+    return (s.webkitTextSizeAdjust||s.textSizeAdjust||'').replace(/\s/g,'');
+  })).toContain('112%');
+
+  await page.locator('[data-input="interface-density"]').selectOption('compact');
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.density)).toBe('compact');
+  const compactRowHeight=await page.locator('.v5-setting-row').first().evaluate(el=>el.getBoundingClientRect().height);
+  expect(compactRowHeight).toBeLessThan(standardRowHeight);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+
+  const saved=await state(page);
+  expect(saved.settings.darkStyle).toBe('oled');
+  expect(saved.settings.textSize).toBe('large');
+  expect(saved.settings.interfaceDensity).toBe('compact');
+
+  await page.reload();
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.oled)).toBe('true');
+  expect(await page.evaluate(()=>document.documentElement.dataset.textSize)).toBe('large');
+  expect(await page.evaluate(()=>document.documentElement.dataset.density)).toBe('compact');
+
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="more"]').click();
+  await page.locator('[data-view="appearance"]').click();
+  await expect(page.locator('[data-input="dark-style"]')).toHaveValue('oled');
+  await expect(page.locator('[data-input="text-size"]')).toHaveValue('large');
+  await expect(page.locator('[data-input="interface-density"]')).toHaveValue('compact');
+
+  await page.locator('[data-input="theme"]').selectOption('light');
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.oled||'')).toBe('');
+  expect(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--v5-bg').trim().toLowerCase())).not.toBe('#000000');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+
 test('iPhone-like layout handles long content, themes and safe-area inputs', async({page,context,browserName})=>{
   await addCar(page,{make:'Mercedes-Benz',model:'C-Class Очень длинное название автомобиля',initial:'9000000',current:'9999999'});
   await page.setViewportSize({width:320,height:568});
