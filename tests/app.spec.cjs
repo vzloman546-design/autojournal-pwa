@@ -666,8 +666,7 @@ test('7-day weather forecast creates tire-change notification at 5C threshold', 
   await page.evaluate(async data=>{const db=await import('./db.js');await db.saveState(data);},seeded);
   await page.reload();
 
-  await gotoSecondary(page,'more');
-  await page.locator('[data-action="weather-open"]').click();
+  await page.locator('.v5-tabbar [data-view="weather"]').click();
   await expect(page.locator('.v5-weather-page')).toBeVisible();
   await expect(page.locator('.v5-tabbar [data-view="weather"]')).toHaveClass(/active/);
   await page.locator('[data-action="weather-check"]').click();
@@ -1052,6 +1051,11 @@ test('accent color can be changed, persisted and adapted to dark theme', async({
   await addCar(page);
   await openProfile(page);
   await page.locator('.v5-menu [data-view="more"]').click();
+  await expect(page.locator('[data-action="weather-open"]')).toHaveCount(0);
+  await expect(page.locator('[data-input="theme"]')).toHaveCount(0);
+  await expect(page.locator('.v5-accent-swatch')).toHaveCount(0);
+  await page.locator('[data-view="appearance"]').click();
+  await expect(page.locator('.v5-subbar-title')).toHaveText('Оформление');
 
   await expect(page.locator('.v5-accent-swatch')).toHaveCount(7);
   await expect(page.locator('.v5-accent-swatch.active')).toHaveAttribute('data-value','blue');
@@ -1069,6 +1073,7 @@ test('accent color can be changed, persisted and adapted to dark theme', async({
 
   await openProfile(page);
   await page.locator('.v5-menu [data-view="more"]').click();
+  await page.locator('[data-view="appearance"]').click();
   await page.locator('[data-input="theme"]').selectOption('dark');
   await expect.poll(()=>page.evaluate(()=>document.documentElement.getAttribute('data-theme'))).toBe('dark');
   expect(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--v5-accent').trim().toLowerCase())).toBe('#45d483');
@@ -1091,6 +1096,7 @@ test('iPhone-like layout handles long content, themes and safe-area inputs', asy
 
   await openProfile(page);
   await page.locator('.v5-menu [data-view="more"]').click();
+  await page.locator('[data-view="appearance"]').click();
   await page.locator('[data-input="theme"]').selectOption('dark');
   await expect.poll(()=>page.evaluate(()=>document.documentElement.getAttribute('data-theme'))).toBe('dark');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
