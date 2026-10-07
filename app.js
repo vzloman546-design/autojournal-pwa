@@ -75,6 +75,7 @@ const icons = {
   doc:`<svg class="icon" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5M9 12h6M9 16h6"/></svg>`,
   chart:`<svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>`,
   gear:`<svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2.1-.8-.7-1.7.9-2-2.1-2.1-2 .9-1.7-.7L10.5 2h-3l-.8 2.1-1.7.7-2-.9L.9 6l.9 2-.7 1.7L-1 10.5v3l2.1.8.7 1.7-.9 2L3 20.1l2-.9 1.7.7.8 2.1h3l.8-2.1 1.7-.7 2 .9 2.1-2.1-.9-2 .7-1.7z" transform="translate(3) scale(.75)"/></svg>`,
+  palette:`<svg class="icon" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h1.5a2.5 2.5 0 0 0 0-5H12a2 2 0 0 1 0-4h3.5A5.5 5.5 0 0 0 21 6.5C21 4.6 16.9 3 12 3Z"/><circle cx="7.5" cy="9" r="1"/><circle cx="10" cy="6.5" r="1"/><circle cx="15" cy="6.5" r="1"/><circle cx="17.5" cy="9.5" r="1"/></svg>`,
   close:`<svg class="icon" viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg>`,
   search:`<svg class="icon" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>`,
   weatherTire:`<svg class="icon" viewBox="0 0 24 24"><circle cx="8.5" cy="15" r="6"/><circle cx="8.5" cy="15" r="2.2"/><path d="M8.5 9v3.8M8.5 17.2V21M2.5 15h3.8M10.7 15h3.8"/><path d="M17.5 3v7M14.5 4.7l6 3.6M20.5 4.7l-6 3.6"/></svg>`,
@@ -386,7 +387,7 @@ const defaultState = () => ({
 let state = defaultState();
 let ui = { view:'home', sheet:null, sheetId:null, search:'', historyType:'all', expenseFilter:'all', notificationTab:'auto', analyticsTab:'expenses', analyticsPeriod:'month', reportMode:'short', healthSystemKey:'' };
 const primaryViews=new Set(['home','records','refuels','weather']);
-const secondaryTitles={profile:'Профиль',carcard:'Паспорт автомобиля',report:'Отчёт автомобиля',analytics:'Статистика',documents:'Документы',parts:'Здоровье автомобиля',notifications:'Уведомления',more:'Настройки'};
+const secondaryTitles={profile:'Профиль',carcard:'Паспорт автомобиля',report:'Отчёт автомобиля',analytics:'Статистика',documents:'Документы',parts:'Здоровье автомобиля',notifications:'Уведомления',more:'Настройки',appearance:'Оформление'};
 let navStack=[];
 let nextTransition='';
 const viewScrollPositions=new Map();
@@ -972,8 +973,11 @@ function accentColorSetting(){
   return `<div class="v5-setting-row v5-accent-setting"><div><strong>Акцентный цвет</strong><span>Цвет кнопок, активных вкладок и выделений</span></div><div class="v5-accent-picker" role="group" aria-label="Акцентный цвет">${Object.entries(ACCENT_PALETTES).map(([key,item])=>`<button type="button" class="v5-accent-swatch ${selected===key?'active':''}" data-action="accent-select" data-value="${key}" aria-label="${item.label}" aria-pressed="${selected===key?'true':'false'}" title="${item.label}"><span style="--swatch:${item.light.accent};--swatch-2:${item.light.accent2}"></span></button>`).join('')}</div></div>`;
 }
 
+function appearancePage(){
+  return `<main class="v5-main"><div class="v5-page v5-secondary-page"><div class="v5-menu-page"><div class="v5-setting-row"><div><strong>Тема</strong><span>Системная, светлая или тёмная</span></div><select data-input="theme"><option value="system" ${state.settings.theme==='system'?'selected':''}>Система</option><option value="light" ${state.settings.theme==='light'?'selected':''}>Светлая</option><option value="dark" ${state.settings.theme==='dark'?'selected':''}>Тёмная</option></select></div>${accentColorSetting()}</div></div></main>`;
+}
 function morePage(){
-  return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Настройки</h1><div class="v5-menu-page"><div class="v5-setting-row"><div><strong>Тема</strong><span>Системная, светлая или тёмная</span></div><select data-input="theme"><option value="system" ${state.settings.theme==='system'?'selected':''}>Система</option><option value="light" ${state.settings.theme==='light'?'selected':''}>Светлая</option><option value="dark" ${state.settings.theme==='dark'?'selected':''}>Тёмная</option></select></div>${accentColorSetting()}<button data-action="weather-open">${icons.weatherTire}<span><strong>Погода и шины</strong><small>${state.settings.weatherTireEnabled?(state.settings.weatherTireLat!=null?'Прогноз на 7 дней · порог '+fmtNum(state.settings.weatherTireThreshold,1)+' °C':'Включено · нужно определить местоположение'):'Напоминание о сезонной смене шин'}</small></span><b>›</b></button><button data-action="calendar-export">${icons.calendar}<span><strong>Экспорт напоминаний</strong><small>Файл .ics для системного календаря</small></span><b>›</b></button><button data-action="backup-export">${icons.export}<span><strong>Резервная копия</strong><small>Все локальные данные в JSON</small></span><b>›</b></button><button data-action="backup-import">${icons.import}<span><strong>Восстановить копию</strong><small>Заменит текущие данные после подтверждения</small></span><b>›</b></button><button data-action="persist-storage">${icons.check}<span><strong>Защитить хранилище</strong><small>Запросить persistent storage</small></span><b>›</b></button></div><section class="section"><button class="btn danger block" data-action="reset-all">Удалить все локальные данные</button></section></div><input id="backup-input" type="file" accept="application/json,.json" hidden></main>`;
+  return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Настройки</h1><div class="v5-menu-page"><button data-view="appearance">${icons.palette}<span><strong>Оформление</strong><small>Тема и акцентный цвет</small></span><b>›</b></button><button data-action="calendar-export">${icons.calendar}<span><strong>Экспорт напоминаний</strong><small>Файл .ics для системного календаря</small></span><b>›</b></button><button data-action="backup-export">${icons.export}<span><strong>Резервная копия</strong><small>Все локальные данные в JSON</small></span><b>›</b></button><button data-action="backup-import">${icons.import}<span><strong>Восстановить копию</strong><small>Заменит текущие данные после подтверждения</small></span><b>›</b></button><button data-action="persist-storage">${icons.check}<span><strong>Защитить хранилище</strong><small>Запросить persistent storage</small></span><b>›</b></button></div><section class="section"><button class="btn danger block" data-action="reset-all">Удалить все локальные данные</button></section></div><input id="backup-input" type="file" accept="application/json,.json" hidden></main>`;
 }
 
 
@@ -1889,7 +1893,7 @@ function render(){
     return;
   }
   delete root.dataset.firstRun;
-  const page={home:homePage,records:historyPage,refuels:refuelsPage,weather:weatherPage,notifications:notificationsPage,profile:profilePage,carcard:carCardPage,report:reportPage,parts:partsPage,analytics:analyticsPage,documents:documentsPage,more:morePage}[ui.view]||homePage;
+  const page={home:homePage,records:historyPage,refuels:refuelsPage,weather:weatherPage,notifications:notificationsPage,profile:profilePage,carcard:carCardPage,report:reportPage,parts:partsPage,analytics:analyticsPage,documents:documentsPage,more:morePage,appearance:appearancePage}[ui.view]||homePage;
   const secondary=!primaryViews.has(ui.view);
   root.dataset.secondary=secondary?'true':'false';
   root.innerHTML=`${topbar()}${page()}${secondary?'':tabbar()}${renderSheet()}`;
