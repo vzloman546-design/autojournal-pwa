@@ -19,6 +19,16 @@ const fmtDate = v => v ? new Intl.DateTimeFormat('ru-RU').format(new Date(`${v}T
 const clamp = (v,min,max) => Math.min(max,Math.max(min,v));
 const nonneg = (v, fallback=0) => { const n=Number(v); return Number.isFinite(n) ? Math.max(0,n) : fallback; };
 const plural = (n,one,few,many) => { const v=Math.abs(Math.trunc(Number(n)||0))%100, d=v%10; return v>10&&v<20?many:d===1?one:d>=2&&d<=4?few:many; };
+const ACCENT_PALETTES={
+  blue:{label:'Синий',light:{accent:'#315ce8',accent2:'#4382ff',soft:'#eef1ff'},dark:{accent:'#3977ff',accent2:'#168cff',soft:'#142949'}},
+  purple:{label:'Фиолетовый',light:{accent:'#7c3aed',accent2:'#a855f7',soft:'#f3e8ff'},dark:{accent:'#a78bfa',accent2:'#c084fc',soft:'#2e1b4e'}},
+  pink:{label:'Розовый',light:{accent:'#d63384',accent2:'#ec4899',soft:'#fce7f3'},dark:{accent:'#f472b6',accent2:'#ec4899',soft:'#4a1933'}},
+  red:{label:'Красный',light:{accent:'#d93a3a',accent2:'#ff5a5f',soft:'#ffecec'},dark:{accent:'#ff625f',accent2:'#ff453a',soft:'#481c1c'}},
+  orange:{label:'Оранжевый',light:{accent:'#c96700',accent2:'#ff9500',soft:'#fff1db'},dark:{accent:'#ff9f0a',accent2:'#ffb340',soft:'#472b0c'}},
+  green:{label:'Зелёный',light:{accent:'#208a4b',accent2:'#34c759',soft:'#e8f7ed'},dark:{accent:'#45d483',accent2:'#30d158',soft:'#153b25'}},
+  teal:{label:'Бирюзовый',light:{accent:'#087f8c',accent2:'#14b8a6',soft:'#e4f7f5'},dark:{accent:'#2dd4bf',accent2:'#22d3ee',soft:'#123b3c'}}
+};
+const accentPaletteKey=value=>Object.prototype.hasOwnProperty.call(ACCENT_PALETTES,String(value||''))?String(value):'blue';
 const safeImageData = (v='') => /^data:image\/(?:png|jpe?g|webp|gif|heic|heif);base64,/i.test(String(v)) ? String(v) : '';
 const safeStoredFileData = (v='') => /^data:(?:image\/(?:png|jpe?g|webp|gif|heic|heif)|application\/pdf|text\/plain(?:;charset=[^;,]+)?);base64,/i.test(String(v)) ? String(v) : '';
 const dateOK = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v||'')) && !Number.isNaN(new Date(`${v}T12:00:00`).getTime());
@@ -343,6 +353,7 @@ const defaultState = () => ({
   version: APP_VERSION,
   settings: {
     theme: 'system',
+    accentColor: 'blue',
     defaultWarnKm: 1000,
     defaultWarnDays: 14,
     currency: 'RUB',
@@ -457,8 +468,17 @@ function effectiveTheme() {
 }
 function applyTheme() {
   const t=state.settings.theme;
-  document.documentElement.removeAttribute('data-theme');
-  if (t==='light' || t==='dark') document.documentElement.setAttribute('data-theme',t);
+  const root=document.documentElement;
+  root.removeAttribute('data-theme');
+  if (t==='light' || t==='dark') root.setAttribute('data-theme',t);
+  const accentKey=accentPaletteKey(state.settings.accentColor),palette=ACCENT_PALETTES[accentKey][effectiveTheme()];
+  state.settings.accentColor=accentKey;
+  root.dataset.accent=accentKey;
+  root.style.setProperty('--v5-accent',palette.accent);
+  root.style.setProperty('--v5-accent2',palette.accent2);
+  root.style.setProperty('--v5-soft',palette.soft);
+  root.style.setProperty('--accent',palette.accent);
+  root.style.setProperty('--accent-soft',palette.soft);
   const meta=document.querySelector('meta[name="theme-color"]');
   if(meta) meta.setAttribute('content', effectiveTheme()==='dark' ? '#0b0b0d' : '#f5f5f7');
 }
@@ -501,8 +521,9 @@ function migrate(raw) {
   for(const r of refuels) if(r.carId&&dateOK(r.date)&&r.odometer>0) odometerLogs.push({id:`mileage-refuel-${r.id}`,carId:r.carId,date:r.date,value:r.odometer,note:'Восстановлено из заправки',sourceType:'refuel',sourceId:r.id});
   for(const c of cars){ const vals=odometerLogs.filter(x=>x.carId===c.id).map(x=>Number(x.value)).filter(Number.isFinite); const loggedMax=vals.length?Math.max(...vals):0; if(c.currentOdometer>Math.max(c.initialOdometer,loggedMax)) odometerLogs.push({id:uid(),carId:c.id,date:c.trackingStartDate||today(),value:c.currentOdometer,note:'Восстановлено из текущего пробега',sourceType:'manual',sourceId:`legacy-current-${c.id}`}); const allVals=odometerLogs.filter(x=>x.carId===c.id).map(x=>nonneg(x.value)); c.currentOdometer=Math.max(c.initialOdometer,...(allVals.length?allVals:[0])); if(!c.trackingStartDate){const dates=odometerLogs.filter(x=>x.carId===c.id&&dateOK(x.date)).map(x=>x.date).sort();c.trackingStartDate=dates[0]||today();} }
   const theme=['system','light','dark'].includes(rs.theme)?rs.theme:base.settings.theme;
+  const accentColor=accentPaletteKey(rs.accentColor||base.settings.accentColor);
   const weatherLat=Number(rs.weatherTireLat),weatherLon=Number(rs.weatherTireLon),weatherThreshold=Number(rs.weatherTireThreshold);
-  const settings={...base.settings,theme,defaultWarnKm:nonneg(rs.defaultWarnKm??base.settings.defaultWarnKm,base.settings.defaultWarnKm),defaultWarnDays:nonneg(rs.defaultWarnDays??base.settings.defaultWarnDays,base.settings.defaultWarnDays),currency:'RUB',lastBackupAt:String(rs.lastBackupAt||''),
+  const settings={...base.settings,theme,accentColor,defaultWarnKm:nonneg(rs.defaultWarnKm??base.settings.defaultWarnKm,base.settings.defaultWarnKm),defaultWarnDays:nonneg(rs.defaultWarnDays??base.settings.defaultWarnDays,base.settings.defaultWarnDays),currency:'RUB',lastBackupAt:String(rs.lastBackupAt||''),
     weatherTireEnabled:Boolean(rs.weatherTireEnabled),
     weatherTireThreshold:Number.isFinite(weatherThreshold)?clamp(weatherThreshold,-20,20):5,
     weatherTireLat:Number.isFinite(weatherLat)&&weatherLat>=-90&&weatherLat<=90?weatherLat:null,
@@ -946,9 +967,13 @@ function docRow(d){
 }
 
 async function storageInfoText(){ try{if(!navigator.storage?.estimate)return 'Недоступно'; const {usage=0,quota=0}=await navigator.storage.estimate(); return `${fmtNum(usage/1024/1024,1)} из ${fmtNum(quota/1024/1024,0)} МБ`; }catch{return 'Недоступно';}}
+function accentColorSetting(){
+  const selected=accentPaletteKey(state.settings.accentColor);
+  return `<div class="v5-setting-row v5-accent-setting"><div><strong>Акцентный цвет</strong><span>Цвет кнопок, активных вкладок и выделений</span></div><div class="v5-accent-picker" role="group" aria-label="Акцентный цвет">${Object.entries(ACCENT_PALETTES).map(([key,item])=>`<button type="button" class="v5-accent-swatch ${selected===key?'active':''}" data-action="accent-select" data-value="${key}" aria-label="${item.label}" aria-pressed="${selected===key?'true':'false'}" title="${item.label}"><span style="--swatch:${item.light.accent};--swatch-2:${item.light.accent2}"></span></button>`).join('')}</div></div>`;
+}
 
 function morePage(){
-  return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Настройки</h1><div class="v5-menu-page"><div class="v5-setting-row"><div><strong>Тема</strong><span>Системная, светлая или тёмная</span></div><select data-input="theme"><option value="system" ${state.settings.theme==='system'?'selected':''}>Система</option><option value="light" ${state.settings.theme==='light'?'selected':''}>Светлая</option><option value="dark" ${state.settings.theme==='dark'?'selected':''}>Тёмная</option></select></div><button data-action="weather-open">${icons.weatherTire}<span><strong>Погода и шины</strong><small>${state.settings.weatherTireEnabled?(state.settings.weatherTireLat!=null?'Прогноз на 7 дней · порог '+fmtNum(state.settings.weatherTireThreshold,1)+' °C':'Включено · нужно определить местоположение'):'Напоминание о сезонной смене шин'}</small></span><b>›</b></button><button data-action="calendar-export">${icons.calendar}<span><strong>Экспорт напоминаний</strong><small>Файл .ics для системного календаря</small></span><b>›</b></button><button data-action="backup-export">${icons.export}<span><strong>Резервная копия</strong><small>Все локальные данные в JSON</small></span><b>›</b></button><button data-action="backup-import">${icons.import}<span><strong>Восстановить копию</strong><small>Заменит текущие данные после подтверждения</small></span><b>›</b></button><button data-action="persist-storage">${icons.check}<span><strong>Защитить хранилище</strong><small>Запросить persistent storage</small></span><b>›</b></button></div><section class="section"><button class="btn danger block" data-action="reset-all">Удалить все локальные данные</button></section></div><input id="backup-input" type="file" accept="application/json,.json" hidden></main>`;
+  return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Настройки</h1><div class="v5-menu-page"><div class="v5-setting-row"><div><strong>Тема</strong><span>Системная, светлая или тёмная</span></div><select data-input="theme"><option value="system" ${state.settings.theme==='system'?'selected':''}>Система</option><option value="light" ${state.settings.theme==='light'?'selected':''}>Светлая</option><option value="dark" ${state.settings.theme==='dark'?'selected':''}>Тёмная</option></select></div>${accentColorSetting()}<button data-action="weather-open">${icons.weatherTire}<span><strong>Погода и шины</strong><small>${state.settings.weatherTireEnabled?(state.settings.weatherTireLat!=null?'Прогноз на 7 дней · порог '+fmtNum(state.settings.weatherTireThreshold,1)+' °C':'Включено · нужно определить местоположение'):'Напоминание о сезонной смене шин'}</small></span><b>›</b></button><button data-action="calendar-export">${icons.calendar}<span><strong>Экспорт напоминаний</strong><small>Файл .ics для системного календаря</small></span><b>›</b></button><button data-action="backup-export">${icons.export}<span><strong>Резервная копия</strong><small>Все локальные данные в JSON</small></span><b>›</b></button><button data-action="backup-import">${icons.import}<span><strong>Восстановить копию</strong><small>Заменит текущие данные после подтверждения</small></span><b>›</b></button><button data-action="persist-storage">${icons.check}<span><strong>Защитить хранилище</strong><small>Запросить persistent storage</small></span><b>›</b></button></div><section class="section"><button class="btn danger block" data-action="reset-all">Удалить все локальные данные</button></section></div><input id="backup-input" type="file" accept="application/json,.json" hidden></main>`;
 }
 
 
@@ -2226,6 +2251,16 @@ document.addEventListener('click', async e=>{
   if(a==='open-reminders'){ui.sheet='reminders';render();return;}
   if(a==='open-profile'){navigateTo('profile');return;}
   if(a==='go-back'){goBack();return;}
+  if(a==='accent-select'){
+    const value=accentPaletteKey(el.dataset.value);
+    if(state.settings.accentColor!==value){
+      state.settings.accentColor=value;
+      applyTheme();
+      await persist();
+      render();
+    }
+    return;
+  }
   if(a==='analytics-tab'){ui.analyticsTab=el.dataset.value||'expenses';nextTransition='fade';render();return;}
   if(a==='report-mode'){ui.reportMode=el.dataset.value==='full'?'full':'short';nextTransition='fade';render();return;}
   if(a==='print-report'){saveVehicleReportPdf();return;}
@@ -2527,7 +2562,7 @@ function mergeSyncStates(localRaw,incomingRaw){
     for(const item of incoming[key]||[])map.set(String(item.id),item);
     result[key]=[...map.values()];
   }
-  result.settings={...local.settings,...incoming.settings,theme:local.settings.theme,lastBackupAt:local.settings.lastBackupAt};
+  result.settings={...local.settings,...incoming.settings,theme:local.settings.theme,accentColor:local.settings.accentColor,lastBackupAt:local.settings.lastBackupAt};
   result.nextSeq=Math.max(nonneg(local.nextSeq,1),nonneg(incoming.nextSeq,1));
   result.activeCarId=result.cars.some(x=>x.id===incoming.activeCarId)?incoming.activeCarId:(result.cars.some(x=>x.id===local.activeCarId)?local.activeCarId:result.cars[0]?.id||null);
   return migrate(result);
