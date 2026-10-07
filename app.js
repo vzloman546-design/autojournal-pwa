@@ -8,7 +8,7 @@ import {
   hashSyncData, updateVaultShadow
 } from './sync.js';
 
-const APP_VERSION = 7;
+const APP_VERSION = 8;
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -354,7 +354,10 @@ const defaultState = () => ({
   version: APP_VERSION,
   settings: {
     theme: 'system',
+    darkStyle: 'standard',
     accentColor: 'blue',
+    textSize: 'standard',
+    interfaceDensity: 'standard',
     defaultWarnKm: 1000,
     defaultWarnDays: 14,
     currency: 'RUB',
@@ -472,16 +475,27 @@ function applyTheme() {
   const root=document.documentElement;
   root.removeAttribute('data-theme');
   if (t==='light' || t==='dark') root.setAttribute('data-theme',t);
-  const accentKey=accentPaletteKey(state.settings.accentColor),palette=ACCENT_PALETTES[accentKey][effectiveTheme()];
+  const effective=effectiveTheme();
+  const darkStyle=['standard','oled'].includes(state.settings.darkStyle)?state.settings.darkStyle:'standard';
+  const textSize=['compact','standard','large'].includes(state.settings.textSize)?state.settings.textSize:'standard';
+  const density=['standard','compact'].includes(state.settings.interfaceDensity)?state.settings.interfaceDensity:'standard';
+  const accentKey=accentPaletteKey(state.settings.accentColor),palette=ACCENT_PALETTES[accentKey][effective];
   state.settings.accentColor=accentKey;
+  state.settings.darkStyle=darkStyle;
+  state.settings.textSize=textSize;
+  state.settings.interfaceDensity=density;
   root.dataset.accent=accentKey;
+  root.dataset.darkStyle=darkStyle;
+  root.dataset.textSize=textSize;
+  root.dataset.density=density;
+  if(effective==='dark'&&darkStyle==='oled')root.dataset.oled='true';else delete root.dataset.oled;
   root.style.setProperty('--v5-accent',palette.accent);
   root.style.setProperty('--v5-accent2',palette.accent2);
   root.style.setProperty('--v5-soft',palette.soft);
   root.style.setProperty('--accent',palette.accent);
   root.style.setProperty('--accent-soft',palette.soft);
   const meta=document.querySelector('meta[name="theme-color"]');
-  if(meta) meta.setAttribute('content', effectiveTheme()==='dark' ? '#0b0b0d' : '#f5f5f7');
+  if(meta) meta.setAttribute('content', effective==='dark' ? (darkStyle==='oled'?'#000000':'#0b0b0d') : '#f5f5f7');
 }
 function nextSeq(){ const n=Number(state.nextSeq||1); state.nextSeq=n+1; return n; }
 
@@ -522,9 +536,12 @@ function migrate(raw) {
   for(const r of refuels) if(r.carId&&dateOK(r.date)&&r.odometer>0) odometerLogs.push({id:`mileage-refuel-${r.id}`,carId:r.carId,date:r.date,value:r.odometer,note:'Восстановлено из заправки',sourceType:'refuel',sourceId:r.id});
   for(const c of cars){ const vals=odometerLogs.filter(x=>x.carId===c.id).map(x=>Number(x.value)).filter(Number.isFinite); const loggedMax=vals.length?Math.max(...vals):0; if(c.currentOdometer>Math.max(c.initialOdometer,loggedMax)) odometerLogs.push({id:uid(),carId:c.id,date:c.trackingStartDate||today(),value:c.currentOdometer,note:'Восстановлено из текущего пробега',sourceType:'manual',sourceId:`legacy-current-${c.id}`}); const allVals=odometerLogs.filter(x=>x.carId===c.id).map(x=>nonneg(x.value)); c.currentOdometer=Math.max(c.initialOdometer,...(allVals.length?allVals:[0])); if(!c.trackingStartDate){const dates=odometerLogs.filter(x=>x.carId===c.id&&dateOK(x.date)).map(x=>x.date).sort();c.trackingStartDate=dates[0]||today();} }
   const theme=['system','light','dark'].includes(rs.theme)?rs.theme:base.settings.theme;
+  const darkStyle=['standard','oled'].includes(rs.darkStyle)?rs.darkStyle:base.settings.darkStyle;
   const accentColor=accentPaletteKey(rs.accentColor||base.settings.accentColor);
+  const textSize=['compact','standard','large'].includes(rs.textSize)?rs.textSize:base.settings.textSize;
+  const interfaceDensity=['standard','compact'].includes(rs.interfaceDensity)?rs.interfaceDensity:base.settings.interfaceDensity;
   const weatherLat=Number(rs.weatherTireLat),weatherLon=Number(rs.weatherTireLon),weatherThreshold=Number(rs.weatherTireThreshold);
-  const settings={...base.settings,theme,accentColor,defaultWarnKm:nonneg(rs.defaultWarnKm??base.settings.defaultWarnKm,base.settings.defaultWarnKm),defaultWarnDays:nonneg(rs.defaultWarnDays??base.settings.defaultWarnDays,base.settings.defaultWarnDays),currency:'RUB',lastBackupAt:String(rs.lastBackupAt||''),
+  const settings={...base.settings,theme,darkStyle,accentColor,textSize,interfaceDensity,defaultWarnKm:nonneg(rs.defaultWarnKm??base.settings.defaultWarnKm,base.settings.defaultWarnKm),defaultWarnDays:nonneg(rs.defaultWarnDays??base.settings.defaultWarnDays,base.settings.defaultWarnDays),currency:'RUB',lastBackupAt:String(rs.lastBackupAt||''),
     weatherTireEnabled:Boolean(rs.weatherTireEnabled),
     weatherTireThreshold:Number.isFinite(weatherThreshold)?clamp(weatherThreshold,-20,20):5,
     weatherTireLat:Number.isFinite(weatherLat)&&weatherLat>=-90&&weatherLat<=90?weatherLat:null,
@@ -974,10 +991,17 @@ function accentColorSetting(){
 }
 
 function appearancePage(){
-  return `<main class="v5-main"><div class="v5-page v5-secondary-page"><div class="v5-menu-page"><div class="v5-setting-row"><div><strong>Тема</strong><span>Системная, светлая или тёмная</span></div><select data-input="theme"><option value="system" ${state.settings.theme==='system'?'selected':''}>Система</option><option value="light" ${state.settings.theme==='light'?'selected':''}>Светлая</option><option value="dark" ${state.settings.theme==='dark'?'selected':''}>Тёмная</option></select></div>${accentColorSetting()}</div></div></main>`;
+  const s=state.settings;
+  return `<main class="v5-main"><div class="v5-page v5-secondary-page"><div class="v5-menu-page">
+    <div class="v5-setting-row"><div><strong>Тема</strong><span>Системная, светлая или тёмная</span></div><select data-input="theme"><option value="system" ${s.theme==='system'?'selected':''}>Система</option><option value="light" ${s.theme==='light'?'selected':''}>Светлая</option><option value="dark" ${s.theme==='dark'?'selected':''}>Тёмная</option></select></div>
+    <div class="v5-setting-row"><div><strong>Тёмная тема</strong><span>OLED использует чистый чёрный фон #000</span></div><select data-input="dark-style"><option value="standard" ${s.darkStyle!=='oled'?'selected':''}>Обычная</option><option value="oled" ${s.darkStyle==='oled'?'selected':''}>OLED</option></select></div>
+    ${accentColorSetting()}
+    <div class="v5-setting-row"><div><strong>Размер текста</strong><span>Меняет только текст, не размеры карточек</span></div><select data-input="text-size"><option value="compact" ${s.textSize==='compact'?'selected':''}>Компактный</option><option value="standard" ${s.textSize!=='compact'&&s.textSize!=='large'?'selected':''}>Стандартный</option><option value="large" ${s.textSize==='large'?'selected':''}>Крупный</option></select></div>
+    <div class="v5-setting-row"><div><strong>Плотность интерфейса</strong><span>Компактная уменьшает вертикальные отступы</span></div><select data-input="interface-density"><option value="standard" ${s.interfaceDensity!=='compact'?'selected':''}>Стандартная</option><option value="compact" ${s.interfaceDensity==='compact'?'selected':''}>Компактная</option></select></div>
+  </div></div></main>`;
 }
 function morePage(){
-  return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Настройки</h1><div class="v5-menu-page"><button data-view="appearance">${icons.palette}<span><strong>Оформление</strong><small>Тема и акцентный цвет</small></span><b>›</b></button><button data-action="calendar-export">${icons.calendar}<span><strong>Экспорт напоминаний</strong><small>Файл .ics для системного календаря</small></span><b>›</b></button><button data-action="backup-export">${icons.export}<span><strong>Резервная копия</strong><small>Все локальные данные в JSON</small></span><b>›</b></button><button data-action="backup-import">${icons.import}<span><strong>Восстановить копию</strong><small>Заменит текущие данные после подтверждения</small></span><b>›</b></button><button data-action="persist-storage">${icons.check}<span><strong>Защитить хранилище</strong><small>Запросить persistent storage</small></span><b>›</b></button></div><section class="section"><button class="btn danger block" data-action="reset-all">Удалить все локальные данные</button></section></div><input id="backup-input" type="file" accept="application/json,.json" hidden></main>`;
+  return `<main class="v5-main"><div class="v5-page"><h1 class="v5-title">Настройки</h1><div class="v5-menu-page"><button data-view="appearance">${icons.palette}<span><strong>Оформление</strong><small>Тема, цвет, текст и плотность</small></span><b>›</b></button><button data-action="calendar-export">${icons.calendar}<span><strong>Экспорт напоминаний</strong><small>Файл .ics для системного календаря</small></span><b>›</b></button><button data-action="backup-export">${icons.export}<span><strong>Резервная копия</strong><small>Все локальные данные в JSON</small></span><b>›</b></button><button data-action="backup-import">${icons.import}<span><strong>Восстановить копию</strong><small>Заменит текущие данные после подтверждения</small></span><b>›</b></button><button data-action="persist-storage">${icons.check}<span><strong>Защитить хранилище</strong><small>Запросить persistent storage</small></span><b>›</b></button></div><section class="section"><button class="btn danger block" data-action="reset-all">Удалить все локальные данные</button></section></div><input id="backup-input" type="file" accept="application/json,.json" hidden></main>`;
 }
 
 
@@ -2228,6 +2252,9 @@ document.addEventListener('change', async e=>{
   if(key==='expense-filter'){ui.expenseFilter=e.target.value;render();}
   if(key==='analytics-period'){ui.analyticsPeriod=e.target.value;nextTransition='fade';render();}
   if(key==='theme'){state.settings.theme=e.target.value;applyTheme();await persist();render();}
+  if(key==='dark-style'){state.settings.darkStyle=e.target.value==='oled'?'oled':'standard';applyTheme();await persist();render();}
+  if(key==='text-size'){state.settings.textSize=['compact','large'].includes(e.target.value)?e.target.value:'standard';applyTheme();await persist();render();}
+  if(key==='interface-density'){state.settings.interfaceDensity=e.target.value==='compact'?'compact':'standard';applyTheme();await persist();render();}
   if(key==='weather-tire-enabled'){state.settings.weatherTireEnabled=Boolean(e.target.checked);await persist();await updateWeatherPushRegistration();if(state.settings.weatherTireEnabled)scheduleWeatherCheck(50);render();}
   if(key==='weather-threshold'){const n=Number(e.target.value);state.settings.weatherTireThreshold=Number.isFinite(n)?clamp(n,-20,20):5;state.settings.weatherTireConditionActive=false;await persist();await updateWeatherPushRegistration();scheduleWeatherCheck(50);render();}
   if(e.target.id==='backup-input') await importBackupFile(e.target.files[0]);
@@ -2566,7 +2593,7 @@ function mergeSyncStates(localRaw,incomingRaw){
     for(const item of incoming[key]||[])map.set(String(item.id),item);
     result[key]=[...map.values()];
   }
-  result.settings={...local.settings,...incoming.settings,theme:local.settings.theme,accentColor:local.settings.accentColor,lastBackupAt:local.settings.lastBackupAt};
+  result.settings={...local.settings,...incoming.settings,theme:local.settings.theme,darkStyle:local.settings.darkStyle,accentColor:local.settings.accentColor,textSize:local.settings.textSize,interfaceDensity:local.settings.interfaceDensity,lastBackupAt:local.settings.lastBackupAt};
   result.nextSeq=Math.max(nonneg(local.nextSeq,1),nonneg(incoming.nextSeq,1));
   result.activeCarId=result.cars.some(x=>x.id===incoming.activeCarId)?incoming.activeCarId:(result.cars.some(x=>x.id===local.activeCarId)?local.activeCarId:result.cars[0]?.id||null);
   return migrate(result);
