@@ -1906,3 +1906,253 @@ body.v5-sheet-settling .sheet-backdrop{
   .v5-weather-number{width:102px;min-width:102px}
   .v5-weather-forecast-row{padding:10px 11px;gap:10px}
 }
+
+
+/* =========================================================
+   AutoJournal — global layout grid normalization
+   Alignment only: keeps the existing visual language intact.
+   ========================================================= */
+:root{
+  --aj-grid-1:4px;
+  --aj-grid-2:8px;
+  --aj-grid-3:12px;
+  --aj-grid-4:16px;
+  --aj-grid-5:20px;
+  --aj-grid-6:24px;
+  --aj-content-x:16px;
+}
+
+/* One vertical guide for every full-screen destination. */
+.v5-topbar,
+.v5-subbar{
+  padding-left:max(var(--aj-content-x),env(safe-area-inset-left,0px));
+  padding-right:max(var(--aj-content-x),env(safe-area-inset-right,0px));
+}
+.v5-main{
+  padding-left:max(var(--aj-content-x),env(safe-area-inset-left,0px));
+  padding-right:max(var(--aj-content-x),env(safe-area-inset-right,0px));
+}
+.v5-page,
+.v5-secondary-page,
+.v5-weather-page,
+.v5-health-page,
+.v5-report-page{
+  width:100%;
+  min-width:0;
+}
+.v5-page>*,
+.v5-secondary-page>*,
+.v5-weather-page>*,
+.v5-health-page>*,
+.v5-report-page>*{
+  min-width:0;
+}
+.v5-title{
+  margin-top:var(--aj-grid-2);
+  margin-bottom:var(--aj-grid-6);
+}
+.v5-section{
+  margin-top:var(--aj-grid-6);
+}
+.v5-section h2{
+  margin-bottom:var(--aj-grid-3);
+}
+.v5-section-head{
+  margin-bottom:var(--aj-grid-3);
+}
+
+/* Repeated rows share one left/right rail and icon/text rhythm. */
+.v5-menu,
+.v5-menu-page{
+  margin-top:var(--aj-grid-4);
+}
+.v5-menu button,
+.v5-menu-page button,
+.v5-setting-row{
+  padding-left:var(--aj-grid-4);
+  padding-right:var(--aj-grid-4);
+  column-gap:var(--aj-grid-3);
+}
+.list-row,
+.menu-row{
+  padding-left:var(--aj-grid-4);
+  padding-right:var(--aj-grid-4);
+  column-gap:var(--aj-grid-3);
+}
+.list-row+.list-row::before,
+.menu-row+.menu-row::before{
+  left:64px;
+  right:var(--aj-grid-4);
+}
+.v5-list .list-row+.list-row::before{
+  display:none;
+}
+
+/* Cards that behave as rows use the same internal horizontal rail. */
+.v5-add-record,
+.v5-quick-card,
+.v5-profile-card,
+.v5-notify-card{
+  padding-left:var(--aj-grid-4);
+  padding-right:var(--aj-grid-4);
+  column-gap:var(--aj-grid-3);
+}
+.v5-add-record{
+  padding-top:var(--aj-grid-4);
+  padding-bottom:var(--aj-grid-4);
+}
+.v5-quick-card{
+  padding-top:var(--aj-grid-4);
+  padding-bottom:var(--aj-grid-4);
+}
+.v5-profile-card{
+  padding-top:var(--aj-grid-4);
+  padding-bottom:var(--aj-grid-4);
+}
+
+/* Home/statistics blocks stay on the same 4 px spacing system. */
+.v5-mileage-card{padding:var(--aj-grid-5)}
+.v5-quick-two{gap:var(--aj-grid-3)}
+.v5-stats-card{padding:var(--aj-grid-2)}
+.v5-stats-card>div{padding:var(--aj-grid-3) var(--aj-grid-2)}
+.v5-record-tools{gap:var(--aj-grid-2);margin:var(--aj-grid-4) 0}
+.v5-fuel-summary{padding:var(--aj-grid-2);margin:var(--aj-grid-4) 0}
+.v5-fuel-summary>div{padding:var(--aj-grid-3) var(--aj-grid-2)}
+.v5-analytics-grid{gap:var(--aj-grid-2);margin-top:var(--aj-grid-4)}
+.v5-fuel-metrics,
+.v5-fuel-facts,
+.v5-spec-grid,
+.v5-report-kpis{gap:var(--aj-grid-2)}
+
+/* Passport/spec rows line up with menus and other list destinations. */
+.v5-passport-actions{gap:var(--aj-grid-2);margin:var(--aj-grid-3) 0 var(--aj-grid-5)}
+.v5-passport-section{margin-top:var(--aj-grid-6)}
+.v5-spec-list>div{
+  gap:var(--aj-grid-3);
+  padding:var(--aj-grid-3) var(--aj-grid-4);
+}
+.v5-spec-editor{margin-top:var(--aj-grid-2)}
+.v5-spec-editor>summary{padding-left:var(--aj-grid-4);padding-right:var(--aj-grid-4)}
+.v5-spec-editor-grid{gap:var(--aj-grid-2);padding:0 var(--aj-grid-4) var(--aj-grid-4)}
+.v5-spec-editor-grid>.field{padding-top:var(--aj-grid-3)}
+
+/* Bottom sheets: header, content and actions now share the same 16 px rail. */
+.sheet-head{
+  padding-left:var(--aj-grid-4);
+  padding-right:var(--aj-grid-4);
+}
+.sheet-body{
+  padding:var(--aj-grid-4) var(--aj-grid-4) var(--aj-grid-5);
+}
+.sheet-foot{
+  padding-left:var(--aj-grid-4);
+  padding-right:var(--aj-grid-4);
+  display:grid;
+  gap:var(--aj-grid-2);
+}
+.sheet-foot>*{min-width:0}
+.sheet-foot>.btn,
+.sheet-foot>.btn-row,
+.sheet-foot>.v5-wide{
+  margin-top:0!important;
+}
+.form-section{margin-bottom:var(--aj-grid-5)}
+.form-title{margin-bottom:var(--aj-grid-2)}
+.field-grid{gap:var(--aj-grid-2)}
+.field{gap:var(--aj-grid-1)}
+.helper{margin-top:var(--aj-grid-2)}
+.btn-row{gap:var(--aj-grid-2)}
+.file-chip{
+  gap:var(--aj-grid-2);
+  flex-wrap:wrap;
+}
+.file-name{
+  flex:1 1 140px;
+}
+
+/* Stored files and sync screens use the same card rhythm. */
+.v5-stored-file-list{gap:var(--aj-grid-4)}
+.v5-stored-file-card{gap:var(--aj-grid-3);padding:var(--aj-grid-4)}
+.v5-stored-file-open{gap:var(--aj-grid-3)}
+.v5-sync-mode-grid{gap:var(--aj-grid-2);margin:var(--aj-grid-4) 0}
+.v5-sync-mode{padding:var(--aj-grid-4);gap:var(--aj-grid-2)}
+.v5-sync-summary{gap:var(--aj-grid-2);margin:var(--aj-grid-4) 0}
+.v5-sync-choice{gap:var(--aj-grid-2);margin-top:var(--aj-grid-3)}
+.v5-sync-live{gap:var(--aj-grid-3);padding:var(--aj-grid-3);margin:var(--aj-grid-3) 0}
+
+/* Vehicle Health: align hero/list/card content to the common rail. */
+.v5-health-hero{
+  gap:var(--aj-grid-3);
+  padding:var(--aj-grid-4);
+}
+.v5-health-summary{gap:var(--aj-grid-2)}
+.v5-health-summary>div{padding:var(--aj-grid-3)}
+.v5-health-section{gap:var(--aj-grid-3)}
+.v5-health-section-head{gap:var(--aj-grid-3)}
+.v5-health-item{
+  gap:var(--aj-grid-3);
+  padding:var(--aj-grid-3) var(--aj-grid-4);
+}
+.v5-health-note{padding:var(--aj-grid-3)}
+
+/* Weather & Tires: same rails as the rest of the application. */
+.v5-weather-page>.v5-title{margin-bottom:var(--aj-grid-2)}
+.v5-weather-page>.v5-secondary-lead{margin-bottom:var(--aj-grid-5)}
+.v5-weather-grid{gap:var(--aj-grid-3)}
+.v5-weather-section-head{
+  padding:var(--aj-grid-4);
+  padding-bottom:var(--aj-grid-3);
+}
+.v5-weather-card-body{
+  gap:var(--aj-grid-3);
+  padding:var(--aj-grid-3) var(--aj-grid-4) var(--aj-grid-4);
+}
+.v5-weather-toggle,
+.v5-weather-field{gap:var(--aj-grid-3)}
+.v5-weather-actions{gap:var(--aj-grid-2)}
+.v5-weather-forecast-row{
+  padding:var(--aj-grid-3) var(--aj-grid-4);
+  gap:var(--aj-grid-3);
+}
+.v5-weather-empty{padding:var(--aj-grid-4)}
+
+/* Prevent long labels/values from pushing any grid wider than the viewport. */
+.v5-menu button>*,
+.v5-menu-page button>*,
+.v5-setting-row>*,
+.list-row>*,
+.menu-row>*,
+.v5-add-record>*,
+.v5-quick-card>*,
+.v5-profile-card>*,
+.v5-notify-card>*,
+.v5-health-item>*,
+.v5-weather-toggle>*,
+.v5-weather-field>*,
+.v5-weather-forecast-row>*,
+.detail-grid>*,
+.field-grid>*,
+.btn-row>*{
+  min-width:0;
+}
+.v5-menu small,
+.v5-menu-page small,
+.row-sub,
+.v5-setting-row span,
+.v5-health-item-main small,
+.v5-weather-toggle small,
+.v5-weather-field small{
+  overflow-wrap:anywhere;
+}
+
+/* Narrow iPhones keep the same rails instead of introducing a second layout scale. */
+@media(max-width:430px){
+  .v5-health-hero{padding:var(--aj-grid-4)}
+  .v5-health-item{padding:var(--aj-grid-3) var(--aj-grid-4)}
+  .v5-stored-file-card{padding:var(--aj-grid-4)}
+}
+@media(max-width:359px){
+  .v5-weather-section-head{padding:var(--aj-grid-4);padding-bottom:var(--aj-grid-3)}
+  .v5-weather-card-body{padding:var(--aj-grid-3) var(--aj-grid-4) var(--aj-grid-4)}
+  .v5-weather-forecast-row{padding:var(--aj-grid-3) var(--aj-grid-4)}
+}
