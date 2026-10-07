@@ -2221,3 +2221,151 @@ body.v5-sheet-settling .sheet-backdrop{
   .v5-menu-page .v5-accent-swatch{width:28px;height:28px;min-width:28px;min-height:28px}
   .v5-accent-swatch>span{width:21px;height:21px}
 }
+
+
+/* =========================================================
+   Appearance options: OLED, text size and interface density
+   ========================================================= */
+:root{
+  --aj-text-adjust:100%;
+}
+:root[data-text-size="compact"]{--aj-text-adjust:92%}
+:root[data-text-size="standard"]{--aj-text-adjust:100%}
+:root[data-text-size="large"]{--aj-text-adjust:112%}
+
+html,
+body,
+#app{
+  -webkit-text-size-adjust:var(--aj-text-adjust);
+  text-size-adjust:var(--aj-text-adjust);
+}
+
+/* Keep form fields at iOS-safe sizes even when compact text is selected. */
+@media(max-width:600px){
+  input,
+  textarea,
+  select{
+    -webkit-text-size-adjust:100%;
+    text-size-adjust:100%;
+  }
+}
+
+/* OLED mode only becomes active when JS marks the effective theme as dark. */
+:root[data-oled="true"]{
+  color-scheme:dark;
+  --bg:#000000;
+  --surface:#09090b;
+  --surface-2:#111113;
+  --text:#f7f7f9;
+  --muted:#a0a0a8;
+  --muted-2:#73737b;
+  --line:#28282c;
+  --line-soft:#1b1b1f;
+  --shadow:none;
+
+  --v5-bg:#000000;
+  --v5-card:#101012;
+  --v5-text:#f7f7f9;
+  --v5-muted:#a0a0a8;
+  --v5-line:#28282c;
+}
+:root[data-oled="true"] html,
+:root[data-oled="true"] body,
+:root[data-oled="true"] #app,
+:root[data-oled="true"] #ios-edge-shield,
+:root[data-oled="true"] .v5-topbar,
+:root[data-oled="true"] .v5-subbar,
+:root[data-oled="true"] .v5-main{
+  background:#000000!important;
+}
+
+/* Compact density changes vertical rhythm only; horizontal rails stay untouched. */
+:root[data-density="compact"] .v5-title{
+  margin-top:6px;
+  margin-bottom:18px;
+}
+:root[data-density="compact"] .v5-section{
+  margin-top:20px;
+}
+:root[data-density="compact"] .v5-section h2,
+:root[data-density="compact"] .v5-section-head{
+  margin-bottom:10px;
+}
+:root[data-density="compact"] .v5-menu,
+:root[data-density="compact"] .v5-menu-page{
+  margin-top:12px;
+}
+:root[data-density="compact"] .v5-menu button,
+:root[data-density="compact"] .v5-menu-page button,
+:root[data-density="compact"] .v5-setting-row{
+  min-height:56px;
+  padding-top:8px;
+  padding-bottom:8px;
+}
+:root[data-density="compact"] .list-row,
+:root[data-density="compact"] .menu-row{
+  padding-top:9px;
+  padding-bottom:9px;
+}
+:root[data-density="compact"] .v5-add-record,
+:root[data-density="compact"] .v5-quick-card,
+:root[data-density="compact"] .v5-profile-card,
+:root[data-density="compact"] .v5-notify-card{
+  padding-top:12px;
+  padding-bottom:12px;
+}
+:root[data-density="compact"] .v5-mileage-card{
+  padding-top:16px;
+  padding-bottom:16px;
+}
+:root[data-density="compact"] .v5-stats-card>div,
+:root[data-density="compact"] .v5-fuel-summary>div{
+  padding-top:8px;
+  padding-bottom:8px;
+}
+:root[data-density="compact"] .v5-record-tools,
+:root[data-density="compact"] .v5-fuel-summary{
+  margin-top:12px;
+  margin-bottom:12px;
+}
+:root[data-density="compact"] .v5-passport-actions{
+  margin-top:10px;
+  margin-bottom:16px;
+}
+:root[data-density="compact"] .v5-passport-section{
+  margin-top:20px;
+}
+:root[data-density="compact"] .v5-spec-list>div,
+:root[data-density="compact"] .v5-health-item,
+:root[data-density="compact"] .v5-weather-forecast-row{
+  padding-top:9px;
+  padding-bottom:9px;
+}
+:root[data-density="compact"] .sheet-head{
+  padding-top:10px;
+  padding-bottom:8px;
+}
+:root[data-density="compact"] .sheet-body{
+  padding-top:12px;
+  padding-bottom:16px;
+}
+:root[data-density="compact"] .sheet-foot{
+  padding-top:10px;
+  padding-bottom:max(10px,env(safe-area-inset-bottom,0px));
+}
+:root[data-density="compact"] .form-section{
+  margin-bottom:16px;
+}
+:root[data-density="compact"] .v5-stored-file-card,
+:root[data-density="compact"] .v5-health-hero{
+  padding-top:12px;
+  padding-bottom:12px;
+}
+:root[data-density="compact"] .v5-weather-section-head{
+  padding-top:12px;
+  padding-bottom:9px;
+}
+:root[data-density="compact"] .v5-weather-card-body{
+  padding-top:9px;
+  padding-bottom:12px;
+}
