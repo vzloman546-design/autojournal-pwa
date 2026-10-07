@@ -950,6 +950,53 @@ test('secondary screens hide bottom nav and no horizontal overflow at mobile wid
   }
 });
 
+test('global layout keeps pages menus and sheets on one grid', async({page})=>{
+  await addCar(page);
+
+  for(const view of ['home','records','refuels','weather']){
+    await page.locator('.v5-tabbar [data-view="'+view+'"]').click();
+    const metrics=await page.evaluate(()=>{
+      const main=document.querySelector('.v5-main');
+      const pageEl=document.querySelector('.v5-page');
+      const cs=getComputedStyle(main);
+      return {
+        overflow:document.documentElement.scrollWidth<=innerWidth,
+        left:parseFloat(cs.paddingLeft),
+        right:parseFloat(cs.paddingRight),
+        pageWidth:pageEl?.getBoundingClientRect().width||0,
+        mainInner:main.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight)
+      };
+    });
+    expect(metrics.overflow).toBe(true);
+    expect(Math.abs(metrics.left-metrics.right)).toBeLessThan(.6);
+    expect(Math.abs(metrics.pageWidth-Math.min(760,metrics.mainInner))).toBeLessThan(1.5);
+  }
+
+  await openProfile(page);
+  await expect(page.locator('.v5-menu button').first()).toBeVisible();
+  const menuGrid=await page.locator('.v5-menu button').first().evaluate(el=>{
+    const cs=getComputedStyle(el);
+    return {left:parseFloat(cs.paddingLeft),right:parseFloat(cs.paddingRight),gap:parseFloat(cs.columnGap)};
+  });
+  expect(menuGrid.left).toBe(16);
+  expect(menuGrid.right).toBe(16);
+  expect(menuGrid.gap).toBe(12);
+
+  await page.locator('[data-action="go-back"]').click();
+  await page.locator('.v5-tabbar [data-view="records"]').click();
+  await page.locator('[data-action="add-entry"]').first().click();
+  const sheetGrid=await page.evaluate(()=>{
+    const pick=sel=>{const cs=getComputedStyle(document.querySelector(sel));return [parseFloat(cs.paddingLeft),parseFloat(cs.paddingRight)]};
+    return {head:pick('.sheet-head'),body:pick('.sheet-body'),foot:pick('.sheet-foot')};
+  });
+  for(const pair of [sheetGrid.head,sheetGrid.body,sheetGrid.foot]){
+    expect(pair[0]).toBe(16);
+    expect(pair[1]).toBe(16);
+  }
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+
 test('primary tabs ignore left-edge back swipe', async({page})=>{
   await addCar(page);
   for(const view of ['home','records','refuels','weather']){
