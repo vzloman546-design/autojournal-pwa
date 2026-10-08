@@ -29,9 +29,20 @@
       if(s.accentColor)root.dataset.accent=String(s.accentColor);
     }catch{} })();
   </script>
-  <link rel="manifest" href="./manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
-  <link rel="icon" href="./icons/icon-192.png" />
+  <link id="aj-manifest" rel="manifest" href="./manifest.webmanifest" />
+  <link id="aj-apple-touch-icon" rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png" />
+  <link id="aj-favicon" rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+  <script>
+    (() => {
+      try {
+        const settings=JSON.parse(localStorage.getItem('autojournal-appearance-v1')||'{}');
+        const dark=settings.theme==='dark'||(settings.theme!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);
+        document.getElementById('aj-manifest').href=dark?'./manifest-dark.webmanifest':'./manifest.webmanifest';
+        document.getElementById('aj-apple-touch-icon').href=dark?'./icons/apple-touch-icon-dark.png':'./icons/apple-touch-icon.png';
+        document.getElementById('aj-favicon').href=dark?'./icons/icon-192-dark.png':'./icons/icon-192.png';
+      } catch {}
+    })();
+  </script>
   <link rel="stylesheet" href="./styles.css" />
   <title>АвтоЖурнал</title>
 </head>
