@@ -2457,3 +2457,12 @@ body.v5-sheet-settling .sheet-backdrop{
   position:relative;
   z-index:1;
 }
+
+
+/* Vehicle passport search: same grid, themes and density as other controls */
+.v5-passport-search{margin-top:16px;min-width:0;box-sizing:border-box}
+.v5-passport-search input[type="search"]{min-width:0;width:100%;font:inherit;appearance:none;-webkit-appearance:none}
+.v5-passport-search input[type="search"]::-webkit-search-cancel-button{cursor:pointer}
+.v5-passport-search-count{margin-top:8px;font-size:.8125rem;color:var(--v5-muted)}
+.v5-passport-no-results{margin-top:24px;padding:20px 16px;border:1px solid var(--v5-line);border-radius:16px;background:var(--v5-card);color:var(--v5-muted);text-align:center;overflow-wrap:anywhere}
+:root[data-density="compact"] .v5-passport-search{margin-top:12px}
