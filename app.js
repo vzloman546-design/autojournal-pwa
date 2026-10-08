@@ -867,7 +867,8 @@ function healthTrackedComponentByKey(key){
     .filter(x=>x.systemKey===key)
     .sort((a,b)=>String(componentState(a).installedDate||'').localeCompare(String(componentState(b).installedDate||''))||nonneg(componentState(a).installedOdometer)-nonneg(componentState(b).installedOdometer)||String(a.id).localeCompare(String(b.id))).at(-1)||null;
 }
-function healthStatusText(status){
+function healthStatusText(status,comp=null){
+  if(status==='neutral'&&comp&&componentEvents(comp).some(e=>e.missingMileage&&!e.dueDate))return 'Нужен пробег';
   return {ok:'В норме',soon:'Скоро',due:'Срок наступил',overdue:'Просрочено',neutral:'Нет интервала'}[status]||status;
 }
 function healthCoreCard(key){
@@ -885,7 +886,7 @@ function healthCoreCard(key){
   return `<button class="v5-health-item" data-action="component-detail" data-id="${comp.id}">
     <span class="v5-health-item-icon">${status==='ok'?icons.check:status==='overdue'||status==='due'?icons.alert:icons.wrench}</span>
     <span class="v5-health-item-main"><strong>${esc(comp.name)}</strong><small>Последнее: ${fmtDate(cs.installedDate)} · ${componentKmText(cs.installedOdometer)}${next?` · ${esc(describeDue(next))}`:''}</small></span>
-    <span class="v5-health-state ${status}">${esc(healthStatusText(status))}</span><b>›</b>
+    <span class="v5-health-state ${status}">${esc(healthStatusText(status,comp))}</span><b>›</b>
   </button>`;
 }
 function healthExtraComponentCard(comp){
@@ -894,7 +895,7 @@ function healthExtraComponentCard(comp){
   return `<button class="v5-health-item compact" data-action="component-detail" data-id="${comp.id}">
     <span class="v5-health-item-icon">${icons.wrench}</span>
     <span class="v5-health-item-main"><strong>${esc(comp.name)}</strong><small>${next?esc(describeDue(next)):esc(comp.category||'Интервал не задан')}</small></span>
-    <span class="v5-health-state ${status}">${esc(healthStatusText(status))}</span><b>›</b>
+    <span class="v5-health-state ${status}">${esc(healthStatusText(status,comp))}</span><b>›</b>
   </button>`;
 }
 function partsPage(){
