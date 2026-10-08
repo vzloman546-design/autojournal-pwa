@@ -9,6 +9,27 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="АвтоЖурнал" />
   <meta name="description" content="Офлайн-сервисная книжка, заправки, расходы, напоминания и статистика автомобиля" />
+  <script>
+    (()=>{try{
+      const raw=localStorage.getItem('autojournal-appearance-v1');
+      if(!raw)return;
+      const s=JSON.parse(raw)||{},root=document.documentElement;
+      const theme=['light','dark'].includes(s.theme)?s.theme:'system';
+      const effective=theme==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):theme;
+      if(theme!=='system')root.setAttribute('data-theme',theme);
+      if(effective==='dark'&&s.darkStyle==='oled'){
+        root.dataset.oled='true';
+        root.dataset.darkStyle='oled';
+        root.style.backgroundColor='#000000';
+        root.style.setProperty('--v5-bg','#000000');
+        const meta=document.querySelector('meta[name="theme-color"]');
+        if(meta)meta.setAttribute('content','#000000');
+      }
+      if(['compact','standard','large'].includes(s.textSize))root.dataset.textSize=s.textSize;
+      if(['standard','compact'].includes(s.interfaceDensity))root.dataset.density=s.interfaceDensity;
+      if(s.accentColor)root.dataset.accent=String(s.accentColor);
+    }catch{} })();
+  </script>
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
   <link rel="icon" href="./icons/icon-192.png" />
