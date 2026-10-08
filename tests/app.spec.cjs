@@ -1146,6 +1146,23 @@ test('header bell opens standalone notifications while Weather and Tires is a fu
 });
 
 
+test('selected icon artwork follows explicit light/dark app theme and persists after reload',async({page})=>{
+  await addCar(page);
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="more"]').click();
+  await page.locator('[data-view="appearance"]').click();
+  await page.locator('[data-input="theme"]').selectOption('dark');
+  await expect(page.locator('#aj-manifest')).toHaveAttribute('href',/manifest-dark\.webmanifest$/);
+  await expect(page.locator('#aj-apple-touch-icon')).toHaveAttribute('href',/apple-touch-icon-dark\.png$/);
+  await expect(page.locator('#aj-favicon')).toHaveAttribute('href',/icon-192-dark\.png$/);
+  await page.reload();
+  await expect(page.locator('#aj-manifest')).toHaveAttribute('href',/manifest-dark\.webmanifest$/);
+  await page.locator('[data-input="theme"]').selectOption('light');
+  await expect(page.locator('#aj-manifest')).toHaveAttribute('href',/\/manifest\.webmanifest$/);
+  await expect(page.locator('#aj-apple-touch-icon')).toHaveAttribute('href',/\/apple-touch-icon\.png$/);
+  await expect(page.locator('#aj-favicon')).toHaveAttribute('href',/\/icon-192\.png$/);
+});
+
 test('accent color can be changed, persisted and adapted to dark theme', async({page})=>{
   await addCar(page);
   await openProfile(page);
