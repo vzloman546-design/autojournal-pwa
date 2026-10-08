@@ -503,12 +503,6 @@ function applyTheme() {
   if(meta) meta.setAttribute('content', effective==='dark' ? (darkStyle==='oled'?'#000000':'#0b0b0d') : '#f5f5f7');
   const iosStatusMeta=document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
   if(iosStatusMeta) iosStatusMeta.setAttribute('content',effective==='dark'?'black-translucent':'default');
-  const manifestLink=document.getElementById('aj-manifest');
-  if(manifestLink)manifestLink.href=effective==='dark'?'./manifest-dark.webmanifest':'./manifest.webmanifest';
-  const appleTouchLink=document.getElementById('aj-apple-touch-icon');
-  if(appleTouchLink)appleTouchLink.href=effective==='dark'?'./icons/apple-touch-icon-dark.png':'./icons/apple-touch-icon.png';
-  const faviconLink=document.getElementById('aj-favicon');
-  if(faviconLink)faviconLink.href=effective==='dark'?'./icons/icon-192-dark.png':'./icons/icon-192.png';
   try{
     localStorage.setItem('autojournal-appearance-v1',JSON.stringify({
       theme:t,
