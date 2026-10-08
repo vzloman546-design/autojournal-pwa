@@ -1246,8 +1246,7 @@ test('top car header uses edge-free glass blur while controls stay sharp', async
     const before=getComputedStyle(el,'::before');
     const main=el.nextElementSibling;
     const car=el.querySelector('.v5-car-head');
-    const bell=el.querySelector('.v5-head-notifications');
-    const avatar=el.querySelector('.v5-avatar');
+    const actions=el.querySelector('.v5-head-actions');
     return {
       topPosition:getComputedStyle(el).position,
       topBg:getComputedStyle(el).backgroundColor,
@@ -1259,8 +1258,7 @@ test('top car header uses edge-free glass blur while controls stay sharp', async
       mainHeight:getComputedStyle(main).height,
       mainPaddingTop:getComputedStyle(main).paddingTop,
       carZ:getComputedStyle(car).zIndex,
-      bellZ:getComputedStyle(bell).zIndex,
-      avatarZ:getComputedStyle(avatar).zIndex
+      actionsZ:getComputedStyle(actions).zIndex
     };
   });
   expect(metrics.topPosition).toBe('fixed');
@@ -1272,8 +1270,7 @@ test('top car header uses edge-free glass blur while controls stay sharp', async
   expect(metrics.mask).toContain('linear-gradient');
   expect(parseFloat(metrics.mainPaddingTop)).toBeGreaterThan(70);
   expect(Number(metrics.carZ)).toBeGreaterThan(0);
-  expect(Number(metrics.bellZ)).toBeGreaterThan(0);
-  expect(Number(metrics.avatarZ)).toBeGreaterThan(0);
+  expect(Number(metrics.actionsZ)).toBeGreaterThan(0);
 });
 
 
