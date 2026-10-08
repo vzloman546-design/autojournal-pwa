@@ -1261,8 +1261,8 @@ test('bottom nav blur fades in smoothly while the bar stays sharp', async({page}
     };
   });
   expect(metrics.beforeDisplay).toBe('block');
-  expect(parseFloat(metrics.beforeTop)).toBeLessThan(0);
-  expect(metrics.blur).toContain('blur(18px)');
+  expect(parseFloat(metrics.beforeTop)).toBeLessThan(-150);
+  expect(metrics.blur).toContain('blur(22px)');
   expect(metrics.mask).toContain('linear-gradient');
   expect(metrics.background).toContain('linear-gradient');
   expect(metrics.isolation).toBe('isolate');
