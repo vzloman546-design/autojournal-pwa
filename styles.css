@@ -2228,10 +2228,16 @@ body.v5-sheet-settling .sheet-backdrop{
    ========================================================= */
 :root{
   --aj-font-delta:0px;
+  --aj-base-font-size:16px;
 }
-:root[data-text-size="compact"]{--aj-font-delta:-1px}
-:root[data-text-size="standard"]{--aj-font-delta:0px}
-:root[data-text-size="large"]{--aj-font-delta:2px}
+:root[data-text-size="compact"]{--aj-font-delta:-1px;--aj-base-font-size:15px}
+:root[data-text-size="standard"]{--aj-font-delta:0px;--aj-base-font-size:16px}
+:root[data-text-size="large"]{--aj-font-delta:2px;--aj-base-font-size:18px}
+
+body,
+#app{
+  font-size:var(--aj-base-font-size);
+}
 
 /* OLED mode only becomes active when JS marks the effective theme as dark. */
 :root[data-oled="true"]{
