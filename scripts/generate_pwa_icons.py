@@ -12,12 +12,19 @@ DEST = ROOT / "icons"
 DEST.mkdir(exist_ok=True)
 SCALE = 3
 SIDE = 512
-for theme, background in (("light",(17,113,253)),("dark",(17,27,48))):
+# A solid WHITE canvas with the BLUE foreground helps iOS icon segmentation.
+# Do not use alpha in apple-touch-icon: web clips can turn it permanently black.
+for theme, background, foreground in (
+    ("light", (255,255,255), (17,113,253)),
+    ("dark", (15,23,42), (123,187,255)),
+):
     image = Image.new("RGB",(SIDE*SCALE,SIDE*SCALE), background)
     draw = ImageDraw.Draw(image)
     for depth, contour in SHAPES:
         draw.polygon([(x*SCALE,y*SCALE) for x,y in contour],
-                     fill=(255,255,255) if depth == 0 else background)
+                     fill=foreground if depth == 0 else background)
+    assert image.getpixel((20*SCALE,20*SCALE)) == background
+    assert image.getpixel((180*SCALE,130*SCALE)) == foreground
     for pixels in (180,192,512):
         name = "apple-touch-icon" if pixels == 180 else f"icon-{pixels}"
         if theme == "dark":
