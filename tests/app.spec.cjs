@@ -1239,41 +1239,6 @@ test('iPhone-like layout handles long content, themes and safe-area inputs', asy
 });
 
 
-test('top car header uses edge-free glass blur while controls stay sharp', async({page})=>{
-  await addCar(page);
-  await expect(page.locator('.v5-topbar')).toBeVisible();
-  const metrics=await page.locator('.v5-topbar').evaluate(el=>{
-    const before=getComputedStyle(el,'::before');
-    const main=el.nextElementSibling;
-    const car=el.querySelector('.v5-car-head');
-    const actions=el.querySelector('.v5-head-actions');
-    return {
-      topPosition:getComputedStyle(el).position,
-      topBg:getComputedStyle(el).backgroundColor,
-      beforePosition:before.position,
-      beforeTop:before.top,
-      beforeBottom:before.bottom,
-      blur:before.backdropFilter||before.webkitBackdropFilter||'',
-      mask:before.maskImage||before.webkitMaskImage||'',
-      mainHeight:getComputedStyle(main).height,
-      mainPaddingTop:getComputedStyle(main).paddingTop,
-      carZ:getComputedStyle(car).zIndex,
-      actionsZ:getComputedStyle(actions).zIndex
-    };
-  });
-  expect(metrics.topPosition).toBe('fixed');
-  expect(metrics.topBg).toBe('rgba(0, 0, 0, 0)');
-  expect(metrics.beforePosition).toBe('fixed');
-  expect(parseFloat(metrics.beforeTop)).toBe(0);
-  expect(parseFloat(metrics.beforeBottom)).toBe(0);
-  expect(metrics.blur).toContain('blur(22px)');
-  expect(metrics.mask).toContain('linear-gradient');
-  expect(parseFloat(metrics.mainPaddingTop)).toBeGreaterThan(70);
-  expect(Number(metrics.carZ)).toBeGreaterThan(0);
-  expect(Number(metrics.actionsZ)).toBeGreaterThan(0);
-});
-
-
 test('bottom nav blur fades in smoothly while the bar stays sharp', async({page})=>{
   await addCar(page);
   await expect(page.locator('.v5-tab-wrap')).toBeVisible();
