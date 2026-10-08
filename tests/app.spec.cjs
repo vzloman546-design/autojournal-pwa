@@ -1146,21 +1146,35 @@ test('header bell opens standalone notifications while Weather and Tires is a fu
 });
 
 
-test('selected icon artwork follows explicit light/dark app theme and persists after reload',async({page})=>{
+test('minimalist iPhone icon stays system-managed across app themes and PWA icons are valid PNGs',async({page})=>{
   await addCar(page);
+  const selectors={
+    '#aj-manifest':'./manifest.webmanifest',
+    '#aj-apple-touch-icon':'./icons/apple-touch-icon.png',
+    '#aj-favicon':'./icons/icon-192.png'
+  };
+  for(const [selector,href] of Object.entries(selectors)){
+    await expect(page.locator(selector)).toHaveAttribute('href',href);
+  }
   await openProfile(page);
   await page.locator('.v5-menu [data-view="more"]').click();
   await page.locator('[data-view="appearance"]').click();
-  await page.locator('[data-input="theme"]').selectOption('dark');
-  await expect(page.locator('#aj-manifest')).toHaveAttribute('href',/manifest-dark\.webmanifest$/);
-  await expect(page.locator('#aj-apple-touch-icon')).toHaveAttribute('href',/apple-touch-icon-dark\.png$/);
-  await expect(page.locator('#aj-favicon')).toHaveAttribute('href',/icon-192-dark\.png$/);
+  for(const theme of ['dark','light','system']){
+    await page.locator('[data-input="theme"]').selectOption(theme);
+    for(const [selector,href] of Object.entries(selectors))
+      await expect(page.locator(selector)).toHaveAttribute('href',href);
+  }
   await page.reload();
-  await expect(page.locator('#aj-manifest')).toHaveAttribute('href',/manifest-dark\.webmanifest$/);
-  await page.locator('[data-input="theme"]').selectOption('light');
-  await expect(page.locator('#aj-manifest')).toHaveAttribute('href',/\/manifest\.webmanifest$/);
-  await expect(page.locator('#aj-apple-touch-icon')).toHaveAttribute('href',/\/apple-touch-icon\.png$/);
-  await expect(page.locator('#aj-favicon')).toHaveAttribute('href',/\/icon-192\.png$/);
+  for(const [selector,href] of Object.entries(selectors))
+    await expect(page.locator(selector)).toHaveAttribute('href',href);
+  for(const [filename,size] of [['apple-touch-icon.png',180],['icon-192.png',192],['icon-512.png',512],['apple-touch-icon-dark.png',180]]){
+    const response=await page.request.get('./icons/'+filename);
+    expect(response.ok()).toBe(true);
+    const png=await response.body();
+    expect(png.subarray(0,8).toString('hex')).toBe('89504e470d0a1a0a');
+    expect(png.readUInt32BE(16)).toBe(size);
+    expect(png.readUInt32BE(20)).toBe(size);
+  }
 });
 
 test('accent color can be changed, persisted and adapted to dark theme', async({page})=>{
