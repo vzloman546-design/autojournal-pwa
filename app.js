@@ -488,7 +488,10 @@ function applyTheme() {
   root.dataset.darkStyle=darkStyle;
   root.dataset.textSize=textSize;
   root.dataset.density=density;
-  if(effective==='dark'&&darkStyle==='oled')root.dataset.oled='true';else delete root.dataset.oled;
+  const oledActive=effective==='dark'&&darkStyle==='oled';
+  if(oledActive)root.dataset.oled='true';else delete root.dataset.oled;
+  root.style.backgroundColor=oledActive?'#000000':'';
+  root.style.removeProperty('--v5-bg');
   root.style.setProperty('--v5-accent',palette.accent);
   root.style.setProperty('--v5-accent2',palette.accent2);
   root.style.setProperty('--v5-soft',palette.soft);
