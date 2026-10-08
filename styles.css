@@ -2457,3 +2457,74 @@ body.v5-sheet-settling .sheet-backdrop{
   position:relative;
   z-index:1;
 }
+
+
+/* =========================================================
+   Soft top-navigation glass fade
+   Mirrors the edge-free bottom blur on primary screens only.
+   ========================================================= */
+.v5-topbar{
+  position:fixed!important;
+  top:0;
+  left:0;
+  right:0;
+  z-index:20;
+  background:transparent!important;
+  isolation:isolate;
+}
+.v5-topbar::before{
+  content:"";
+  display:block;
+  position:fixed;
+  z-index:0;
+  inset:0;
+  pointer-events:none;
+  background:linear-gradient(
+    to bottom,
+    color-mix(in srgb,var(--v5-bg) 24%,transparent) 0%,
+    color-mix(in srgb,var(--v5-bg) 19%,transparent) 56px,
+    color-mix(in srgb,var(--v5-bg) 12%,transparent) 100px,
+    color-mix(in srgb,var(--v5-bg) 6%,transparent) 140px,
+    color-mix(in srgb,var(--v5-bg) 2%,transparent) 180px,
+    transparent 220px,
+    transparent 100%
+  );
+  -webkit-backdrop-filter:blur(22px) saturate(130%);
+  backdrop-filter:blur(22px) saturate(130%);
+  -webkit-mask-image:linear-gradient(
+    to bottom,
+    #000 0%,
+    rgba(0,0,0,.90) 45px,
+    rgba(0,0,0,.74) 70px,
+    rgba(0,0,0,.55) 95px,
+    rgba(0,0,0,.36) 120px,
+    rgba(0,0,0,.20) 145px,
+    rgba(0,0,0,.10) 170px,
+    rgba(0,0,0,.04) 195px,
+    rgba(0,0,0,.01) 220px,
+    transparent 250px,
+    transparent 100%
+  );
+  mask-image:linear-gradient(
+    to bottom,
+    #000 0%,
+    rgba(0,0,0,.90) 45px,
+    rgba(0,0,0,.74) 70px,
+    rgba(0,0,0,.55) 95px,
+    rgba(0,0,0,.36) 120px,
+    rgba(0,0,0,.20) 145px,
+    rgba(0,0,0,.10) 170px,
+    rgba(0,0,0,.04) 195px,
+    rgba(0,0,0,.01) 220px,
+    transparent 250px,
+    transparent 100%
+  );
+}
+.v5-topbar>*{
+  position:relative;
+  z-index:1;
+}
+.v5-topbar + .v5-main{
+  height:100dvh;
+  padding-top:calc(78px + env(safe-area-inset-top,0px));
+}
