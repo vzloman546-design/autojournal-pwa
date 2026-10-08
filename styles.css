@@ -2393,39 +2393,3 @@ body.v5-sheet-settling .sheet-backdrop{
     max-height:28px;
   }
 }
-
-
-/* =========================================================
-   Bottom navigation backdrop blur
-   Blurs only the content behind and below the floating bar.
-   ========================================================= */
-.v5-tab-wrap{
-  isolation:isolate;
-}
-.v5-tab-wrap::before{
-  content:""!important;
-  display:block!important;
-  position:absolute;
-  z-index:0;
-  inset:0;
-  pointer-events:none;
-  background:color-mix(in srgb,var(--v5-bg) 22%,transparent);
-  -webkit-backdrop-filter:blur(18px) saturate(135%);
-  backdrop-filter:blur(18px) saturate(135%);
-}
-.v5-tab-wrap::after{
-  content:""!important;
-  display:block!important;
-  position:absolute;
-  z-index:0;
-  left:0;
-  right:0;
-  top:0;
-  height:26px;
-  pointer-events:none;
-  background:linear-gradient(to bottom,color-mix(in srgb,var(--v5-bg) 0%,transparent),color-mix(in srgb,var(--v5-bg) 10%,transparent));
-}
-.v5-tabbar{
-  position:relative;
-  z-index:1;
-}
