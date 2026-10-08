@@ -1131,6 +1131,28 @@ test('OLED text size and compact density persist without breaking the grid', asy
   const compactRowHeight=await page.locator('.v5-setting-row').first().evaluate(el=>el.getBoundingClientRect().height);
   expect(compactRowHeight).toBeLessThan(standardRowHeight);
 
+  const compactAccentGeometry=await page.locator('.v5-accent-swatch.active').evaluate(el=>{
+    const box=el.getBoundingClientRect(),dot=el.querySelector('span').getBoundingClientRect(),ring=getComputedStyle(el,'::after');
+    return {
+      width:box.width,
+      height:box.height,
+      dotDx:Math.abs((box.left+box.width/2)-(dot.left+dot.width/2)),
+      dotDy:Math.abs((box.top+box.height/2)-(dot.top+dot.height/2)),
+      ringTop:ring.top,
+      ringLeft:ring.left,
+      ringRight:ring.right,
+      ringBottom:ring.bottom,
+      radius:ring.borderRadius
+    };
+  });
+  expect(Math.abs(compactAccentGeometry.width-compactAccentGeometry.height)).toBeLessThan(.25);
+  expect(compactAccentGeometry.dotDx).toBeLessThan(.25);
+  expect(compactAccentGeometry.dotDy).toBeLessThan(.25);
+  expect(compactAccentGeometry.ringTop).toBe(compactAccentGeometry.ringLeft);
+  expect(compactAccentGeometry.ringTop).toBe(compactAccentGeometry.ringRight);
+  expect(compactAccentGeometry.ringTop).toBe(compactAccentGeometry.ringBottom);
+  expect(compactAccentGeometry.radius).toBe('50%');
+
   await page.locator('[data-input="text-size"]').selectOption('large');
   await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.textSize)).toBe('large');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
