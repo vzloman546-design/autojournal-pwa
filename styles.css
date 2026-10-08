@@ -2393,3 +2393,58 @@ body.v5-sheet-settling .sheet-backdrop{
     max-height:28px;
   }
 }
+
+
+/* =========================================================
+   Soft bottom-navigation glass fade
+   A gradual native-like blur imitation with no visible edge.
+   ========================================================= */
+.v5-tab-wrap{
+  isolation:isolate;
+}
+.v5-tab-wrap::before{
+  content:""!important;
+  display:block!important;
+  position:absolute;
+  z-index:0;
+  left:0;
+  right:0;
+  top:-48px;
+  bottom:0;
+  pointer-events:none;
+  background:linear-gradient(
+    to bottom,
+    color-mix(in srgb,var(--v5-bg) 0%,transparent) 0%,
+    color-mix(in srgb,var(--v5-bg) 3%,transparent) 24%,
+    color-mix(in srgb,var(--v5-bg) 9%,transparent) 52%,
+    color-mix(in srgb,var(--v5-bg) 18%,transparent) 76%,
+    color-mix(in srgb,var(--v5-bg) 24%,transparent) 100%
+  );
+  -webkit-backdrop-filter:blur(18px) saturate(135%);
+  backdrop-filter:blur(18px) saturate(135%);
+  -webkit-mask-image:linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0,0,0,.06) 18%,
+    rgba(0,0,0,.32) 38%,
+    rgba(0,0,0,.72) 62%,
+    #000 82%,
+    #000 100%
+  );
+  mask-image:linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0,0,0,.06) 18%,
+    rgba(0,0,0,.32) 38%,
+    rgba(0,0,0,.72) 62%,
+    #000 82%,
+    #000 100%
+  );
+}
+.v5-tab-wrap::after{
+  display:none!important;
+}
+.v5-tabbar{
+  position:relative;
+  z-index:1;
+}
