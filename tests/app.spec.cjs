@@ -1239,6 +1239,39 @@ test('iPhone-like layout handles long content, themes and safe-area inputs', asy
 });
 
 
+test('bottom nav blur fades in smoothly while the bar stays sharp', async({page})=>{
+  await addCar(page);
+  await expect(page.locator('.v5-tab-wrap')).toBeVisible();
+  const metrics=await page.locator('.v5-tab-wrap').evaluate(el=>{
+    const before=getComputedStyle(el,'::before');
+    const bar=el.querySelector('.v5-tabbar');
+    const barStyle=getComputedStyle(bar);
+    const wrap=el.getBoundingClientRect();
+    return {
+      beforeDisplay:before.display,
+      beforeTop:before.top,
+      blur:before.backdropFilter||before.webkitBackdropFilter||'',
+      mask:before.maskImage||before.webkitMaskImage||'',
+      background:before.backgroundImage,
+      isolation:getComputedStyle(el).isolation,
+      barPosition:barStyle.position,
+      barZ:Number(barStyle.zIndex||0),
+      wrapBottom:wrap.bottom,
+      viewportHeight:innerHeight
+    };
+  });
+  expect(metrics.beforeDisplay).toBe('block');
+  expect(parseFloat(metrics.beforeTop)).toBeLessThan(0);
+  expect(metrics.blur).toContain('blur(18px)');
+  expect(metrics.mask).toContain('linear-gradient');
+  expect(metrics.background).toContain('linear-gradient');
+  expect(metrics.isolation).toBe('isolate');
+  expect(metrics.barPosition).toBe('relative');
+  expect(metrics.barZ).toBeGreaterThan(0);
+  expect(Math.abs(metrics.wrapBottom-metrics.viewportHeight)).toBeLessThan(1);
+});
+
+
 test('fuel journal calculates full-tank consumption with partial fills', async({page})=>{
   await addCar(page,{initial:'100000',current:'100700'});
   await addRefuel(page,{date:isoOffset(-2),odometer:100000,amount:3000,liters:50,station:'Лукойл',fullTank:true});
