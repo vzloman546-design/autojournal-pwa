@@ -1106,6 +1106,7 @@ test('OLED text size and compact density persist without breaking the grid', asy
   await expect(page.locator('[data-input="interface-density"]')).toHaveValue('standard');
 
   const standardRowHeight=await page.locator('.v5-setting-row').first().evaluate(el=>el.getBoundingClientRect().height);
+  const standardTextSize=await page.locator('.v5-setting-row strong').first().evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
 
   await page.locator('[data-input="theme"]').selectOption('dark');
   await page.locator('[data-input="dark-style"]').selectOption('oled');
@@ -1113,12 +1114,15 @@ test('OLED text size and compact density persist without breaking the grid', asy
   expect(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--v5-bg').trim().toLowerCase())).toBe('#000000');
   expect(await page.evaluate(()=>getComputedStyle(document.querySelector('#app')).backgroundColor)).toBe('rgb(0, 0, 0)');
 
+  await page.locator('[data-input="text-size"]').selectOption('compact');
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.textSize)).toBe('compact');
+  const compactTextSize=await page.locator('.v5-setting-row strong').first().evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
+  expect(compactTextSize).toBeLessThan(standardTextSize);
+
   await page.locator('[data-input="text-size"]').selectOption('large');
   await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.textSize)).toBe('large');
-  expect(await page.evaluate(()=>{
-    const s=getComputedStyle(document.documentElement);
-    return (s.webkitTextSizeAdjust||s.textSizeAdjust||'').replace(/\s/g,'');
-  })).toContain('112%');
+  const largeTextSize=await page.locator('.v5-setting-row strong').first().evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
+  expect(largeTextSize).toBeGreaterThan(standardTextSize);
 
   await page.locator('[data-input="interface-density"]').selectOption('compact');
   await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.density)).toBe('compact');
