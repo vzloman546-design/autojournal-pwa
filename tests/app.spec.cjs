@@ -1249,7 +1249,11 @@ test('bottom nav blur fades in smoothly while the bar stays sharp', async({page}
     const wrap=el.getBoundingClientRect();
     return {
       beforeDisplay:before.display,
+      beforePosition:before.position,
       beforeTop:before.top,
+      beforeBottom:before.bottom,
+      beforeLeft:before.left,
+      beforeRight:before.right,
       blur:before.backdropFilter||before.webkitBackdropFilter||'',
       mask:before.maskImage||before.webkitMaskImage||'',
       background:before.backgroundImage,
@@ -1261,7 +1265,11 @@ test('bottom nav blur fades in smoothly while the bar stays sharp', async({page}
     };
   });
   expect(metrics.beforeDisplay).toBe('block');
-  expect(parseFloat(metrics.beforeTop)).toBeLessThan(-150);
+  expect(metrics.beforePosition).toBe('fixed');
+  expect(parseFloat(metrics.beforeTop)).toBe(0);
+  expect(parseFloat(metrics.beforeBottom)).toBe(0);
+  expect(parseFloat(metrics.beforeLeft)).toBe(0);
+  expect(parseFloat(metrics.beforeRight)).toBe(0);
   expect(metrics.blur).toContain('blur(22px)');
   expect(metrics.mask).toContain('linear-gradient');
   expect(metrics.background).toContain('linear-gradient');
