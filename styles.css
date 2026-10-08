@@ -2178,15 +2178,21 @@ body.v5-sheet-settling .sheet-backdrop{
   height:30px;
   min-width:30px;
   min-height:30px;
+  max-width:30px;
+  max-height:30px;
+  aspect-ratio:1 / 1;
   padding:0;
   border-radius:50%;
   display:grid;
   grid-template-columns:none;
   place-items:center;
+  align-self:center;
+  justify-self:center;
   gap:0;
   text-align:center;
   background:transparent;
   border:0!important;
+  box-sizing:border-box;
 }
 .v5-accent-swatch>span{
   width:22px;
@@ -2280,7 +2286,7 @@ body.v5-sheet-settling .sheet-backdrop{
   margin-top:12px;
 }
 :root[data-density="compact"] .v5-menu button,
-:root[data-density="compact"] .v5-menu-page button,
+:root[data-density="compact"] .v5-menu-page button:not(.v5-accent-swatch),
 :root[data-density="compact"] .v5-setting-row{
   min-height:56px;
   padding-top:8px;
@@ -2361,5 +2367,29 @@ body.v5-sheet-settling .sheet-backdrop{
   textarea,
   select{
     font-size:max(16px,1rem)!important;
+  }
+}
+
+
+/* Compact density must never resize the circular accent controls. */
+:root[data-density="compact"] .v5-menu-page .v5-accent-swatch{
+  width:30px;
+  height:30px;
+  min-width:30px;
+  min-height:30px;
+  max-width:30px;
+  max-height:30px;
+  padding:0;
+  aspect-ratio:1 / 1;
+  border-radius:50%;
+}
+@media(max-width:359px){
+  :root[data-density="compact"] .v5-menu-page .v5-accent-swatch{
+    width:28px;
+    height:28px;
+    min-width:28px;
+    min-height:28px;
+    max-width:28px;
+    max-height:28px;
   }
 }
