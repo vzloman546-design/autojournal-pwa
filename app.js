@@ -496,6 +496,8 @@ function applyTheme() {
   root.style.setProperty('--accent-soft',palette.soft);
   const meta=document.querySelector('meta[name="theme-color"]');
   if(meta) meta.setAttribute('content', effective==='dark' ? (darkStyle==='oled'?'#000000':'#0b0b0d') : '#f5f5f7');
+  const iosStatusMeta=document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if(iosStatusMeta) iosStatusMeta.setAttribute('content',effective==='dark'?'black-translucent':'default');
 }
 function nextSeq(){ const n=Number(state.nextSeq||1); state.nextSeq=n+1; return n; }
 
