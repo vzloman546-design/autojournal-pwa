@@ -1146,7 +1146,7 @@ test('header bell opens standalone notifications while Weather and Tires is a fu
 });
 
 
-test('minimalist iPhone icon stays system-managed across app themes and PWA icons are valid PNGs',async({page})=>{
+test('original AutoJournal icon remains stable across app themes and PWA icons are valid PNGs',async({page})=>{
   await addCar(page);
   const selectors={
     '#aj-manifest':'./manifest.webmanifest',
@@ -1167,7 +1167,7 @@ test('minimalist iPhone icon stays system-managed across app themes and PWA icon
   await page.reload();
   for(const [selector,href] of Object.entries(selectors))
     await expect(page.locator(selector)).toHaveAttribute('href',href);
-  for(const [filename,size] of [['apple-touch-icon.png',180],['icon-192.png',192],['icon-512.png',512],['apple-touch-icon-dark.png',180]]){
+  for(const [filename,size] of [['apple-touch-icon.png',180],['icon-192.png',192],['icon-512.png',512]]){
     const response=await page.request.get('./icons/'+filename);
     expect(response.ok()).toBe(true);
     const png=await response.body();

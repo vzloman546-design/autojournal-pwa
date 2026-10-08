@@ -1,8 +1,7 @@
-const CACHE='autojournal-v5.14.30';
+const CACHE='autojournal-v5.14.31';
 const APP_SHELL=[
-  './','./index.html','./styles.css','./app.js','./db.js','./manifest.webmanifest','./manifest-dark.webmanifest',
+  './','./index.html','./styles.css','./app.js','./db.js','./manifest.webmanifest',
   './icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png',
-  './icons/icon-192-dark.png','./icons/icon-512-dark.png','./icons/apple-touch-icon-dark.png',
   './sync.js','./sync-config.js','./vendor/qrcode.mjs','./vendor/jsQR.js'
 ];
 self.addEventListener('install',event=>{
