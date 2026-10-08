@@ -941,6 +941,10 @@ test('backup cancellation leaves lastBackupAt untouched and saved file confirmat
   await closeSheet(page);
   expect((await state(page)).settings.lastBackupAt).toBe('');
   await page.locator('[data-action="backup-export"]').click();
+  await expect(page.locator('[data-action="backup-confirm"]')).toBeDisabled();
+  const [download]=await Promise.all([page.waitForEvent('download'),page.locator('[data-action="backup-download"]').click()]);
+  expect(await download.path()).toBeTruthy();
+  await expect(page.locator('[data-action="backup-confirm"]')).toBeEnabled();
   await page.locator('[data-action="backup-confirm"]').click();
   expect(Date.parse((await state(page)).settings.lastBackupAt)).toBeGreaterThan(0);
 });
