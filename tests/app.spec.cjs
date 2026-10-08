@@ -1124,10 +1124,15 @@ test('OLED text size and compact density persist without breaking the grid', asy
   const largeTextSize=await page.locator('.v5-setting-row strong').first().evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
   expect(largeTextSize).toBeGreaterThan(standardTextSize);
 
+  await page.locator('[data-input="text-size"]').selectOption('standard');
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.textSize)).toBe('standard');
   await page.locator('[data-input="interface-density"]').selectOption('compact');
   await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.density)).toBe('compact');
   const compactRowHeight=await page.locator('.v5-setting-row').first().evaluate(el=>el.getBoundingClientRect().height);
   expect(compactRowHeight).toBeLessThan(standardRowHeight);
+
+  await page.locator('[data-input="text-size"]').selectOption('large');
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.textSize)).toBe('large');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 
   const saved=await state(page);
