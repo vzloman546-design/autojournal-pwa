@@ -1164,9 +1164,16 @@ test('OLED text size and compact density persist without breaking the grid', asy
   expect(saved.settings.darkStyle).toBe('oled');
   expect(saved.settings.textSize).toBe('large');
   expect(saved.settings.interfaceDensity).toBe('compact');
+  const appearanceBootstrap=await page.evaluate(()=>JSON.parse(localStorage.getItem('autojournal-appearance-v1')||'{}'));
+  expect(appearanceBootstrap.theme).toBe('dark');
+  expect(appearanceBootstrap.darkStyle).toBe('oled');
+  expect(appearanceBootstrap.textSize).toBe('large');
+  expect(appearanceBootstrap.interfaceDensity).toBe('compact');
 
   await page.reload();
   await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.oled)).toBe('true');
+  expect(await page.evaluate(()=>document.querySelector('meta[name="theme-color"]')?.getAttribute('content'))).toBe('#000000');
+  expect(await page.evaluate(()=>getComputedStyle(document.documentElement).backgroundColor)).toBe('rgb(0, 0, 0)');
   expect(await page.evaluate(()=>document.documentElement.dataset.textSize)).toBe('large');
   expect(await page.evaluate(()=>document.documentElement.dataset.density)).toBe('compact');
 
