@@ -8,7 +8,7 @@ import {
   hashSyncData, updateVaultShadow
 } from './sync.js';
 
-const APP_VERSION = 8;
+const APP_VERSION = 9;
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -388,7 +388,7 @@ const defaultState = () => ({
 });
 
 let state = defaultState();
-let ui = { view:'home', sheet:null, sheetId:null, search:'', historyType:'all', expenseFilter:'all', notificationTab:'auto', analyticsTab:'expenses', analyticsPeriod:'month', reportMode:'short', healthSystemKey:'' };
+let ui = { view:'home', sheet:null, sheetId:null, search:'', historyType:'all', expenseFilter:'all', notificationTab:'auto', analyticsTab:'expenses', analyticsPeriod:'month', reportMode:'short', healthSystemKey:'', passportSearch:'' };
 const primaryViews=new Set(['home','records','refuels','weather']);
 const secondaryTitles={profile:'Профиль',carcard:'Паспорт автомобиля',report:'Отчёт автомобиля',analytics:'Статистика',documents:'Документы',parts:'Здоровье автомобиля',notifications:'Уведомления',more:'Настройки',appearance:'Оформление'};
 let navStack=[];
@@ -407,6 +407,7 @@ function restoreViewScroll(view=ui.view,root=$('#app')){
 }
 let pendingPdfFile=null;
 let pendingPdfUrl='';
+let pendingBackupFile=null;
 let syncPair=null;
 let syncMode='';
 let syncIncoming=null;
@@ -527,15 +528,15 @@ function migrate(raw) {
   let seq=1;
   const serviceEntries=(Array.isArray(raw.serviceEntries)?raw.serviceEntries:[]).map((x,index)=>({
     ...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),odometer:nonneg(x.odometer),type:String(x.type||'other'),title:String(x.title||''),category:String(x.category||''),faultKey:String(x.faultKey||''),
-    workText:String(x.workText||''),partsText:String(x.partsText||''),partsCost:nonneg(x.partsCost),laborCost:nonneg(x.laborCost),otherCost:nonneg(x.otherCost),systemKey:String(x.systemKey||inferSystemKey(x.title,x.category)),componentId:String(x.componentId||''),componentAction:String(x.componentAction||''),componentEventOdometer:nonneg(x.componentEventOdometer??x.odometer),notes:String(x.notes||''),
+    workText:String(x.workText||''),partsText:String(x.partsText||''),partsCost:nonneg(x.partsCost),laborCost:nonneg(x.laborCost),otherCost:nonneg(x.otherCost),systemKey:String(x.systemKey||inferSystemKey(x.title,x.category)),componentId:String(x.componentId||''),componentAction:String(x.componentAction||''),componentEventOdometer:x.componentEventOdometer===null?null:nonneg(x.componentEventOdometer??x.odometer),notes:String(x.notes||''),
     photos:Array.isArray(x.photos)?x.photos.filter(f=>f&&safeImageData(f.data)).map(f=>({id:String(f.id||uid()),name:String(f.name||'Фото'),data:safeImageData(f.data)})):[],
     createdAt:String(x.createdAt||`${String(x.date||'0000-00-00')}T00:00:00.000Z#${String(index).padStart(8,'0')}`),seq:nonneg(x.seq,seq++)
   }));
   const components=(Array.isArray(raw.components)?raw.components:[]).map(x=>({
     ...x,id:String(x.id||uid()),carId:String(x.carId||''),name:String(x.name||''),category:String(x.category||''),systemKey:String(x.systemKey||inferSystemKey(x.name,x.category)),brand:String(x.brand||''),partNumber:String(x.partNumber||''),
-    baseInstalledDate:String(x.baseInstalledDate||x.installedDate||nowISO()),baseInstalledOdometer:nonneg(x.baseInstalledOdometer??x.installedOdometer),
-    installedDate:String(x.installedDate||x.baseInstalledDate||nowISO()),installedOdometer:nonneg(x.installedOdometer??x.baseInstalledOdometer),lifeKm:nonneg(x.lifeKm),lifeMonths:nonneg(x.lifeMonths),inspectKm:nonneg(x.inspectKm),inspectMonths:nonneg(x.inspectMonths),
-    warnKm:x.warnKm==null?base.settings.defaultWarnKm:nonneg(x.warnKm),warnDays:x.warnDays==null?base.settings.defaultWarnDays:nonneg(x.warnDays),cost:nonneg(x.cost),notes:String(x.notes||''),sourceEntryId:String(x.sourceEntryId||''),lastInspectionDate:String(x.lastInspectionDate||''),lastInspectionOdometer:nonneg(x.lastInspectionOdometer)
+    baseInstalledDate:String(x.baseInstalledDate||x.installedDate||nowISO()),baseInstalledOdometer:x.baseInstalledOdometer===null?null:nonneg(x.baseInstalledOdometer??x.installedOdometer),
+    installedDate:String(x.installedDate||x.baseInstalledDate||nowISO()),installedOdometer:x.installedOdometer===null?null:nonneg(x.installedOdometer??x.baseInstalledOdometer),lifeKm:nonneg(x.lifeKm),lifeMonths:nonneg(x.lifeMonths),inspectKm:nonneg(x.inspectKm),inspectMonths:nonneg(x.inspectMonths),
+    warnKm:x.warnKm==null?base.settings.defaultWarnKm:nonneg(x.warnKm),warnDays:x.warnDays==null?base.settings.defaultWarnDays:nonneg(x.warnDays),cost:nonneg(x.cost),notes:String(x.notes||''),sourceEntryId:String(x.sourceEntryId||''),lastInspectionDate:String(x.lastInspectionDate||''),lastInspectionOdometer:x.lastInspectionOdometer===null?null:nonneg(x.lastInspectionOdometer)
   }));
   const expenses=(Array.isArray(raw.expenses)?raw.expenses:[]).map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),date:String(x.date||''),odometer:nonneg(x.odometer),category:String(x.category||'Другое'),amount:nonneg(x.amount),description:String(x.description||''),note:String(x.note||''),linkedServiceId:String(x.linkedServiceId||''),linkedRefuelId:String(x.linkedRefuelId||'')}));
   const documents=(Array.isArray(raw.documents)?raw.documents:[]).map(x=>({...x,id:String(x.id||uid()),carId:String(x.carId||''),title:String(x.title||''),type:String(x.type||''),number:String(x.number||''),issueDate:String(x.issueDate||''),expiryDate:String(x.expiryDate||''),remindDays:x.remindDays==null?30:nonneg(x.remindDays),files:Array.isArray(x.files)?x.files.filter(f=>f&&safeStoredFileData(f.data)).map(f=>({id:String(f.id||uid()),name:String(f.name||'Файл'),type:String(f.type||''),size:nonneg(f.size),data:safeStoredFileData(f.data)})):[]}));
@@ -579,12 +580,19 @@ async function persist() { await saveState(state); scheduleAutoSync(); }
 
 function compareLifecycle(a,b){ const ak=nonneg(a.componentEventOdometer??a.odometer),bk=nonneg(b.componentEventOdometer??b.odometer); return String(a.date||'').localeCompare(String(b.date||'')) || ak-bk || String(a.createdAt||'').localeCompare(String(b.createdAt||'')) || Number(a.seq||0)-Number(b.seq||0) || String(a.id||'').localeCompare(String(b.id||'')); }
 function componentState(comp){
-  let installedDate=comp.baseInstalledDate||comp.installedDate||today(), installedOdometer=nonneg(comp.baseInstalledOdometer??comp.installedOdometer);
-  let lastInspectionDate=installedDate, lastInspectionOdometer=installedOdometer;
+  // Null is an unknown reading for a historic replacement/check, not 0 km.
+  let installedDate=comp.baseInstalledDate||comp.installedDate||today();
+  let installedOdometer=comp.baseInstalledOdometer===null?null:nonneg(comp.baseInstalledOdometer??comp.installedOdometer);
+  let lastInspectionDate=installedDate,lastInspectionOdometer=installedOdometer;
   const actions=state.serviceEntries.filter(e=>e.componentId===comp.id&&['inspect','replace'].includes(e.componentAction)).sort(compareLifecycle);
-  for(const e of actions){const eventKm=nonneg(e.componentEventOdometer??e.odometer);if(e.componentAction==='replace'){installedDate=e.date;installedOdometer=eventKm;lastInspectionDate=e.date;lastInspectionOdometer=eventKm;}else{lastInspectionDate=e.date;lastInspectionOdometer=eventKm;}}
+  for(const e of actions){
+    const eventKm=e.componentEventOdometer===null?null:nonneg(e.componentEventOdometer??e.odometer);
+    if(e.componentAction==='replace'){installedDate=e.date;installedOdometer=eventKm;lastInspectionDate=e.date;lastInspectionOdometer=eventKm;}
+    else{lastInspectionDate=e.date;lastInspectionOdometer=eventKm;}
+  }
   return {installedDate,installedOdometer,lastInspectionDate,lastInspectionOdometer};
 }
+function componentKmText(value){return value==null?'пробег неизвестен':`${fmtNum(value)} км`;}
 function removeMileageSource(type,id){ state.odometerLogs=state.odometerLogs.filter(x=>!(x.sourceType===type&&x.sourceId===id)); const cid=car()?.id||state.serviceEntries.find(x=>x.id===id)?.carId||state.expenses.find(x=>x.id===id)?.carId; if(cid) recalculateCurrentOdometer(cid); }
 function recordMileageObservation(value,date,note,sourceType,sourceId){ const c=car(); const carId=c?.id || state.serviceEntries.find(x=>x.id===sourceId)?.carId || state.expenses.find(x=>x.id===sourceId)?.carId || (state.refuels||[]).find(x=>x.id===sourceId)?.carId; if(!carId)return; state.odometerLogs=state.odometerLogs.filter(x=>!(x.sourceType===sourceType&&x.sourceId===sourceId)); const n=nonneg(value); if(n>0){const derived=['service','component','expense','refuel'].includes(sourceType);state.odometerLogs.push({id:derived?`mileage-${sourceType}-${sourceId}`:uid(),carId,date,value:n,note,sourceType,sourceId});} recalculateCurrentOdometer(carId); }
 function recalculateCurrentOdometer(carId){ const c=state.cars.find(x=>x.id===carId); if(!c)return 0; const vals=[nonneg(c.initialOdometer),...state.odometerLogs.filter(x=>x.carId===carId).map(x=>nonneg(x.value))]; c.currentOdometer=Math.max(...vals); return c.currentOdometer; }
@@ -636,6 +644,7 @@ function averageKmPerDay(c=car()) {
 }
 
 function eventStatus({dueKm,dueDate,warnKm,warnDays}) {
+  if(dueKm==null&&!dueDate)return 'neutral';
   const km=currentKm(), t=today(); const kmOver=dueKm!=null&&km>dueKm, kmDue=dueKm!=null&&km===dueKm; const dateOver=dueDate&&t>dueDate, dateDue=dueDate&&t===dueDate;
   if(kmOver||dateOver)return 'overdue'; if(kmDue||dateDue)return 'due';
   const wk=Number(warnKm??state.settings.defaultWarnKm), wd=Number(warnDays??state.settings.defaultWarnDays);
@@ -652,22 +661,38 @@ function describeDue(ev) {
     const d=daysBetween(today(),ev.dueDate);
     bits.push(d<=0 ? `дата ${fmtDate(ev.dueDate)} прошла` : `${fmtDate(ev.dueDate)} (${d} дн.)`);
   }
+  if(ev.missingMileage)bits.push('укажите пробег на дату работы для расчёта по км');
   if (!bits.length) return 'срок не задан';
   return bits.join(' · ');
 }
 
 function componentEvents(comp) {
-  const events=[], cs=componentState(comp);
-  if(nonneg(comp.lifeKm)>0||nonneg(comp.lifeMonths)>0){const dueKm=nonneg(comp.lifeKm)>0?cs.installedOdometer+nonneg(comp.lifeKm):null;const dueDate=nonneg(comp.lifeMonths)>0?addMonths(cs.installedDate,comp.lifeMonths):null;const ev={kind:'replace',componentId:comp.id,title:`Замена: ${comp.name}`,dueKm,dueDate,warnKm:comp.warnKm,warnDays:comp.warnDays};ev.status=eventStatus(ev);events.push(ev);}
-  if(nonneg(comp.inspectKm)>0||nonneg(comp.inspectMonths)>0){const dueKm=nonneg(comp.inspectKm)>0?cs.lastInspectionOdometer+nonneg(comp.inspectKm):null;const dueDate=nonneg(comp.inspectMonths)>0?addMonths(cs.lastInspectionDate,comp.inspectMonths):null;const ev={kind:'inspect',componentId:comp.id,title:`Проверка: ${comp.name}`,dueKm,dueDate,warnKm:comp.warnKm,warnDays:comp.warnDays};ev.status=eventStatus(ev);events.push(ev);}
+  const events=[],cs=componentState(comp);
+  if(nonneg(comp.lifeKm)>0||nonneg(comp.lifeMonths)>0){
+    const missingMileage=nonneg(comp.lifeKm)>0&&cs.installedOdometer==null;
+    const dueKm=nonneg(comp.lifeKm)>0&&!missingMileage?cs.installedOdometer+nonneg(comp.lifeKm):null;
+    const dueDate=nonneg(comp.lifeMonths)>0?addMonths(cs.installedDate,comp.lifeMonths):null;
+    const ev={kind:'replace',componentId:comp.id,title:`Замена: ${comp.name}`,dueKm,dueDate,missingMileage,warnKm:comp.warnKm,warnDays:comp.warnDays};
+    ev.status=eventStatus(ev);events.push(ev);
+  }
+  if(nonneg(comp.inspectKm)>0||nonneg(comp.inspectMonths)>0){
+    const missingMileage=nonneg(comp.inspectKm)>0&&cs.lastInspectionOdometer==null;
+    const dueKm=nonneg(comp.inspectKm)>0&&!missingMileage?cs.lastInspectionOdometer+nonneg(comp.inspectKm):null;
+    const dueDate=nonneg(comp.inspectMonths)>0?addMonths(cs.lastInspectionDate,comp.inspectMonths):null;
+    const ev={kind:'inspect',componentId:comp.id,title:`Проверка: ${comp.name}`,dueKm,dueDate,missingMileage,warnKm:comp.warnKm,warnDays:comp.warnDays};
+    ev.status=eventStatus(ev);events.push(ev);
+  }
   return events;
 }
-
 function allReminders(includeOk=false) {
-  if(!car())return[]; const list=[]; for(const comp of carItems(state.components))list.push(...componentEvents(comp)); for(const doc of carItems(state.documents)){const ev=documentEvent(doc);if(ev)list.push(ev);} const rank={overdue:0,due:1,soon:2,ok:3}; return list.filter(x=>includeOk||x.status!=='ok').sort((a,b)=>rank[a.status]-rank[b.status]||String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999'))||(a.dueKm??1e15)-(b.dueKm??1e15));
+  if(!car())return[];
+  const list=[];for(const comp of carItems(state.components))list.push(...componentEvents(comp));
+  for(const doc of carItems(state.documents)){const ev=documentEvent(doc);if(ev)list.push(ev);}
+  const rank={overdue:0,due:1,soon:2,ok:3,neutral:4};
+  return list.filter(x=>includeOk||!['ok','neutral'].includes(x.status)).sort((a,b)=>rank[a.status]-rank[b.status]||String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999'))||(a.dueKm??1e15)-(b.dueKm??1e15));
 }
 function componentOverall(comp){const evs=componentEvents(comp);if(!evs.length)return'neutral';if(evs.some(x=>x.status==='overdue'))return'overdue';if(evs.some(x=>x.status==='due'))return'due';if(evs.some(x=>x.status==='soon'))return'soon';return'ok';}
-function componentProgress(comp){const cs=componentState(comp);if(!nonneg(comp.lifeKm)&&!nonneg(comp.lifeMonths))return 0;let ratios=[];if(nonneg(comp.lifeKm)>0)ratios.push((currentKm()-cs.installedOdometer)/nonneg(comp.lifeKm));if(nonneg(comp.lifeMonths)>0){const end=addMonths(cs.installedDate,comp.lifeMonths);const total=Math.max(1,daysBetween(cs.installedDate,end));ratios.push(daysBetween(cs.installedDate,today())/total);}return clamp(Math.max(...ratios,0),0,1.15);}
+function componentProgress(comp){const cs=componentState(comp);if(!nonneg(comp.lifeKm)&&!nonneg(comp.lifeMonths))return 0;let ratios=[];if(nonneg(comp.lifeKm)>0&&cs.installedOdometer!=null)ratios.push((currentKm()-cs.installedOdometer)/nonneg(comp.lifeKm));if(nonneg(comp.lifeMonths)>0){const end=addMonths(cs.installedDate,comp.lifeMonths);const total=Math.max(1,daysBetween(cs.installedDate,end));ratios.push(daysBetween(cs.installedDate,today())/total);}return clamp(Math.max(...ratios,0),0,1.15);}
 
 function pageHeaderTitle() {
   return ({home:'АвтоЖурнал',history:'История',parts:'Здоровье автомобиля',expenses:'Расходы',analytics:'Аналитика',documents:'Документы',more:'Ещё'})[ui.view] || 'АвтоЖурнал';
@@ -858,7 +883,7 @@ function healthCoreCard(key){
   const next=componentEvents(comp).sort((a,b)=>(rank[a.status]??9)-(rank[b.status]??9)||String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999'))||(a.dueKm??1e15)-(b.dueKm??1e15))[0];
   return `<button class="v5-health-item" data-action="component-detail" data-id="${comp.id}">
     <span class="v5-health-item-icon">${status==='ok'?icons.check:status==='overdue'||status==='due'?icons.alert:icons.wrench}</span>
-    <span class="v5-health-item-main"><strong>${esc(comp.name)}</strong><small>Последнее: ${fmtDate(cs.installedDate)} · ${fmtNum(cs.installedOdometer)} км${next?` · ${esc(describeDue(next))}`:''}</small></span>
+    <span class="v5-health-item-main"><strong>${esc(comp.name)}</strong><small>Последнее: ${fmtDate(cs.installedDate)} · ${componentKmText(cs.installedOdometer)}${next?` · ${esc(describeDue(next))}`:''}</small></span>
     <span class="v5-health-state ${status}">${esc(healthStatusText(status))}</span><b>›</b>
   </button>`;
 }
@@ -1137,14 +1162,28 @@ function customSpecRows(text=''){
 }
 function carCardPage(){
   const c=car();if(!c)return `<main class="v5-main"><div class="v5-page">${emptyState('Нет автомобиля','Добавьте автомобиль, чтобы открыть его паспорт.','add-car','Добавить автомобиль')}</div></main>`;
-  const custom=customSpecRows(c.customSpecs),specSections=carSpecDisplaySections(c);
+  const search=String(ui.passportSearch||''),needle=search.toLocaleLowerCase('ru').replace(/ё/g,'е').trim();
+  const matches=text=>String(text??'').toLocaleLowerCase('ru').replace(/ё/g,'е').includes(needle);
+  const filterRows=(label,rows)=>!needle||matches(label)?rows:rows.filter(row=>matches(row.join(' ')));
+  const basic=filterRows('Основные данные', [['VIN',c.vin||'—'],['Госномер',c.plate||'—'],['Комплектация',c.trim||'—'],['Год',c.year||'—']]);
+  const purchase=filterRows('Покупка и учёт', [
+    ['Дата покупки',fmtDate(c.purchaseDate)],['Цена покупки',c.purchasePrice?money(c.purchasePrice):'—'],
+    ['Пробег начала учёта',`${fmtNum(c.initialOdometer)} км`],['Текущий пробег',`${fmtNum(c.currentOdometer)} км`]
+  ]);
+  const specSections=carSpecDisplaySections(c).map(sec=>({title:sec.title,rows:filterRows(sec.title,sec.rows)})).filter(sec=>sec.rows.length);
+  const custom=filterRows('Дополнительные характеристики',customSpecRows(c.customSpecs));
+  const count=basic.length+purchase.length+specSections.reduce((n,sec)=>n+sec.rows.length,0)+custom.length;
+  const section=(title,rows)=>rows.length?`<section class="v5-passport-section"><h2>${esc(title)}</h2><div class="v5-spec-grid">${rows.map(([label,value])=>`<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}</div></section>`:'';
   return `<main class="v5-main"><div class="v5-page v5-secondary-page">
     <section class="v5-car-passport-hero">${c.photo?`<img src="${c.photo}" alt="${esc(c.make)} ${esc(c.model)}">`:`<div class="v5-car-passport-placeholder"><div class="v5-car-passport-placeholder-inner">${icons.carPassport}<span>Нет фото автомобиля</span></div></div>`}<div><h1>${esc(c.make)} ${esc(c.model)}</h1><p>${[c.year,c.trim,c.plate].filter(Boolean).map(esc).join(' · ')||'Паспорт автомобиля'}</p><strong>${fmtNum(c.currentOdometer)} км</strong></div></section>
     <div class="v5-passport-actions"><button class="v5-primary v5-passport-action" data-action="edit-current-car"><span class="v5-passport-action-icon">${icons.edit}</span><span class="v5-passport-action-label">Изменить</span></button><button class="btn v5-passport-action" data-view="report"><span class="v5-passport-action-icon">${icons.doc}</span><span class="v5-passport-action-label">Отчёт</span></button></div>
-    <section class="v5-passport-section"><h2>Основные данные</h2><div class="v5-spec-grid"><div><span>VIN</span><strong>${carSpecValue(c.vin)}</strong></div><div><span>Госномер</span><strong>${carSpecValue(c.plate)}</strong></div><div><span>Комплектация</span><strong>${carSpecValue(c.trim)}</strong></div><div><span>Год</span><strong>${carSpecValue(c.year)}</strong></div></div></section>
-    ${specSections.map(sec=>`<section class="v5-passport-section"><h2>${esc(sec.title)}</h2><div class="v5-spec-grid">${sec.rows.map(([label,value])=>`<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}</div></section>`).join('')}
+    <div class="v5-passport-search v5-search">${icons.search}<input type="search" data-input="passport-search" aria-label="Поиск по характеристикам" value="${esc(search)}" placeholder="Найти характеристику, значение или раздел" autocomplete="off"></div>
+    ${needle?`<div class="v5-passport-search-count" aria-live="polite">Найдено характеристик: ${count}</div>`:''}
+    ${section('Основные данные',basic)}
+    ${specSections.map(sec=>section(sec.title,sec.rows)).join('')}
     ${custom.length?`<section class="v5-passport-section"><h2>Дополнительные характеристики</h2><div class="v5-spec-list">${custom.map(([k,v])=>`<div><span>${esc(k)}</span><strong>${esc(v||'—')}</strong></div>`).join('')}</div></section>`:''}
-    <section class="v5-passport-section"><h2>Покупка и учёт</h2><div class="v5-spec-grid"><div><span>Дата покупки</span><strong>${fmtDate(c.purchaseDate)}</strong></div><div><span>Цена покупки</span><strong>${c.purchasePrice?money(c.purchasePrice):'—'}</strong></div><div><span>Пробег начала учёта</span><strong>${fmtNum(c.initialOdometer)} км</strong></div><div><span>Текущий пробег</span><strong>${fmtNum(c.currentOdometer)} км</strong></div></div></section>
+    ${section('Покупка и учёт',purchase)}
+    ${!count?`<div class="v5-passport-no-results">По запросу «${esc(search)}» ничего не найдено. Попробуйте другое слово.</div>`:''}
   </div></main>`;
 }
 function reportTable(title,headers,rows){
@@ -1778,7 +1817,7 @@ function entrySheet(id=null){
     <div class="form-section"><div class="form-title">Когда</div><div class="field-grid two">
       ${inputField('Дата','date',x?.date||nowISO(),'date',`required max="${today()}"`)}
       ${inputField('Пробег, км · необязательно','odometer',odoValue,'number',`min="0" inputmode="numeric" placeholder="${lastKm}"`)}
-    </div><div class="helper">Последний сохранённый пробег: ${fmtNum(lastKm)} км. Если пробег не указан, для сброса ресурса зафиксируется текущий пробег ${fmtNum(lastKm)} км.</div></div>
+    </div><div class="helper">Последний сохранённый пробег: ${fmtNum(lastKm)} км. Для сегодняшней записи без пробега используется текущий пробег ${fmtNum(lastKm)} км. Для записи задним числом без пробега расчёт по километрам будет недоступен, пока вы не укажете фактическое показание.</div></div>
     <div class="form-section"><div class="form-title">Связь с узлом автомобиля <span class="v5-optional">необязательно</span></div>
       <div class="field-grid">${groupedVehicleSystemField('Узел автомобиля','systemKey',selectedSystem)}
       ${selectField('Действие с контролем','componentActionChoice',[['none','Не связывать с контролем'],['work','Связать, но не сбрасывать цикл'],['inspect','Проверено — сбросить только цикл проверки'],['replace','Заменено — начать ресурс и проверку заново']],currentAction)}</div>
@@ -1850,7 +1889,7 @@ function entryDetailSheet(id){
 
 function intervalText(km, months){ const bits=[]; if(Number(km)>0)bits.push(`${fmtNum(km)} км`); if(Number(months)>0)bits.push(`${fmtNum(months)} мес.`); return bits.join(' / ')||'—'; }
 
-function componentDetailSheet(id){ const c=state.components.find(x=>x.id===id); if(!c)return ''; const evs=componentEvents(c), cs=componentState(c); return sheetWrap(c.name,`<div class="detail-hero"><div class="detail-title">${esc(c.name)}</div><div class="detail-sub">${[c.brand,c.partNumber,c.category].filter(Boolean).map(esc).join(' · ')||'Узел автомобиля'}</div><div class="detail-grid"><div class="detail-item"><div class="detail-label">Установлено</div><div class="detail-value">${fmtDate(cs.installedDate)} · ${fmtNum(cs.installedOdometer)} км</div></div><div class="detail-item"><div class="detail-label">Состояние</div><div class="detail-value">${statusPill(componentOverall(c))}</div></div><div class="detail-item"><div class="detail-label">Ресурс</div><div class="detail-value">${intervalText(c.lifeKm,c.lifeMonths)}</div></div><div class="detail-item"><div class="detail-label">Проверка</div><div class="detail-value">${intervalText(c.inspectKm,c.inspectMonths)}</div></div></div></div><section class="section"><div class="section-title" style="margin-bottom:8px">Следующие события</div>${evs.length?evs.map(reminderCard).join(''):emptyState('Интервалы не заданы','Добавь ресурс или график проверки в настройках узла.',null,null,icons.calendar)}</section>${c.notes?`<section class="section"><div class="form-title">Заметки</div><div class="note-box">${esc(c.notes)}</div></section>`:''}`,`<div class="btn-row"><button class="btn primary" data-action="mark-inspection" data-id="${c.id}">Проверено</button><button class="btn" data-action="mark-replacement" data-id="${c.id}">Заменено</button></div><div class="btn-row" style="margin-top:8px"><button class="btn" data-action="edit-component" data-id="${c.id}">Изменить</button><button class="btn danger" data-action="delete-component" data-id="${c.id}">Удалить</button></div>`); }
+function componentDetailSheet(id){ const c=state.components.find(x=>x.id===id); if(!c)return ''; const evs=componentEvents(c), cs=componentState(c); return sheetWrap(c.name,`<div class="detail-hero"><div class="detail-title">${esc(c.name)}</div><div class="detail-sub">${[c.brand,c.partNumber,c.category].filter(Boolean).map(esc).join(' · ')||'Узел автомобиля'}</div><div class="detail-grid"><div class="detail-item"><div class="detail-label">Установлено</div><div class="detail-value">${fmtDate(cs.installedDate)} · ${componentKmText(cs.installedOdometer)}</div></div><div class="detail-item"><div class="detail-label">Состояние</div><div class="detail-value">${statusPill(componentOverall(c))}</div></div><div class="detail-item"><div class="detail-label">Ресурс</div><div class="detail-value">${intervalText(c.lifeKm,c.lifeMonths)}</div></div><div class="detail-item"><div class="detail-label">Проверка</div><div class="detail-value">${intervalText(c.inspectKm,c.inspectMonths)}</div></div></div></div><section class="section"><div class="section-title" style="margin-bottom:8px">Следующие события</div>${evs.length?evs.map(reminderCard).join(''):emptyState('Интервалы не заданы','Добавь ресурс или график проверки в настройках узла.',null,null,icons.calendar)}</section>${c.notes?`<section class="section"><div class="form-title">Заметки</div><div class="note-box">${esc(c.notes)}</div></section>`:''}`,`<div class="btn-row"><button class="btn primary" data-action="mark-inspection" data-id="${c.id}">Проверено</button><button class="btn" data-action="mark-replacement" data-id="${c.id}">Заменено</button></div><div class="btn-row" style="margin-top:8px"><button class="btn" data-action="edit-component" data-id="${c.id}">Изменить</button><button class="btn danger" data-action="delete-component" data-id="${c.id}">Удалить</button></div>`); }
 
 function expenseDetailSheet(id){
   const x=state.expenses.find(e=>e.id===id);if(!x)return '';const linkedService=x.linkedServiceId?state.serviceEntries.find(e=>e.id===x.linkedServiceId):null,linkedRefuel=x.linkedRefuelId?(state.refuels||[]).find(r=>r.id===x.linkedRefuelId):null;
@@ -1901,8 +1940,22 @@ function pdfReadySheet(){
   const foot=`${shareSupported?`<button class="btn primary block" data-action="share-ready-pdf">${icons.export} Сохранить / поделиться</button>`:''}<button class="btn block" style="margin-top:8px" data-action="download-ready-pdf">Открыть / скачать PDF</button>`;
   return sheetWrap('PDF готов',body,foot);
 }
-
-function renderSheet(){if(!ui.sheet)return '';if(ui.sheet==='sync')return syncOverviewSheet();if(ui.sheet==='sync-qr')return syncQrSheet();if(ui.sheet==='sync-scan')return syncScanSheet();if(ui.sheet==='sync-progress')return syncProgressSheet();if(ui.sheet==='sync-import')return syncImportSheet();if(ui.sheet==='sync-success')return syncSuccessSheet();if(ui.sheet==='sync-vault-conflict')return syncVaultConflictSheet();if(ui.sheet==='weather')return weatherSettingsSheet();if(ui.sheet==='pdf-ready')return pdfReadySheet();if(ui.sheet==='profile')return profileSheet();if(ui.sheet==='reminders')return remindersSheet();if(ui.sheet==='car')return carSheet(ui.sheetId);if(ui.sheet==='garage')return garageSheet();if(ui.sheet==='odometer')return odometerSheet();if(ui.sheet==='entry')return entrySheet(ui.sheetId);if(ui.sheet==='component')return componentSheet(ui.sheetId);if(ui.sheet==='expense')return expenseSheet(ui.sheetId);if(ui.sheet==='document')return documentSheet(ui.sheetId);if(ui.sheet==='refuel')return refuelSheet(ui.sheetId);if(ui.sheet==='entry-detail')return entryDetailSheet(ui.sheetId);if(ui.sheet==='component-detail')return componentDetailSheet(ui.sheetId);if(ui.sheet==='expense-detail')return expenseDetailSheet(ui.sheetId);if(ui.sheet==='document-detail')return documentDetailSheet(ui.sheetId);if(ui.sheet==='refuel-detail')return refuelDetailSheet(ui.sheetId);return '';}
+function backupReadySheet(){
+  if(!pendingBackupFile)return sheetWrap('Резервная копия','<div class="install-note">Сформируйте резервную копию ещё раз.</div>');
+  const shareSupported=typeof navigator.share==='function'&&Boolean(navigator.canShare?.({files:[pendingBackupFile]}));
+  const canPick=typeof window.showSaveFilePicker==='function';
+  const body=`<div class="install-note"><strong>Копия подготовлена.</strong><br>Файл «${esc(pendingBackupFile.name)}» (${storedFileSize(pendingBackupFile.size)}) содержит актуальные записи, документы и настройки.<br><br>Отметка о резервной копии обновится только после успешной записи файла или вашего подтверждения сохранения.</div>`;
+  const foot=`${canPick?`<button class="btn primary block" data-action="backup-save">${icons.export} Сохранить файл</button>`:''}${shareSupported?`<button class="btn ${canPick?'':'primary'} block" style="margin-top:8px" data-action="backup-share">${icons.export} Сохранить / поделиться</button>`:''}<button class="btn ${canPick||shareSupported?'':'primary'} block" style="margin-top:8px" data-action="backup-download">${icons.export} Скачать JSON</button><div class="helper" style="margin-top:12px">После сохранения проверьте, что файл появился в «Файлах» или загрузках.</div><button class="btn block" style="margin-top:8px" data-action="backup-confirm">Я проверил: файл сохранён</button>`;
+  return sheetWrap('Резервная копия',body,foot);
+}
+async function confirmBackupSaved(){
+  if(!pendingBackupFile){toast('Сначала подготовьте резервную копию');return;}
+  state.settings.lastBackupAt=new Date().toISOString();
+  await persist();
+  pendingBackupFile=null;
+  ui.sheet=null;render();toast('Сохранение резервной копии подтверждено');
+}
+function renderSheet(){if(!ui.sheet)return '';if(ui.sheet==='sync')return syncOverviewSheet();if(ui.sheet==='sync-qr')return syncQrSheet();if(ui.sheet==='sync-scan')return syncScanSheet();if(ui.sheet==='sync-progress')return syncProgressSheet();if(ui.sheet==='sync-import')return syncImportSheet();if(ui.sheet==='sync-success')return syncSuccessSheet();if(ui.sheet==='sync-vault-conflict')return syncVaultConflictSheet();if(ui.sheet==='weather')return weatherSettingsSheet();if(ui.sheet==='pdf-ready')return pdfReadySheet();if(ui.sheet==='backup-ready')return backupReadySheet();if(ui.sheet==='profile')return profileSheet();if(ui.sheet==='reminders')return remindersSheet();if(ui.sheet==='car')return carSheet(ui.sheetId);if(ui.sheet==='garage')return garageSheet();if(ui.sheet==='odometer')return odometerSheet();if(ui.sheet==='entry')return entrySheet(ui.sheetId);if(ui.sheet==='component')return componentSheet(ui.sheetId);if(ui.sheet==='expense')return expenseSheet(ui.sheetId);if(ui.sheet==='document')return documentSheet(ui.sheetId);if(ui.sheet==='refuel')return refuelSheet(ui.sheetId);if(ui.sheet==='entry-detail')return entryDetailSheet(ui.sheetId);if(ui.sheet==='component-detail')return componentDetailSheet(ui.sheetId);if(ui.sheet==='expense-detail')return expenseDetailSheet(ui.sheetId);if(ui.sheet==='document-detail')return documentDetailSheet(ui.sheetId);if(ui.sheet==='refuel-detail')return refuelDetailSheet(ui.sheetId);return '';}
 
 function navigateTo(view,{replace=false}={}){
   if(!view)return;
@@ -1991,8 +2044,13 @@ async function handleSubmit(e){
     };
     if(x){
       const floor=linkedMileageFloor(id);if(requested<floor){toast(`В истории есть запись на ${fmtNum(floor)} км. Сначала исправь её.`);return;}
-      Object.assign(x,details);state.odometerLogs=state.odometerLogs.filter(v=>!(v.carId===id&&v.sourceType==='manual'&&nonneg(v.value)>requested));
-      state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Из карточки автомобиля',sourceType:'manual',sourceId:uid()});recalculateCurrentOdometer(id);
+      const oldCurrent=nonneg(x.currentOdometer);
+      Object.assign(x,details);
+      if(requested!==oldCurrent){
+        state.odometerLogs=state.odometerLogs.filter(v=>!(v.carId===id&&v.sourceType==='manual'&&nonneg(v.value)>requested));
+        state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Из карточки автомобиля',sourceType:'manual',sourceId:uid()});
+        recalculateCurrentOdometer(id);
+      }
     }else{
       const obj={...details,currentOdometer:requested,trackingStartDate:nowISO()};state.cars.push(obj);state.activeCarId=id;
       state.odometerLogs.push({id:uid(),carId:id,date:nowISO(),value:requested,note:'Начало учёта',sourceType:'car-start',sourceId:id});
@@ -2009,7 +2067,9 @@ async function handleSubmit(e){
     }
     const hasMileage=String(d.odometer??'').trim()!=='',systemKey=String(d.systemKey||''),system=vehicleSystemInfo(systemKey);
     const actionChoice=['none','work','inspect','replace'].includes(d.componentActionChoice)?d.componentActionChoice:'none';
-    const lifecycleAction=['inspect','replace'].includes(actionChoice)?actionChoice:'',eventKm=hasMileage?nonneg(d.odometer):currentKm();
+    const lifecycleAction=['inspect','replace'].includes(actionChoice)?actionChoice:'';
+    const historicalUnknownKm=!hasMileage&&d.date<today();
+    const eventKm=hasMileage?nonneg(d.odometer):historicalUnknownKm?null:currentKm();
     const obj={id,carId:car().id,date:d.date,odometer:hasMileage?nonneg(d.odometer):0,type:d.type,title:String(d.title||'').trim(),category:system?.group||x?.category||'',systemKey,
       faultKey:x?.faultKey||'',workText:d.workText||'',partsText:d.partsText||'',partsCost:nonneg(d.partsCost),laborCost:nonneg(d.laborCost),otherCost:x?.otherCost||0,
       componentId:'',componentAction:lifecycleAction,componentEventOdometer:eventKm,notes:d.notes||'',photos,createdAt:x?.createdAt||new Date().toISOString(),seq:x?.seq!=null?nonneg(x.seq):nextSeq()};
@@ -2232,6 +2292,11 @@ document.addEventListener('input', e=>{
   if(e.target.matches('[data-system-combobox-input]'))syncSystemComboboxSearch(e.target);
   const key=e.target.dataset.input;
   if(key==='history-search'){ui.search=e.target.value; const pos=$('.v5-main')?.scrollTop||0; render(); const ms=$('.v5-main'); if(ms)ms.scrollTop=pos; $('#app input[data-input="history-search"]')?.focus();}
+  if(key==='passport-search'){
+    ui.passportSearch=e.target.value;const caret=e.target.selectionStart,pos=$('.v5-main')?.scrollTop||0;
+    render();const input=$('[data-input="passport-search"]');if(input){input.focus({preventScroll:true});try{input.setSelectionRange(caret,caret);}catch{}}
+    const main=$('.v5-main');if(main)main.scrollTop=pos;
+  }
 });
 document.addEventListener('focusin',e=>{
   if(e.target.matches('[data-system-combobox-input]'))openSystemCombobox(e.target);
@@ -2321,6 +2386,33 @@ document.addEventListener('click', async e=>{
     return;
   }
   if(a==='download-ready-pdf'){downloadPendingPdf();return;}
+  if(a==='backup-save'){
+    if(!pendingBackupFile)return;
+    try{
+      if(typeof window.showSaveFilePicker!=='function'){toast('Системное сохранение здесь недоступно');return;}
+      const handle=await window.showSaveFilePicker({suggestedName:pendingBackupFile.name,types:[{description:'Резервная копия AutoJournal',accept:{'application/json':['.json']}}]});
+      const writable=await handle.createWritable();
+      try{await writable.write(pendingBackupFile);await writable.close();}catch(error){try{await writable.abort();}catch{}throw error;}
+      await confirmBackupSaved();
+    }catch(error){if(error?.name!=='AbortError'){console.warn('Backup save failed',error);toast('Не удалось записать резервную копию');}}
+    return;
+  }
+  if(a==='backup-share'){
+    if(!pendingBackupFile)return;
+    try{
+      if(!navigator.canShare?.({files:[pendingBackupFile]}))throw new Error('Web Share unavailable');
+      await navigator.share({title:pendingBackupFile.name,files:[pendingBackupFile]});
+      toast('Файл передан. Проверьте его сохранение и подтвердите ниже.');
+    }catch(error){if(error?.name!=='AbortError'){console.warn('Backup share failed',error);toast('Не удалось поделиться копией');}}
+    return;
+  }
+  if(a==='backup-download'){
+    if(!pendingBackupFile)return;
+    triggerPdfDownload(pendingBackupFile,pendingBackupFile.name);
+    toast('Скачивание начато. Проверьте сохранение файла.');
+    return;
+  }
+  if(a==='backup-confirm'){await confirmBackupSaved();return;}
   if(a==='notif-tab'){ui.notificationTab=el.dataset.value||'auto';render();return;}
   if(a==='first-run-link'){
     if(!getSyncApiUrl()){toast('Сервер синхронизации недоступен');return;}
@@ -2902,10 +2994,24 @@ async function applyIncomingSync(replace=false){
   }catch(err){console.error('Could not apply sync data',err);toast('Не удалось сохранить полученные данные');}
 }
 
-async function exportBackup(){state.settings.lastBackupAt=new Date().toISOString();await persist();downloadText(`autojournal-backup-${nowISO()}.json`,JSON.stringify(state,null,2));toast('Резервная копия создана');}
+function exportBackup(){
+  // Creating a Blob or triggering a download is not proof that an external file was saved.
+  pendingBackupFile=new File([JSON.stringify(state,null,2)],`autojournal-backup-${nowISO()}.json`,{type:'application/json'});
+  ui.sheet='backup-ready';ui.sheetId=null;render();
+}
 async function importBackupFile(file){
   if(!file)return;if(file.size>80*1024*1024){toast('Резервная копия слишком большая');return;}
-  try{const data=JSON.parse(await file.text());if(!data||!Array.isArray(data.cars)||!Array.isArray(data.serviceEntries)||!Array.isArray(data.expenses||[])||!Array.isArray(data.documents||[])||!Array.isArray(data.refuels||[]))throw new Error('invalid');if(!confirm('Восстановление заменит все текущие данные. Продолжить?'))return;state=migrate(data);await persist();applyTheme();navStack=[];ui.view='home';ui.sheet=null;ui.sheetId=null;render();toast('Резервная копия восстановлена');}catch{toast('Не удалось прочитать резервную копию');}
+  const previous=state;
+  try{
+    const data=JSON.parse(await file.text());
+    const required=['cars','odometerLogs','serviceEntries','components','expenses','documents'];
+    if(!data||typeof data!=='object'||required.some(key=>!Array.isArray(data[key]))||!Array.isArray(data.refuels||[]))throw new Error('invalid');
+    const total=data.serviceEntries.length+data.expenses.length+data.documents.length;
+    if(!confirm(`Проверен файл: ${data.cars.length} авто, ${total} записей/расходов/документов. Восстановление заменит текущие данные. Продолжить?`))return;
+    const restored=migrate(data);
+    await saveState(restored);
+    state=restored;scheduleAutoSync();applyTheme();navStack=[];ui.view='home';ui.sheet=null;ui.sheetId=null;render();toast('Резервная копия восстановлена');
+  }catch(error){state=previous;console.warn('Backup import failed',error);toast('Не удалось проверить или восстановить резервную копию');}
 }
 
 function predictedDateForKm(dueKm){ const avg=averageKmPerDay(); if(!avg || dueKm==null)return null; const rem=dueKm-currentKm(); if(rem<=0)return today(); return addDays(today(),Math.ceil(rem/avg)); }
