@@ -3009,8 +3009,9 @@ async function importBackupFile(file){
   const previous=state;
   try{
     const data=JSON.parse(await file.text());
-    const required=['cars','odometerLogs','serviceEntries','components','expenses','documents'];
-    if(!data||typeof data!=='object'||required.some(key=>!Array.isArray(data[key]))||!Array.isArray(data.refuels||[]))throw new Error('invalid');
+    const required=['cars','serviceEntries','expenses','documents'];
+    const optional=['odometerLogs','components','refuels','syncDevices'];
+    if(!data||typeof data!=='object'||required.some(key=>!Array.isArray(data[key]))||optional.some(key=>key in data&&!Array.isArray(data[key])))throw new Error('invalid');
     const total=data.serviceEntries.length+data.expenses.length+data.documents.length;
     if(!confirm(`Проверен файл: ${data.cars.length} авто, ${total} записей/расходов/документов. Восстановление заменит текущие данные. Продолжить?`))return;
     const restored=migrate(data);
