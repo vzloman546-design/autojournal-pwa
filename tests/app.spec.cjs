@@ -1186,7 +1186,11 @@ test('OLED text size and compact density persist without breaking the grid', asy
 
   await page.locator('[data-input="theme"]').selectOption('light');
   await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.oled||'')).toBe('');
+  expect(await page.evaluate(()=>document.documentElement.style.backgroundColor)).toBe('');
+  expect(await page.evaluate(()=>document.documentElement.style.getPropertyValue('--v5-bg'))).toBe('');
   expect(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--v5-bg').trim().toLowerCase())).not.toBe('#000000');
+  expect(await page.evaluate(()=>getComputedStyle(document.querySelector('#app')).backgroundColor)).not.toBe('rgb(0, 0, 0)');
+  expect(await page.evaluate(()=>getComputedStyle(document.querySelector('.v5-subbar')).backgroundColor)).not.toBe('rgb(0, 0, 0)');
   expect(await page.evaluate(()=>document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.getAttribute('content'))).toBe('default');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
