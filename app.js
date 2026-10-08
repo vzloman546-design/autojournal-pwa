@@ -408,6 +408,7 @@ function restoreViewScroll(view=ui.view,root=$('#app')){
 let pendingPdfFile=null;
 let pendingPdfUrl='';
 let pendingBackupFile=null;
+let pendingBackupAttempted=false;
 let syncPair=null;
 let syncMode='';
 let syncIncoming=null;
@@ -1945,14 +1946,14 @@ function backupReadySheet(){
   const shareSupported=typeof navigator.share==='function'&&Boolean(navigator.canShare?.({files:[pendingBackupFile]}));
   const canPick=typeof window.showSaveFilePicker==='function';
   const body=`<div class="install-note"><strong>Копия подготовлена.</strong><br>Файл «${esc(pendingBackupFile.name)}» (${storedFileSize(pendingBackupFile.size)}) содержит актуальные записи, документы и настройки.<br><br>Отметка о резервной копии обновится только после успешной записи файла или вашего подтверждения сохранения.</div>`;
-  const foot=`${canPick?`<button class="btn primary block" data-action="backup-save">${icons.export} Сохранить файл</button>`:''}${shareSupported?`<button class="btn ${canPick?'':'primary'} block" style="margin-top:8px" data-action="backup-share">${icons.export} Сохранить / поделиться</button>`:''}<button class="btn ${canPick||shareSupported?'':'primary'} block" style="margin-top:8px" data-action="backup-download">${icons.export} Скачать JSON</button><div class="helper" style="margin-top:12px">После сохранения проверьте, что файл появился в «Файлах» или загрузках.</div><button class="btn block" style="margin-top:8px" data-action="backup-confirm">Я проверил: файл сохранён</button>`;
+  const foot=`${canPick?`<button class="btn primary block" data-action="backup-save">${icons.export} Сохранить файл</button>`:''}${shareSupported?`<button class="btn ${canPick?'':'primary'} block" style="margin-top:8px" data-action="backup-share">${icons.export} Сохранить / поделиться</button>`:''}<button class="btn ${canPick||shareSupported?'':'primary'} block" style="margin-top:8px" data-action="backup-download">${icons.export} Скачать JSON</button><div class="helper" style="margin-top:12px">После сохранения проверьте, что файл появился в «Файлах» или загрузках.</div><button class="btn block" style="margin-top:8px" data-action="backup-confirm" ${pendingBackupAttempted?'':'disabled'}>Я проверил: файл сохранён</button>`;
   return sheetWrap('Резервная копия',body,foot);
 }
 async function confirmBackupSaved(){
   if(!pendingBackupFile){toast('Сначала подготовьте резервную копию');return;}
   state.settings.lastBackupAt=new Date().toISOString();
   await persist();
-  pendingBackupFile=null;
+  pendingBackupFile=null;pendingBackupAttempted=false;
   ui.sheet=null;render();toast('Сохранение резервной копии подтверждено');
 }
 function renderSheet(){if(!ui.sheet)return '';if(ui.sheet==='sync')return syncOverviewSheet();if(ui.sheet==='sync-qr')return syncQrSheet();if(ui.sheet==='sync-scan')return syncScanSheet();if(ui.sheet==='sync-progress')return syncProgressSheet();if(ui.sheet==='sync-import')return syncImportSheet();if(ui.sheet==='sync-success')return syncSuccessSheet();if(ui.sheet==='sync-vault-conflict')return syncVaultConflictSheet();if(ui.sheet==='weather')return weatherSettingsSheet();if(ui.sheet==='pdf-ready')return pdfReadySheet();if(ui.sheet==='backup-ready')return backupReadySheet();if(ui.sheet==='profile')return profileSheet();if(ui.sheet==='reminders')return remindersSheet();if(ui.sheet==='car')return carSheet(ui.sheetId);if(ui.sheet==='garage')return garageSheet();if(ui.sheet==='odometer')return odometerSheet();if(ui.sheet==='entry')return entrySheet(ui.sheetId);if(ui.sheet==='component')return componentSheet(ui.sheetId);if(ui.sheet==='expense')return expenseSheet(ui.sheetId);if(ui.sheet==='document')return documentSheet(ui.sheetId);if(ui.sheet==='refuel')return refuelSheet(ui.sheetId);if(ui.sheet==='entry-detail')return entryDetailSheet(ui.sheetId);if(ui.sheet==='component-detail')return componentDetailSheet(ui.sheetId);if(ui.sheet==='expense-detail')return expenseDetailSheet(ui.sheetId);if(ui.sheet==='document-detail')return documentDetailSheet(ui.sheetId);if(ui.sheet==='refuel-detail')return refuelDetailSheet(ui.sheetId);return '';}
@@ -2402,6 +2403,7 @@ document.addEventListener('click', async e=>{
     try{
       if(!navigator.canShare?.({files:[pendingBackupFile]}))throw new Error('Web Share unavailable');
       await navigator.share({title:pendingBackupFile.name,files:[pendingBackupFile]});
+      pendingBackupAttempted=true;render();
       toast('Файл передан. Проверьте его сохранение и подтвердите ниже.');
     }catch(error){if(error?.name!=='AbortError'){console.warn('Backup share failed',error);toast('Не удалось поделиться копией');}}
     return;
@@ -2409,10 +2411,11 @@ document.addEventListener('click', async e=>{
   if(a==='backup-download'){
     if(!pendingBackupFile)return;
     triggerPdfDownload(pendingBackupFile,pendingBackupFile.name);
+    pendingBackupAttempted=true;render();
     toast('Скачивание начато. Проверьте сохранение файла.');
     return;
   }
-  if(a==='backup-confirm'){await confirmBackupSaved();return;}
+  if(a==='backup-confirm'){if(!pendingBackupAttempted){toast('Сначала сохраните или передайте файл');return;}await confirmBackupSaved();return;}
   if(a==='notif-tab'){ui.notificationTab=el.dataset.value||'auto';render();return;}
   if(a==='first-run-link'){
     if(!getSyncApiUrl()){toast('Сервер синхронизации недоступен');return;}
@@ -2997,6 +3000,7 @@ async function applyIncomingSync(replace=false){
 function exportBackup(){
   // Creating a Blob or triggering a download is not proof that an external file was saved.
   pendingBackupFile=new File([JSON.stringify(state,null,2)],`autojournal-backup-${nowISO()}.json`,{type:'application/json'});
+  pendingBackupAttempted=false;
   ui.sheet='backup-ready';ui.sheetId=null;render();
 }
 async function importBackupFile(file){
