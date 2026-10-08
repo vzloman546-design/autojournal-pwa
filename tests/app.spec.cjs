@@ -900,13 +900,19 @@ test('backup roundtrip and calendar export', async({page})=>{
   const original=await state(page);
 
   await openProfile(page); await page.locator('.v5-menu [data-view="more"]').click();
-  const [backup]=await Promise.all([page.waitForEvent('download'),page.locator('[data-action="backup-export"]').click()]);
+  await page.locator('[data-action="backup-export"]').click();
+  await expect(page.locator('[data-action="backup-download"]')).toBeVisible();
+  expect((await state(page)).settings.lastBackupAt).toBe('');
+  const [backup]=await Promise.all([page.waitForEvent('download'),page.locator('[data-action="backup-download"]').click()]);
+  expect((await state(page)).settings.lastBackupAt).toBe('');
   const backupPath=await backup.path();
   expect(backupPath).toBeTruthy();
   const backupText=await fs.readFile(backupPath,'utf8');
   const parsed=JSON.parse(backupText);
   expect(parsed.cars).toHaveLength(1);
   expect(parsed.serviceEntries.some(x=>x.title==='Backup marker')).toBe(true);
+  await page.locator('[data-action="backup-confirm"]').click();
+  expect((await state(page)).settings.lastBackupAt).toMatch(/^\d{4}-\d{2}-\d{2}/);
 
   const [cal]=await Promise.all([page.waitForEvent('download'),page.locator('[data-action="calendar-export"]').click()]);
   const calPath=await cal.path();
@@ -924,6 +930,95 @@ test('backup roundtrip and calendar export', async({page})=>{
   const restored=await state(page);
   expect(restored.cars).toHaveLength(original.cars.length);
   expect(restored.serviceEntries.some(x=>x.title==='Backup marker')).toBe(true);
+});
+
+test('backup cancellation leaves lastBackupAt untouched and saved file confirmation updates it', async({page})=>{
+  await addCar(page);
+  await openProfile(page);
+  await page.locator('.v5-menu [data-view="more"]').click();
+  await page.locator('[data-action="backup-export"]').click();
+  expect((await state(page)).settings.lastBackupAt).toBe('');
+  await closeSheet(page);
+  expect((await state(page)).settings.lastBackupAt).toBe('');
+  await page.locator('[data-action="backup-export"]').click();
+  await page.locator('[data-action="backup-confirm"]').click();
+  expect(Date.parse((await state(page)).settings.lastBackupAt)).toBeGreaterThan(0);
+});
+
+test('editing the vehicle passport without changing mileage does not add odometer history',async({page})=>{
+  await addCar(page);
+  const before=await state(page);
+  await gotoSecondary(page,'carcard');
+  await page.locator('[data-action="edit-current-car"]').click();
+  await page.locator('#vin').fill('KMH12345678901234');
+  await page.locator('button[form="car-form"]').click();
+  const after=await state(page);
+  expect(after.cars[0].vin).toBe('KMH12345678901234');
+  expect(after.odometerLogs).toHaveLength(before.odometerLogs.length);
+  expect(after.cars[0].currentOdometer).toBe(before.cars[0].currentOdometer);
+});
+
+test('historic replacement without mileage keeps kilometer resource unknown until corrected', async({page})=>{
+  await addCar(page);
+  await page.locator('[data-action="add-entry"]').first().click();
+  await page.locator('#title').fill('Замена свечей задним числом');
+  await page.locator('#date').fill(isoOffset(-14));
+  await chooseVehicleSystem(page,'свечи','spark_plugs');
+  await page.locator('#componentActionChoice').selectOption('replace');
+  await page.locator('#lifeKm').fill('10000');
+  await expect(page.locator('#odometer')).toHaveValue('');
+  await page.locator('button[form="entry-form"]').click();
+  let s=await state(page);
+  let entry=s.serviceEntries.find(x=>x.title==='Замена свечей задним числом');
+  expect(entry.componentEventOdometer).toBeNull();
+  await page.reload();
+  s=await state(page);
+  entry=s.serviceEntries.find(x=>x.title==='Замена свечей задним числом');
+  expect(entry.componentEventOdometer).toBeNull();
+  await page.locator('.v5-quick-card[data-view="parts"]').click();
+  const row=page.locator('[data-action="component-detail"]',{hasText:'Свечи зажигания'});
+  await expect(row).toContainText('пробег неизвестен');
+  await row.click();
+  await expect(page.locator('.sheet')).toContainText('укажите пробег на дату работы');
+  await closeSheet(page);
+  await page.locator('[data-action="go-back"]').click();
+  await page.locator('.v5-tabbar [data-view="records"]').click();
+  await page.locator('[data-action="entry-detail"]').first().click();
+  await page.locator('[data-action="edit-entry"]').click();
+  await page.locator('#odometer').fill('205000');
+  await page.locator('button[form="entry-form"]').click();
+  s=await state(page);
+  entry=s.serviceEntries.find(x=>x.title==='Замена свечей задним числом');
+  expect(entry.componentEventOdometer).toBe(205000);
+  await page.locator('.v5-tabbar [data-view="home"]').click();
+  await page.locator('.v5-quick-card[data-view="parts"]').click();
+  await expect(page.locator('[data-action="component-detail"]',{hasText:'Свечи зажигания'})).toContainText('через 5 000 км');
+});
+
+test('vehicle passport search filters by section, characteristic value and custom field',async({page})=>{
+  await addCar(page);
+  await page.locator('[data-action="car-switch"]').click();
+  await page.locator('[data-action="edit-current-car"]').click();
+  await page.locator('.v5-spec-editor summary',{hasText:'Свечи и зажигание'}).click();
+  await page.locator('#spec__sparkPlugModel').fill('Denso IK16TT');
+  await page.locator('.v5-spec-editor summary',{hasText:'Топливная система'}).click();
+  await page.locator('#spec__fuelTankCapacityL').fill('65');
+  await page.locator('[name="customSpecs"]').fill('Цвет чехлов: зелёный');
+  await page.locator('button[form="car-form"]').click();
+  await gotoSecondary(page,'carcard');
+  const input=page.locator('[data-input="passport-search"]');
+  await input.fill('Denso');
+  await expect(page.locator('.v5-passport-section')).toHaveCount(1);
+  await expect(page.locator('.v5-passport-section')).toContainText('Denso IK16TT');
+  await input.fill('топливная система');
+  await expect(page.locator('.v5-passport-section')).toContainText('65');
+  await input.fill('чехлов');
+  await expect(page.locator('.v5-passport-section')).toHaveCount(1);
+  await expect(page.locator('.v5-passport-section')).toContainText('зелёный');
+  await input.fill('несуществующая-характеристика');
+  await expect(page.locator('.v5-passport-no-results')).toBeVisible();
+  await input.fill('');
+  expect(await page.locator('.v5-passport-section').count()).toBeGreaterThan(3);
 });
 
 test('secondary screens hide bottom nav and no horizontal overflow at mobile widths', async({page})=>{
