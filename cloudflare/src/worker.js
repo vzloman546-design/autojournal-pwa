@@ -131,36 +131,84 @@ async function weatherForecastFor(lat,lon){
   const data=await res.json(),times=data?.daily?.time||[],means=data?.daily?.temperature_2m_mean||[];
   return times.map((date,i)=>({date:String(date),mean:Number(means[i])})).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x.date)&&Number.isFinite(x.mean)).slice(0,7);
 }
+// TEMPORARY diagnostic logs: never include subscription IDs, endpoint URLs,
+// coordinates, VAPID keys, verifiers, tokens or raw exception messages.
+function weatherPushSafeErrorCode(err){
+  const message=String(err?.message||'');
+  if(/^(weather_http|push_http)_[0-9]{3}$/.test(message))return message;
+  if(err?.name==='AbortError')return 'request_aborted';
+  if(/D1|SQLITE|database/i.test(message))return 'database_error';
+  if(/jwk|crypto|key|import/i.test(message))return 'cryptography_error';
+  if(err?.name==='TypeError')return 'network_or_type_error';
+  return 'unexpected_error';
+}
+function weatherPushDiagnostic(event,details={}){
+  console.info('[weather-push]',JSON.stringify({event,...details}));
+}
 async function checkWeatherPushAlerts(env){
-  await ensureSchema(env);
-  const rows=(await env.DB.prepare('SELECT * FROM weather_push_subscriptions WHERE enabled=1 ORDER BY updated_at ASC LIMIT 500').all()).results||[];
+  let rows;
+  try{
+    await ensureSchema(env);
+    rows=(await env.DB.prepare('SELECT * FROM weather_push_subscriptions WHERE enabled=1 ORDER BY updated_at ASC LIMIT 500').all()).results||[];
+  }catch(err){
+    console.warn('[weather-push]',JSON.stringify({event:'setup_error',error:weatherPushSafeErrorCode(err)}));
+    throw err;
+  }
   const now=Date.now(),cooldown=14*86400000;
-  for(const row of rows){
+  const summary={subscriptions:rows.length,forecastBelowThreshold:0,noThresholdMatch:0,pushAccepted:0,pushRejected:0,expiredSubscriptions:0,alreadyActive:0,cooldownBlocked:0,errors:0};
+  weatherPushDiagnostic('run_start',{subscriptions:rows.length});
+  for(let index=0;index<rows.length;index++){
+    const row=rows[index],slot=index+1;
+    // Detail is bounded to avoid flooding logs if many devices are connected.
+    const detail=(event,extra={})=>{if(index<10)weatherPushDiagnostic(event,{slot,...extra});};
+    let stage='forecast';
     try{
       const days=await weatherForecastFor(Number(row.lat),Number(row.lon));
       const threshold=Number(row.threshold),trigger=days.find(x=>x.mean<=threshold)||null;
+      detail('forecast_result',{days:days.length,thresholdMet:Boolean(trigger)});
       if(!trigger){
-        if(Number(row.alert_active)!==0)await env.DB.prepare('UPDATE weather_push_subscriptions SET alert_active=0,last_trigger_date=NULL,last_trigger_temp=NULL,updated_at=?1 WHERE id=?2').bind(now,row.id).run();
+        summary.noThresholdMatch++;
+        if(Number(row.alert_active)!==0){
+          stage='database_reset';
+          await env.DB.prepare('UPDATE weather_push_subscriptions SET alert_active=0,last_trigger_date=NULL,last_trigger_temp=NULL,updated_at=?1 WHERE id=?2').bind(now,row.id).run();
+        }
         continue;
       }
+      summary.forecastBelowThreshold++;
       const active=Boolean(row.alert_active),lastSent=Number(row.last_sent_at)||0;
       if(!active&&now-lastSent>=cooldown){
+        stage='apple_push';
         const pushed=await sendWeatherPush(row,env);
+        detail('push_response',{httpStatus:pushed.status});
         if(pushed.status===404||pushed.status===410){
+          summary.expiredSubscriptions++;
+          stage='database_delete';
           await env.DB.prepare('DELETE FROM weather_push_subscriptions WHERE id=?1').bind(row.id).run();
           continue;
         }
-        if(!pushed.ok)throw new Error('push_http_'+pushed.status);
+        if(!pushed.ok){
+          summary.pushRejected++;
+          throw new Error('push_http_'+pushed.status);
+        }
+        stage='database_mark_sent';
         await env.DB.prepare('UPDATE weather_push_subscriptions SET alert_active=1,last_sent_at=?1,last_trigger_date=?2,last_trigger_temp=?3,updated_at=?1 WHERE id=?4')
           .bind(now,trigger.date,trigger.mean,row.id).run();
+        summary.pushAccepted++;
+        detail('push_accepted');
       }else{
+        const reason=active?'already_active':'cooldown';
+        if(active)summary.alreadyActive++;else summary.cooldownBlocked++;
+        detail('push_skipped',{reason});
+        stage='database_mark_active';
         await env.DB.prepare('UPDATE weather_push_subscriptions SET alert_active=1,last_trigger_date=?1,last_trigger_temp=?2,updated_at=?3 WHERE id=?4')
           .bind(trigger.date,trigger.mean,now,row.id).run();
       }
     }catch(err){
-      console.warn('Weather push check failed',row.id,err);
+      summary.errors++;
+      console.warn('[weather-push]',JSON.stringify({event:'subscription_error',slot,stage,error:weatherPushSafeErrorCode(err)}));
     }
   }
+  weatherPushDiagnostic('run_summary',summary);
 }
 
 export default {
